@@ -50,35 +50,41 @@ class _MotoLoggerAppState extends State<MotoLoggerApp> {
   @override
   Widget build(BuildContext context) {
     final screens = [
-      DashboardScreen(telemetryManager: widget.telemetryManager),
+      DashboardScreen(
+        telemetryManager: widget.telemetryManager,
+        onNavigateTab: (idx) => setState(() => _selectedTabIndex = idx),
+      ),
       HistoryScreen(dbService: widget.dbService),
       SettingsScreen(telemetryManager: widget.telemetryManager),
     ];
 
     return MaterialApp(
       title: 'MotoLogger',
-      theme: AppTheme.darkTheme,
+      theme: AppTheme.lightTheme,
       debugShowCheckedModeBanner: false,
       home: Scaffold(
+        backgroundColor: Colors.white,
         body: screens[_selectedTabIndex],
-        bottomNavigationBar: BottomNavigationBar(
-          currentIndex: _selectedTabIndex,
-          onTap: (idx) => setState(() => _selectedTabIndex = idx),
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.speed),
-              label: 'Dashboard',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.history),
-              label: 'Sessions',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.settings),
-              label: 'Settings',
-            ),
-          ],
-        ),
+        bottomNavigationBar: _selectedTabIndex == 0
+            ? null
+            : BottomNavigationBar(
+                currentIndex: _selectedTabIndex,
+                onTap: (idx) => setState(() => _selectedTabIndex = idx),
+                items: const [
+                  BottomNavigationBarItem(
+                    icon: Icon(Icons.two_wheeler_rounded),
+                    label: 'Jízda',
+                  ),
+                  BottomNavigationBarItem(
+                    icon: Icon(Icons.bar_chart_rounded),
+                    label: 'Historie',
+                  ),
+                  BottomNavigationBarItem(
+                    icon: Icon(Icons.settings_rounded),
+                    label: 'Nastavení',
+                  ),
+                ],
+              ),
       ),
     );
   }

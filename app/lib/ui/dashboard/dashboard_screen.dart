@@ -1,344 +1,662 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../core/theme/app_theme.dart';
 import '../../services/telemetry_manager.dart';
 import '../../services/ble_service.dart';
-import '../widgets/lean_gauge.dart';
-import '../widgets/g_force_circle.dart';
-import '../widgets/rpm_tachometer.dart';
-import '../widgets/gear_indicator.dart';
+import '../widgets/corner_gradient_breather.dart';
+import '../widgets/gg_friction_reticle.dart';
+import '../widgets/slide_to_unlock.dart';
 
-class DashboardScreen extends StatelessWidget {
+/// The core motorcycle telemetry activity screen ("Jízda").
+/// 
+/// Built strictly to user directives:
+/// - Light Apple design with pure white background (#FFFFFF).
+/// - Dynamic corner color blends ("barevný přeliv") that breathe with lean angle.
+/// - Bold black typography on white canvas for outdoor sunlight legibility.
+/// - Naked G-G friction reticle directly on the canvas without any container box.
+/// - Locked by default with Slide-to-Unlock.
+/// - When unlocked: Bottom nav bar + Pause button above it.
+/// - When paused: Splits into Stop/Save (red) and Continue (green).
+/// - Pre-ride Tare Zero calibration modal on session start.
+class DashboardScreen extends StatefulWidget {
   final TelemetryManager telemetryManager;
+  final ValueChanged<int>? onNavigateTab;
 
-  const DashboardScreen({super.key, required this.telemetryManager});
+  const DashboardScreen({
+    super.key,
+    required this.telemetryManager,
+    this.onNavigateTab,
+  });
 
   @override
-  Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: telemetryManager,
-      builder: (context, _) {
-        final pkt = telemetryManager.latestPacket;
-        final isBleConnected = telemetryManager.bleService.state == BleConnectionState.connected;
+  State<DashboardScreen> createState() => _DashboardScreenState();
+}
 
-        return Scaffold(
-          appBar: AppBar(
-            title: const Text('MOTOLOGGER TELEMETRY'),
-            actions: [
-              // Mock Demo Mode Toggle Button for instant testing
-              IconButton(
-                icon: const Icon(Icons.bolt),
-                tooltip: 'Toggle Demo Simulation',
-                color: isBleConnected ? AppTheme.primary : AppTheme.textMuted,
-                onPressed: () {
-                  final isMocking = telemetryManager.bleService.state == BleConnectionState.connected;
-                  telemetryManager.bleService.enableMockMode(!isMocking);
+class _DashboardScreenState extends State<DashboardScreen> {
+  bool _isLocked = true;
+  bool _hasPromptedTareThisSession = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Prompt Tare Zero setup if not currently recording
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!widget.telemetryManager.isRecording && !_hasPromptedTareThisSession) {
+        _showPreRideCalibrationDialog();
+      }
+    });
+  }
+
+  void _showPreRideCalibrationDialog() {
+    _hasPromptedTareThisSession = true;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          title: const Row(
+            children: [
+              Icon(Icons.two_wheeler, color: Colors.black, size: 28),
+              SizedBox(width: 10),
+              Text(
+                'PŘÍPRAVA NA JÍZDU',
+                style: TextStyle(
+                  color: Colors.black,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 17,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Srovnejte motorku do svislé polohy a proveďte kalibraci nulového náklonu (Tare Zero).',
+                style: TextStyle(color: Color(0xFF1C1C1E), fontSize: 14, height: 1.4),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFF2F2F7),
+                  foregroundColor: Colors.black,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    side: const BorderSide(color: Color(0xFFE5E5EA)),
+                  ),
+                ),
+                icon: const Icon(Icons.tune, color: Colors.black),
+                label: const Text(
+                  'ZKALIBROVAT (TARE ZERO)',
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                ),
+                onPressed: () async {
+                  HapticFeedback.mediumImpact();
+                  await widget.telemetryManager.tareZero();
+                  if (ctx.mounted) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      const SnackBar(
+                        content: Text('Senzor byl úspěšně zkalibrován (Tare Zero)!'),
+                        duration: Duration(seconds: 2),
+                        backgroundColor: Colors.black87,
+                      ),
+                    );
+                  }
                 },
               ),
             ],
           ),
-          body: SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Top Status Strip
-                  _buildStatusStrip(pkt, isBleConnected),
-                  const SizedBox(height: 12),
-
-                  // RPM Tachometer Bar
-                  RpmTachometer(currentRpm: pkt.engineRpm),
-                  const SizedBox(height: 14),
-
-                  // Gear and Speed Display
-                  GearSpeedWidget(
-                    gear: pkt.gear,
-                    speedKmh: pkt.vehicleSpeedKmh,
+          actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          actions: [
+            Row(
+              children: [
+                Expanded(
+                  child: TextButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    child: const Text('POZDĚJI', style: TextStyle(color: Color(0xFF8E8E93), fontWeight: FontWeight.w700)),
                   ),
-                  const SizedBox(height: 16),
-
-                  // Central Lean Angle Arc Gauge
-                  Center(
-                    child: LeanGauge(
-                      leanAngleDeg: pkt.leanAngleDeg,
-                      maxLeftDeg: telemetryManager.maxLeanLeft,
-                      maxRightDeg: telemetryManager.maxLeanRight,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  flex: 2,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.black,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                    onPressed: () async {
+                      Navigator.of(ctx).pop();
+                      await widget.telemetryManager.startRecording();
+                      setState(() => _isLocked = true);
+                    },
+                    child: const Text(
+                      'START JÍZDY',
+                      style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, letterSpacing: 0.8),
                     ),
                   ),
-                  const SizedBox(height: 12),
+                ),
+              ],
+            ),
+          ],
+        );
+      },
+    );
+  }
 
-                  // Peak Stats Strip
-                  _buildPeakStatsStrip(),
-                  const SizedBox(height: 16),
+  void _onUnlocked() {
+    setState(() {
+      _isLocked = false;
+    });
+  }
 
-                  // Lower Dynamics Grid: G-Force Circle + Pitch & Throttle
-                  Row(
-                    children: [
-                      // G-G Friction Circle
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: AppTheme.surface,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: AppTheme.surfaceLight),
-                        ),
-                        child: Column(
-                          children: [
-                            const Text(
-                              'G - G FORCES',
-                              style: TextStyle(
-                                color: AppTheme.textMuted,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 1.2,
+  void _onLockAgain() {
+    setState(() {
+      _isLocked = true;
+    });
+  }
+
+  void _onPausePressed() {
+    HapticFeedback.mediumImpact();
+    widget.telemetryManager.pauseRecording();
+  }
+
+  void _onContinuePressed() {
+    HapticFeedback.mediumImpact();
+    widget.telemetryManager.resumeRecording();
+    // Auto re-lock screen when continuing ride
+    setState(() => _isLocked = true);
+  }
+
+  Future<void> _onStopAndSavePressed() async {
+    HapticFeedback.heavyImpact();
+    await widget.telemetryManager.stopRecording();
+    setState(() {
+      _isLocked = false;
+      _hasPromptedTareThisSession = false;
+    });
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Jízda byla úspěšně uložena do historie!'),
+          backgroundColor: AppTheme.success,
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: widget.telemetryManager,
+      builder: (context, _) {
+        final pkt = widget.telemetryManager.latestPacket;
+        final isBleConnected = widget.telemetryManager.bleService.state == BleConnectionState.connected;
+        final isRecording = widget.telemetryManager.isRecording;
+        final isPaused = widget.telemetryManager.isPaused;
+
+        // Lean calculations: negative is left, positive is right
+        final currentLean = pkt.leanAngleDeg;
+        final leftLean = currentLean < 0 ? -currentLean : 0.0;
+        final rightLean = currentLean > 0 ? currentLean : 0.0;
+
+        return Scaffold(
+          backgroundColor: Colors.white,
+          body: OrientationBuilder(
+            builder: (context, orientation) {
+              final isLandscape = orientation == Orientation.landscape;
+
+              return Stack(
+                children: [
+                  // 1. Dynamic Breathing Corner Color Blends ("Barevný přeliv podle náklonu")
+                  Positioned.fill(
+                    child: CornerGradientBreather(
+                      leanAngleDeg: currentLean,
+                      maxLeanLeftDeg: widget.telemetryManager.maxLeanLeft,
+                      maxLeanRightDeg: widget.telemetryManager.maxLeanRight,
+                    ),
+                  ),
+
+                  // 2. Demo simulation toggle & Lock status in corner (subtle)
+                  Positioned(
+                    top: MediaQuery.of(context).padding.top + 8,
+                    left: 0,
+                    right: 0,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          // Demo simulation toggle
+                          GestureDetector(
+                            onTap: () {
+                              final isMocking = widget.telemetryManager.bleService.state == BleConnectionState.connected;
+                              widget.telemetryManager.bleService.enableMockMode(!isMocking);
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.85),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: const Color(0xFFE5E5EA)),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.bolt,
+                                    size: 14,
+                                    color: isBleConnected ? AppTheme.accent : const Color(0xFF8E8E93),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    isBleConnected ? 'DEMO AKTIVNÍ' : 'DEMO',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w800,
+                                      color: isBleConnected ? AppTheme.accent : const Color(0xFF8E8E93),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                            const SizedBox(height: 8),
-                            GForceCircle(
-                              accelX: pkt.accelXG,
-                              accelY: pkt.accelYG,
-                              size: 110,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      // Pitch & Throttle Cards
-                      Expanded(
-                        child: Column(
-                          children: [
-                            _buildMetricTile(
-                              label: 'PITCH (DIVE / ACCEL)',
-                              value: '${pkt.pitchDeg.toStringAsFixed(1)}°',
-                              icon: Icons.swap_vert,
-                              color: pkt.pitchDeg > 0 ? AppTheme.accent : AppTheme.primary,
-                            ),
-                            const SizedBox(height: 10),
-                            _buildMetricTile(
-                              label: 'THROTTLE POSITION',
-                              value: '${pkt.throttlePosPct}%',
-                              icon: Icons.speed,
-                              color: AppTheme.success,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
+                          ),
 
-                  // Action Buttons: Tare Zero & Record Ride
-                  _buildActionControls(context),
-                  const SizedBox(height: 16),
+                          // Manual re-lock button if currently unlocked
+                          if (!_isLocked)
+                            GestureDetector(
+                              onTap: _onLockAgain,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.85),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: const Color(0xFFE5E5EA)),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.lock_outline, size: 14, color: Colors.black),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'ZAMKNOUT',
+                                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.black),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  // 3. Layout Content
+                  Positioned.fill(
+                    child: SafeArea(
+                      child: isLandscape
+                          ? _buildLandscapeLayout(pkt, leftLean, rightLean, isRecording, isPaused)
+                          : _buildPortraitLayout(pkt, leftLean, rightLean, isRecording, isPaused),
+                    ),
+                  ),
                 ],
-              ),
-            ),
+              );
+            },
           ),
         );
       },
     );
   }
 
-  Widget _buildStatusStrip(dynamic pkt, bool isConnected) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppTheme.surfaceLight),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          // BLE Connection Badge
-          Row(
-            children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: isConnected ? AppTheme.success : AppTheme.danger,
-                ),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                isConnected ? 'BLE CONNECTED' : 'BLE OFFLINE',
-                style: TextStyle(
-                  color: isConnected ? AppTheme.success : AppTheme.textMuted,
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.0,
-                ),
-              ),
-            ],
-          ),
-          // Battery Voltage
-          Row(
-            children: [
-              const Icon(Icons.bolt, size: 14, color: AppTheme.accent),
-              const SizedBox(width: 4),
-              Text(
-                '${pkt.batteryVoltage.toStringAsFixed(1)}V',
-                style: const TextStyle(
-                  color: AppTheme.textPrimary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-          // Engine Temp
-          Row(
-            children: [
-              const Icon(Icons.thermostat, size: 14, color: AppTheme.danger),
-              const SizedBox(width: 4),
-              Text(
-                '${pkt.coolantTempC}°C',
-                style: const TextStyle(
-                  color: AppTheme.textPrimary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPeakStatsStrip() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.surfaceLight),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          _buildStatColumn('PEAK LEFT', '${telemetryManager.maxLeanLeft.abs().toStringAsFixed(1)}°', AppTheme.primary),
-          Container(width: 1, height: 28, color: AppTheme.surfaceLight),
-          _buildStatColumn('PEAK RIGHT', '${telemetryManager.maxLeanRight.abs().toStringAsFixed(1)}°', AppTheme.accent),
-          Container(width: 1, height: 28, color: AppTheme.surfaceLight),
-          _buildStatColumn('TOP SPEED', '${telemetryManager.topSpeed.toStringAsFixed(0)} km/h', AppTheme.textPrimary),
-          Container(width: 1, height: 28, color: AppTheme.surfaceLight),
-          _buildStatColumn('MAX G', '${telemetryManager.maxG.toStringAsFixed(2)}G', AppTheme.danger),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatColumn(String label, String value, Color color) {
+  // ================= PORTRAIT LAYOUT =================
+  Widget _buildPortraitLayout(
+    dynamic pkt,
+    double leftLean,
+    double rightLean,
+    bool isRecording,
+    bool isPaused,
+  ) {
     return Column(
       children: [
-        Text(
-          label,
-          style: const TextStyle(color: AppTheme.textMuted, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1.0),
+        const SizedBox(height: 12),
+
+        // Top Row: Lean Badges (Left & Right)
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _buildLeanBadge(leftLean.round(), 'NÁKLON L'),
+              _buildLeanBadge(rightLean.round(), 'NÁKLON P'),
+            ],
+          ),
         ),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: TextStyle(color: color, fontSize: 15, fontWeight: FontWeight.bold),
+
+        const Spacer(flex: 1),
+
+        // Center: Speed Display (Bold Black on White)
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '${pkt.vehicleSpeedKmh}',
+              style: const TextStyle(
+                color: Colors.black,
+                fontSize: 110,
+                fontWeight: FontWeight.w900,
+                height: 0.85,
+                letterSpacing: -5.0,
+                fontFamily: '-apple-system',
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'KM / H',
+              style: TextStyle(
+                color: Colors.black,
+                fontSize: 17,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 6.0,
+                fontFamily: '-apple-system',
+              ),
+            ),
+          ],
+        ),
+
+        const Spacer(flex: 1),
+
+        // Naked G-G Friction Reticle (No Card / Container)
+        GgFrictionReticle(
+          accelXG: pkt.accelXG,
+          accelYG: pkt.accelYG,
+          frictionEnvelope: widget.telemetryManager.frictionEnvelopeRadii,
+          size: 240,
+        ),
+
+        const Spacer(flex: 2),
+
+        // Bottom Controls: Locked Slider OR Unlocked Navigation & Action Buttons
+        _buildBottomControlsArea(isRecording, isPaused, isLandscape: false),
+      ],
+    );
+  }
+
+  // ================= LANDSCAPE LAYOUT =================
+  Widget _buildLandscapeLayout(
+    dynamic pkt,
+    double leftLean,
+    double rightLean,
+    bool isRecording,
+    bool isPaused,
+  ) {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        // Top Left: Lean Badge Left
+        Positioned(
+          top: 10,
+          left: 36,
+          child: _buildLeanBadge(leftLean.round(), 'NÁKLON L'),
+        ),
+
+        // Top Right: Lean Badge Right
+        Positioned(
+          top: 10,
+          right: 36,
+          child: _buildLeanBadge(rightLean.round(), 'NÁKLON P'),
+        ),
+
+        // Center Top: Speed Display
+        Positioned(
+          top: 8,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '${pkt.vehicleSpeedKmh}',
+                style: const TextStyle(
+                  color: Colors.black,
+                  fontSize: 76,
+                  fontWeight: FontWeight.w900,
+                  height: 0.85,
+                  letterSpacing: -3.0,
+                  fontFamily: '-apple-system',
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'KM / H',
+                style: TextStyle(
+                  color: Colors.black,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 4.0,
+                  fontFamily: '-apple-system',
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Center: Naked G-G Friction Reticle
+        Positioned(
+          top: 105,
+          child: GgFrictionReticle(
+            accelXG: pkt.accelXG,
+            accelYG: pkt.accelYG,
+            frictionEnvelope: widget.telemetryManager.frictionEnvelopeRadii,
+            size: 175,
+          ),
+        ),
+
+        // Bottom Controls Area
+        Positioned(
+          bottom: 0,
+          left: 0,
+          right: 0,
+          child: _buildBottomControlsArea(isRecording, isPaused, isLandscape: true),
         ),
       ],
     );
   }
 
-  Widget _buildMetricTile({
-    required String label,
-    required String value,
-    required IconData icon,
-    required Color color,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.surfaceLight),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 18, color: color),
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: const TextStyle(color: AppTheme.textMuted, fontSize: 10, fontWeight: FontWeight.bold),
-              ),
-            ],
+  // ================= COMMON COMPONENT BUILDERS =================
+
+  Widget _buildLeanBadge(int angle, String label) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '$angle°',
+          style: const TextStyle(
+            color: Colors.black,
+            fontSize: 54,
+            fontWeight: FontWeight.w900,
+            letterSpacing: -1.5,
+            height: 1.0,
+            fontFamily: '-apple-system',
           ),
-          Text(
-            value,
-            style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: const TextStyle(
+            color: Color(0xFF8E8E93),
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.8,
+            fontFamily: '-apple-system',
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBottomControlsArea(bool isRecording, bool isPaused, {required bool isLandscape}) {
+    if (_isLocked) {
+      // Locked State: Show Slide to Unlock Bar
+      return Padding(
+        padding: EdgeInsets.fromLTRB(
+          isLandscape ? 60 : 24,
+          8,
+          isLandscape ? 60 : 24,
+          isLandscape ? 12 : 24,
+        ),
+        child: SlideToUnlock(
+          onUnlocked: _onUnlocked,
+          width: isLandscape ? 480 : double.infinity,
+          height: isLandscape ? 58 : 64,
+        ),
+      );
+    }
+
+    // Unlocked State: Show Action Button(s) directly above Bottom Navigation Bar
+    return Container(
+      color: Colors.transparent,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Action Buttons: Pause OR [Stop/Save + Continue]
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: isLandscape ? 80 : 20, vertical: 8),
+            child: isPaused
+                ? Row(
+                    children: [
+                      // Stop & Save Button (Crimson Red)
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFFF3B30),
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            shadowColor: const Color(0x60FF3B30),
+                          ),
+                          icon: const Icon(Icons.stop, size: 22),
+                          label: const Text(
+                            'UKONČIT & ULOŽIT',
+                            style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 0.8),
+                          ),
+                          onPressed: _onStopAndSavePressed,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      // Continue Button (Apple Green)
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF34C759),
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            shadowColor: const Color(0x6034C759),
+                          ),
+                          icon: const Icon(Icons.play_arrow, size: 22),
+                          label: const Text(
+                            'POKRAČOVAT',
+                            style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 0.8),
+                          ),
+                          onPressed: _onContinuePressed,
+                        ),
+                      ),
+                    ],
+                  )
+                : SizedBox(
+                    width: isLandscape ? 460 : double.infinity,
+                    height: isLandscape ? 50 : 56,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF1C1C1E),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      ),
+                      icon: const Icon(Icons.pause, color: Color(0xFFFF9500), size: 22),
+                      label: const Text(
+                        'POZASTAVIT JÍZDU',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 14,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                      onPressed: _onPausePressed,
+                    ),
+                  ),
+          ),
+
+          // Bottom Navigation Bar
+          Container(
+            height: isLandscape ? 58 : 72,
+            decoration: const BoxDecoration(
+              color: Color(0xFFF2F2F7),
+              border: Border(top: BorderSide(color: Color(0xFFE5E5EA), width: 1.2)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildNavItem(
+                  icon: Icons.bar_chart_rounded,
+                  label: 'Historie',
+                  isActive: false,
+                  onTap: () => widget.onNavigateTab?.call(1),
+                ),
+                _buildNavItem(
+                  icon: Icons.two_wheeler_rounded,
+                  label: 'Jízda',
+                  isActive: true,
+                  onTap: () {},
+                ),
+                _buildNavItem(
+                  icon: Icons.settings_rounded,
+                  label: 'Nastavení',
+                  isActive: false,
+                  onTap: () => widget.onNavigateTab?.call(2),
+                ),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildActionControls(BuildContext context) {
-    final isRecording = telemetryManager.isRecording;
-
-    return Row(
-      children: [
-        // Zero Tare Button
-        Expanded(
-          flex: 2,
-          child: ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.surfaceLight,
-              foregroundColor: AppTheme.textPrimary,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+  Widget _buildNavItem({
+    required IconData icon,
+    required String label,
+    required bool isActive,
+    required VoidCallback onTap,
+  }) {
+    final color = isActive ? Colors.black : const Color(0xFF8E8E93);
+    return InkWell(
+      onTap: onTap,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, color: color, size: 24),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 11,
+              fontWeight: isActive ? FontWeight.w900 : FontWeight.w600,
+              fontFamily: '-apple-system',
             ),
-            icon: const Icon(Icons.tune, size: 20),
-            label: const Text('TARE ZERO', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-            onPressed: () async {
-              await telemetryManager.tareZero();
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('IMU Zero-Tare Calibrated!'),
-                    duration: Duration(seconds: 1),
-                    backgroundColor: AppTheme.surfaceLight,
-                  ),
-                );
-              }
-            },
           ),
-        ),
-        const SizedBox(width: 12),
-        // Start / Stop Session Record Button
-        Expanded(
-          flex: 3,
-          child: ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: isRecording ? AppTheme.danger : AppTheme.success,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            icon: Icon(isRecording ? Icons.stop : Icons.fiber_manual_record, size: 20),
-            label: Text(
-              isRecording ? 'STOP LOGGING (${telemetryManager.sampleCount})' : 'START LOGGING',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 0.8),
-            ),
-            onPressed: () async {
-              if (isRecording) {
-                await telemetryManager.stopRecording();
-              } else {
-                await telemetryManager.startRecording();
-              }
-            },
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

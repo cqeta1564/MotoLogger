@@ -18,6 +18,7 @@ class TelemetryManager extends ChangeNotifier {
   Position? _latestPosition;
 
   bool _isRecording = false;
+  bool _isPaused = false;
   int? _currentSessionId;
   String _sessionTitle = 'Track Ride';
   DateTime? _sessionStartTime;
@@ -29,6 +30,9 @@ class TelemetryManager extends ChangeNotifier {
   double _totalDistanceKm = 0.0;
   int _sampleCount = 0;
 
+  // Polar friction envelope: 36 angular sectors (every 10 deg)
+  final List<double> _frictionEnvelope = List.filled(36, 0.15);
+
   final List<FusedSample> _sampleBuffer = [];
   Timer? _batchFlushTimer;
   StreamSubscription? _bleSub;
@@ -37,12 +41,14 @@ class TelemetryManager extends ChangeNotifier {
   TelemetryPacket get latestPacket => _latestPacket;
   Position? get latestPosition => _latestPosition;
   bool get isRecording => _isRecording;
+  bool get isPaused => _isPaused;
   double get maxLeanLeft => _maxLeanLeft;
   double get maxLeanRight => _maxLeanRight;
   double get topSpeed => _topSpeed;
   double get maxG => _maxG;
   double get totalDistanceKm => _totalDistanceKm;
   int get sampleCount => _sampleCount;
+  List<double> get frictionEnvelopeRadii => List.unmodifiable(_frictionEnvelope);
 
   TelemetryManager({
     required this.bleService,
@@ -72,8 +78,18 @@ class TelemetryManager extends ChangeNotifier {
         _maxG = currentG;
       }
 
-      // If session recording is active, fuse with GPS and buffer
-      if (_isRecording && _currentSessionId != null) {
+      // Update polar friction envelope for G-G diagram
+      if (currentG > 0.05) {
+        double angle = atan2(packet.accelYG, packet.accelXG);
+        if (angle < 0) angle += 2 * pi;
+        final sector = ((angle / (2 * pi)) * 36).floor() % 36;
+        if (currentG > _frictionEnvelope[sector]) {
+          _frictionEnvelope[sector] = currentG;
+        }
+      }
+
+      // If session recording is active and not paused, fuse with GPS and buffer
+      if (_isRecording && !_isPaused && _currentSessionId != null) {
         _sampleCount++;
         final sample = FusedSample.fromTelemetryAndGps(
           sessionId: _currentSessionId!,
@@ -98,7 +114,7 @@ class TelemetryManager extends ChangeNotifier {
     });
 
     _gpsSub = gpsService.positionStream.listen((pos) {
-      if (_latestPosition != null && _isRecording) {
+      if (_latestPosition != null && _isRecording && !_isPaused) {
         final distanceMeters = Geolocator.distanceBetween(
           _latestPosition!.latitude,
           _latestPosition!.longitude,
@@ -131,10 +147,26 @@ class TelemetryManager extends ChangeNotifier {
     _totalDistanceKm = 0.0;
     _sampleCount = 0;
     _sampleBuffer.clear();
+    _isPaused = false;
+    _frictionEnvelope.fillRange(0, 36, 0.15);
 
     _currentSessionId = await dbService.startSession(_sessionTitle);
     _isRecording = true;
     notifyListeners();
+  }
+
+  void pauseRecording() {
+    if (_isRecording && !_isPaused) {
+      _isPaused = true;
+      notifyListeners();
+    }
+  }
+
+  void resumeRecording() {
+    if (_isRecording && _isPaused) {
+      _isPaused = false;
+      notifyListeners();
+    }
   }
 
   Future<void> stopRecording() async {
@@ -158,6 +190,7 @@ class TelemetryManager extends ChangeNotifier {
     await dbService.updateSession(session);
 
     _isRecording = false;
+    _isPaused = false;
     _currentSessionId = null;
     notifyListeners();
   }
@@ -171,6 +204,11 @@ class TelemetryManager extends ChangeNotifier {
 
   Future<void> tareZero() async {
     await bleService.sendTareZero();
+  }
+
+  void resetFrictionEnvelope() {
+    _frictionEnvelope.fillRange(0, 36, 0.15);
+    notifyListeners();
   }
 
   @override
