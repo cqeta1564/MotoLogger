@@ -1,12 +1,12 @@
-# MotoLogger v3.4 Hardware Manufacturing & Assembly Guide
+# MotoLogger Hardware Manufacturing & Assembly Guide
 
-This document contains full manufacturing and ordering specifications for fabricating and assembling the **MotoLogger v3.4** hardware using **JLCPCB** or **PCBWay**.
+This document contains full manufacturing and ordering specifications for fabricating and assembling the **MotoLogger** hardware using **JLCPCB** or **PCBWay**.
 
 ---
 
 ## 1. Main Board Fabrication Specifications (Gerbers)
 
-- **Gerber File:** `hardware/gerbers/MotoLogger_v3.4_Clean_Gerber.zip` (Neutral silkscreen without branding)
+- **Gerber File:** `hardware/gerbers/MotoLogger_Clean_Gerber.zip` (Neutral silkscreen without branding)
 - **Board Dimensions:** `31.5 mm x 49.5 mm` (1.24 in x 1.95 in)
 - **Layer Count:** 2 Layers
 - **PCB Thickness:** 1.6 mm
@@ -21,8 +21,8 @@ This document contains full manufacturing and ordering specifications for fabric
 
 ## 2. SMT Assembly Specifications (PCBA)
 
-- **Bill of Materials (BOM):** `hardware/assembly/MotoLogger_v3.4_BOM.csv`
-- **Part Placement / CPL:** `hardware/assembly/MotoLogger_v3.4_Part_Placements.zip`
+- **Bill of Materials (BOM):** `hardware/assembly/MotoLogger_BOM.csv`
+- **Part Placement / CPL:** `hardware/assembly/MotoLogger_Part_Placements.zip`
 - **Assembly Side:** **Top + Bottom** (double-sided SMT assembly)
 - **LCSC SMT Parts Availability:** All active components (ESP32-S3-WROOM-1-N16R8, SN65HVD230DR, LMR14006 buck regulator, MT9700 load switch) feature direct LCSC part numbers.
 

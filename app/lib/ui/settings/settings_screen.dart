@@ -108,7 +108,7 @@ class SettingsScreen extends StatelessWidget {
               _buildCard(
                 title: 'SYSTEM SPECIFICATIONS',
                 children: [
-                  _buildSpecRow('Target Hardware', 'MotoLogger v3.4 (ESP32-S3)'),
+                  _buildSpecRow('Target Hardware', 'MotoLogger (ESP32-S3)'),
                   _buildSpecRow('IMU Subsystem', 'CEVA / Hillcrest BNO085 9-DoF'),
                   _buildSpecRow('IMU Fusion Mode', 'Game Rotation Vector (100 Hz)'),
                   _buildSpecRow('BLE Stream Rate', '25 Hz (28-byte binary packet)'),

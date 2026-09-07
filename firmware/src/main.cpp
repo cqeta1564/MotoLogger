@@ -68,7 +68,7 @@ void setup() {
     delay(500);
     Serial.println("\n==============================================");
     Serial.println("  MotoLogger ESP32-S3 Telemetry Starting...   ");
-    Serial.println("  MotoLogger v3.4 + BNO085 + BLE Android/CarPlay");
+    Serial.println("  MotoLogger + BNO085 + BLE Android/CarPlay");
     Serial.println("==============================================\n");
 
     // 4. Initialize CAN / TWAI Subsystem (500 kbps, Listen-Only default)

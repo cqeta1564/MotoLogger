@@ -1,4 +1,4 @@
-// Pinout v3.2
+// MotoLogger Pinout
 
 #define FORCE_ON    17
 #define SENSE_V_DIG 8
@@ -9,7 +9,7 @@
 
 #define CAN_RX      13
 #define CAN_TX      14
-#define CAN_RS      38    // Standby and/or faster rise times (from v3.2 only)
+#define CAN_RS      38    // Standby and/or faster rise times
 
 #define HI_DRIVER   21    // 3V3 high driver power output
 

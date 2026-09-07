@@ -6,7 +6,7 @@
 [![IMU](https://img.shields.io/badge/IMU-BNO085_9DoF-green.svg)](https://www.ceva-dsp.com/)
 [![BLE](https://img.shields.io/badge/BLE-25Hz_GATT_Stream-purple.svg)](https://github.com/h2zero/NimBLE-Arduino)
 
-High-performance, modular C++ firmware and hardware package for motorcycle telemetry datalogging based on the custom **MotoLogger v3.4 (ESP32-S3)** design paired with a **CEVA / Hillcrest BNO085 9-DoF IMU** breakout module and **NimBLE real-time streaming** to Android (Android Auto) and iOS (Apple CarPlay).
+High-performance, modular C++ firmware and hardware package for motorcycle telemetry datalogging based on the custom **MotoLogger (ESP32-S3)** design paired with a **CEVA / Hillcrest BNO085 9-DoF IMU** breakout module and **NimBLE real-time streaming** to Android (Android Auto) and iOS (Apple CarPlay).
 
 ---
 
@@ -16,16 +16,16 @@ High-performance, modular C++ firmware and hardware package for motorcycle telem
 MotoLogger-Firmware/
 ├── hardware/                                # Complete PCB fabrication & assembly files
 │   ├── gerbers/                             # Production-ready Gerber ZIP archives
-│   │   ├── MotoLogger_v3.4_Clean_Gerber.zip # Main board gerbers (neutral silkscreen)
+│   │   ├── MotoLogger_Clean_Gerber.zip      # Main board gerbers (neutral silkscreen)
 │   │   └── MotoLogger_OBD2_Plug_Gerber.zip  # OBD-II sandwich connector gerbers
 │   ├── assembly/                            # SMT / PCBA manufacturing data
-│   │   ├── MotoLogger_v3.4_BOM.csv          # Bill of Materials with LCSC part numbers
-│   │   ├── MotoLogger_v3.4_BOM.xlsx         # Formatted Excel BOM
-│   │   ├── MotoLogger_v3.4_Part_Placements.zip # Top and bottom SMT placement files
+│   │   ├── MotoLogger_BOM.csv               # Bill of Materials with LCSC part numbers
+│   │   ├── MotoLogger_BOM.xlsx              # Formatted Excel BOM
+│   │   ├── MotoLogger_Part_Placements.zip   # Top and bottom SMT placement files
 │   │   └── Ordering_Specs_JLCPCB_PCBWay.md  # Detailed fabrication and assembly specs
 │   └── schematics/                          # Circuit schematics and reference
-│       ├── MotoLogger_v3.4_Schematic.png    # High-resolution circuit schematic diagram
-│       ├── MotoLogger_v3.4_Schematic.json   # Full circuit schematic source
+│       ├── MotoLogger_Schematic.png         # High-resolution circuit schematic diagram
+│       ├── MotoLogger_Schematic.json        # Full circuit schematic source
 │       └── MotoLogger_Pinout_Reference.h    # Header pad mapping reference
 ├── include/
 │   ├── config.h                             # Hardware pinout, BLE UUIDs, thresholds
@@ -70,7 +70,7 @@ MotoLogger-Firmware/
 
 ---
 
-## Hardware Pinout (MotoLogger v3.4 + BNO085)
+## Hardware Pinout (MotoLogger + BNO085)
 
 | Periphery / Function | ESP32-S3 Pin | Signal / Description |
 | :--- | :--- | :--- |

@@ -5,7 +5,7 @@
 /**
  * @file config.h
  * @brief Hardware pinout, system thresholds, and bus configurations
- *        for MotoLogger based on MotoLogger v3.4 + BNO085 breakout.
+ *        for MotoLogger based on ESP32-S3 + BNO085 breakout.
  */
 
 // ==============================================================================

@@ -3,7 +3,7 @@
 [![PlatformIO](https://img.shields.io/badge/Firmware-ESP32--S3_PlatformIO-orange.svg)](https://platformio.org/)
 [![Flutter](https://img.shields.io/badge/App-Flutter_Android_&_iOS-blue.svg)](https://flutter.dev/)
 [![Android Auto](https://img.shields.io/badge/Projection-Android_Auto_&_CarPlay-green.svg)](https://developer.android.com/training/cars/apps)
-[![Hardware](https://img.shields.io/badge/Hardware-MotoLogger_v3.4-red.svg)](hardware/)
+[![Hardware](https://img.shields.io/badge/Hardware-MotoLogger-red.svg)](hardware/)
 [![License](https://img.shields.io/badge/License-MIT-purple.svg)](LICENSE)
 
 An end-to-end, high-performance motorcycle telemetry and data acquisition system. Features a custom **ESP32-S3 hardware logger**, **100 Hz BNO085 IMU fusion** for vibration-resistant lean angle calculation, **500 kbps TWAI CAN bus capture**, and a companion **Flutter mobile app** with **Android Auto** and **Apple CarPlay** dashboard projection. 100% offline and serverless.
@@ -55,16 +55,16 @@ An end-to-end, high-performance motorcycle telemetry and data acquisition system
 MotoLogger/
 ├── hardware/                                # Complete PCB manufacturing & assembly files
 │   ├── gerbers/                             # Production Gerber ZIP archives (neutral silkscreen)
-│   │   ├── MotoLogger_v3.4_Clean_Gerber.zip # Main board gerbers
+│   │   ├── MotoLogger_Clean_Gerber.zip      # Main board gerbers
 │   │   └── MotoLogger_OBD2_Plug_Gerber.zip  # OBD-II sandwich board gerbers
 │   ├── assembly/                            # SMT / PCBA manufacturing data
-│   │   ├── MotoLogger_v3.4_BOM.csv          # Bill of Materials with LCSC part numbers
-│   │   ├── MotoLogger_v3.4_BOM.xlsx         # Formatted Excel BOM
-│   │   ├── MotoLogger_v3.4_Part_Placements.zip # Top and bottom SMT placement diagrams
+│   │   ├── MotoLogger_BOM.csv               # Bill of Materials with LCSC part numbers
+│   │   ├── MotoLogger_BOM.xlsx              # Formatted Excel BOM
+│   │   ├── MotoLogger_Part_Placements.zip   # Top and bottom SMT placement diagrams
 │   │   └── Ordering_Specs_JLCPCB_PCBWay.md  # Detailed fabrication and assembly specs
 │   └── schematics/                          # Circuit schematics and reference
-│       ├── MotoLogger_v3.4_Schematic.png    # Circuit schematic diagram
-│       ├── MotoLogger_v3.4_Schematic.json   # Schematic source
+│       ├── MotoLogger_Schematic.png         # Circuit schematic diagram
+│       ├── MotoLogger_Schematic.json        # Schematic source
 │       └── MotoLogger_Pinout_Reference.h    # Header pad mapping reference
 │
 ├── firmware/                                # Modular C++ ESP32-S3 Firmware (PlatformIO)
