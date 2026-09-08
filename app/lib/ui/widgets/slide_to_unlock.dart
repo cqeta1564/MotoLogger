@@ -29,40 +29,42 @@ class SlideToUnlock extends StatefulWidget {
 class _SlideToUnlockState extends State<SlideToUnlock>
     with TickerProviderStateMixin {
   double _dragPosition = 0.0;
-  late final AnimationController _resetController;
-  late final AnimationController _shimmerController;
+  AnimationController? _resetController;
+  AnimationController? _shimmerController;
   Animation<double>? _resetAnimation;
+
+  AnimationController get resetController => _resetController ??= AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 280),
+      )..addListener(() {
+          if (_resetAnimation != null) {
+            setState(() {
+              _dragPosition = _resetAnimation!.value;
+            });
+          }
+        });
+
+  AnimationController get shimmerController => _shimmerController ??= AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 2400),
+      )..repeat();
 
   @override
   void initState() {
     super.initState();
-    _resetController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 280),
-    )..addListener(() {
-        if (_resetAnimation != null) {
-          setState(() {
-            _dragPosition = _resetAnimation!.value;
-          });
-        }
-      });
-
-    // Continuous smooth Apple shimmer sweep across the label
-    _shimmerController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2400),
-    )..repeat();
+    resetController;
+    shimmerController;
   }
 
   @override
   void dispose() {
-    _resetController.dispose();
-    _shimmerController.dispose();
+    _resetController?.dispose();
+    _shimmerController?.dispose();
     super.dispose();
   }
 
   void _onHorizontalDragUpdate(DragUpdateDetails details, double maxDrag) {
-    if (_resetController.isAnimating) return;
+    if (resetController.isAnimating) return;
     setState(() {
       _dragPosition = (_dragPosition + details.primaryDelta!).clamp(0.0, maxDrag);
     });
@@ -84,8 +86,8 @@ class _SlideToUnlockState extends State<SlideToUnlock>
       _resetAnimation = Tween<double>(
         begin: _dragPosition,
         end: 0.0,
-      ).animate(CurvedAnimation(parent: _resetController, curve: Curves.easeOutCubic));
-      _resetController.forward(from: 0.0);
+      ).animate(CurvedAnimation(parent: resetController, curve: Curves.easeOutCubic));
+      resetController.forward(from: 0.0);
     }
   }
 
@@ -125,9 +127,9 @@ class _SlideToUnlockState extends State<SlideToUnlock>
                   child: Opacity(
                     opacity: (1.0 - progress * 1.3).clamp(0.0, 1.0),
                     child: AnimatedBuilder(
-                      animation: _shimmerController,
+                      animation: shimmerController,
                       builder: (context, child) {
-                        final val = _shimmerController.value;
+                        final val = shimmerController.value;
                         return ShaderMask(
                           shaderCallback: (bounds) {
                             return LinearGradient(
