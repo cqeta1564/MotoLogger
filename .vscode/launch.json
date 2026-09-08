@@ -1,0 +1,28 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "MotoLogger (Debug)",
+      "request": "launch",
+      "type": "dart",
+      "cwd": "${workspaceFolder}/app",
+      "program": "lib/main.dart"
+    },
+    {
+      "name": "MotoLogger (Profile)",
+      "request": "launch",
+      "type": "dart",
+      "flutterMode": "profile",
+      "cwd": "${workspaceFolder}/app",
+      "program": "lib/main.dart"
+    },
+    {
+      "name": "MotoLogger (Release)",
+      "request": "launch",
+      "type": "dart",
+      "flutterMode": "release",
+      "cwd": "${workspaceFolder}/app",
+      "program": "lib/main.dart"
+    }
+  ]
+}
