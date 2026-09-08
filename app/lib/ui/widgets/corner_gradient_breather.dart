@@ -118,8 +118,12 @@ class _CornerGradientPainter extends CustomPainter {
     final w = size.width;
     final h = size.height;
 
-    final leanRatio = (leanDeg / 45.0).clamp(0.0, 1.0);
-    final isOppositeActive = oppositeLeanDeg > 4.0;
+    // 100% clean: if motorcycle is upright (<= 1.0 deg), render zero color
+    if (leanDeg <= 1.0) return;
+
+    // Smooth entry curve from 1.0 to 5.0 degrees
+    final activation = Curves.easeOut.transform(((leanDeg - 1.0) / 4.0).clamp(0.0, 1.0));
+    final leanRatio = ((leanDeg - 1.0) / 44.0).clamp(0.0, 1.0);
 
     // Dynamic anchor points:
     // P0: Top edge (starts near center of top edge)
@@ -140,12 +144,8 @@ class _CornerGradientPainter extends CustomPainter {
       yBottom = (baseBottom + (h * 0.14 * leanRatio) + (10.0 * breath)).clamp(0.0, h * 0.72);
     }
 
-    // Alpha intensity
-    double baseAlpha = 0.32 + 0.44 * leanRatio + 0.08 * breath;
-    if (isOppositeActive && leanDeg < 2.0) {
-      baseAlpha *= 0.35;
-    }
-    baseAlpha = baseAlpha.clamp(0.12, 0.86);
+    // Alpha intensity: completely 0.0 at <= 1.0 deg, ramping up to ~0.88 at deep lean
+    final baseAlpha = (activation * (0.35 + 0.45 * leanRatio + 0.08 * breath)).clamp(0.0, 0.88);
 
     // Build the logarithmic curve path
     final path = Path();
