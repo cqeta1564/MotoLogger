@@ -176,12 +176,13 @@ class _CornerGradientPainter extends CustomPainter {
       path.close();
     }
 
-    // Palette matching proposal:
-    // Corner: Apple Mint Green
-    // Mid: Vibrant Electric Yellow
-    // Wave: Amber Orange
-    // Leading Logarithmic Edge: Racing Red
+    // Palette matching Apple iOS Design System:
+    // Corner: Apple Mint Green with subtle Teal hint
+    // Mid: Vibrant Electric Gold/Yellow
+    // Wave: Apple Tangerine / Amber
+    // Leading Logarithmic Edge: Apple Racing Red
     const green = Color(0xFF30D158);
+    const teal = Color(0xFF30B0C7);
     const yellow = Color(0xFFFFD60A);
     const orange = Color(0xFFFF9500);
     const red = Color(0xFFFF3B30);
@@ -190,13 +191,36 @@ class _CornerGradientPainter extends CustomPainter {
     final double orangeMix = ((t - 0.20) / 0.40).clamp(0.0, 1.0);
     final double redMix = ((t - 0.55) / 0.45).clamp(0.0, 1.0);
 
-    final cCorner = green.withValues(alpha: (baseAlpha * 0.92).clamp(0.0, 1.0));
-    final cMid = Color.lerp(green, yellow, yellowMix)!.withValues(alpha: (baseAlpha * 0.85).clamp(0.0, 1.0));
-    final cWarm = Color.lerp(yellow, orange, orangeMix)!.withValues(alpha: (baseAlpha * (0.50 + 0.40 * orangeMix)).clamp(0.0, 1.0));
-    final cEdge = Color.lerp(orange, red, redMix)!.withValues(alpha: (baseAlpha * (0.30 + 0.65 * redMix)).clamp(0.0, 1.0));
+    // Dynamic Apple color nodes
+    final cRoot = Color.lerp(green, teal, 0.25)!.withValues(alpha: (baseAlpha * 0.95).clamp(0.0, 1.0));
+    final cMid = Color.lerp(green, yellow, yellowMix)!.withValues(alpha: (baseAlpha * 0.88).clamp(0.0, 1.0));
+    final cWarm = Color.lerp(yellow, orange, orangeMix)!.withValues(alpha: (baseAlpha * (0.55 + 0.35 * orangeMix)).clamp(0.0, 1.0));
+    final cEdge = Color.lerp(orange, red, redMix)!.withValues(alpha: (baseAlpha * (0.35 + 0.60 * redMix)).clamp(0.0, 1.0));
     final cFade = Colors.white.withValues(alpha: 0.0);
 
-    // 1. Fill the corner canopy with smooth feathered dissipation
+    // --- LAYER 1: Ambient Luminous Bloom (Apple Gaussian Aurora) ---
+    final cornerOrigin = isLeft ? Offset.zero : Offset(w, 0);
+    final ambientRadius = (topReach + bottomReach) * 0.82;
+    final ambientShader = ui.Gradient.radial(
+      cornerOrigin,
+      ambientRadius,
+      [
+        cRoot.withValues(alpha: (baseAlpha * 0.40).clamp(0.0, 1.0)),
+        cMid.withValues(alpha: (baseAlpha * 0.30).clamp(0.0, 1.0)),
+        cWarm.withValues(alpha: (baseAlpha * 0.18 * orangeMix).clamp(0.0, 1.0)),
+        cFade,
+      ],
+      const [0.0, 0.42, 0.75, 1.0],
+    );
+
+    final ambientPaint = Paint()
+      ..shader = ambientShader
+      ..style = PaintingStyle.fill
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, (18.0 * sizeFactor + 6.0).clamp(4.0, 32.0));
+
+    canvas.drawPath(path, ambientPaint);
+
+    // --- LAYER 2: Fluid Logarithmic Canopy Fill with Feathered Dissipation ---
     final startOffset = isLeft ? Offset.zero : Offset(w, 0);
     final endOffset = isLeft
         ? Offset(topReach * 0.88, bottomReach * 0.88)
@@ -205,40 +229,40 @@ class _CornerGradientPainter extends CustomPainter {
     final fillShader = ui.Gradient.linear(
       startOffset,
       endOffset,
-      [cCorner, cMid, cWarm, cEdge, cFade],
-      const [0.0, 0.28, 0.58, 0.85, 1.0],
+      [cRoot, cMid, cWarm, cEdge, cFade],
+      const [0.0, 0.28, 0.58, 0.86, 1.0],
     );
 
-    // Soft blur feathering on the fill removes hard vector edges
     final fillPaint = Paint()
       ..shader = fillShader
       ..style = PaintingStyle.fill
-      ..maskFilter = MaskFilter.blur(BlurStyle.normal, (3.0 + 8.0 * sizeFactor).clamp(2.0, 12.0));
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, (4.0 + 8.0 * sizeFactor).clamp(2.5, 14.0));
 
     canvas.drawPath(path, fillPaint);
 
-    // 2. Soft Glowing Wave along the leading edge (only as lean deepens)
+    // --- LAYER 3: Specular Neon Crest Filament (Apple Edge Lighting) ---
     if (orangeMix > 0.05) {
-      final outerGlowPaint = Paint()
+      // Pass A: Soft Ambient Edge Bloom
+      final edgeHaloPaint = Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = (10.0 + 24.0 * t) * sizeFactor
+        ..strokeWidth = (12.0 + 20.0 * t) * sizeFactor
         ..strokeCap = StrokeCap.round
         ..color = Color.lerp(orange, red, redMix)!
             .withValues(alpha: (baseAlpha * 0.35 * orangeMix).clamp(0.0, 0.65))
         ..maskFilter = MaskFilter.blur(BlurStyle.normal, 12.0 * sizeFactor + 4.0);
 
-      canvas.drawPath(curvePath, outerGlowPaint);
-    }
+      canvas.drawPath(curvePath, edgeHaloPaint);
 
-    if (redMix > 0.05) {
-      final innerCrestPaint = Paint()
+      // Pass B: Precision Luminous Core Filament (Crystalline glass edge)
+      final coreFilamentPaint = Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = (4.0 + 10.0 * redMix) * sizeFactor
+        ..strokeWidth = (2.2 + 3.8 * t) * sizeFactor
         ..strokeCap = StrokeCap.round
-        ..color = red.withValues(alpha: (baseAlpha * 0.55 * redMix).clamp(0.0, 0.85))
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, 6.0 * sizeFactor + 2.0);
+        ..color = Color.lerp(orange, red, redMix)!
+            .withValues(alpha: (baseAlpha * 0.78 * orangeMix).clamp(0.0, 0.90))
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, 2.5 * sizeFactor + 0.8);
 
-      canvas.drawPath(curvePath, innerCrestPaint);
+      canvas.drawPath(curvePath, coreFilamentPaint);
     }
   }
 

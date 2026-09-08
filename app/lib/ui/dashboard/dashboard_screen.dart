@@ -270,23 +270,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
   ) {
     return Column(
       children: [
-        const SizedBox(height: 16),
+        const SizedBox(height: 18),
 
-        // Top Row: Lean Badges (Left & Right)
+        // Top Row: Apple Precision Lean Badges (Left & Right)
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 28),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _buildLeanBadge(leftLean.round()),
-              _buildLeanBadge(rightLean.round()),
+              _buildLeanBadge(leftLean.round(), isLeft: true),
+              _buildLeanBadge(rightLean.round(), isLeft: false),
             ],
           ),
         ),
 
         const Spacer(flex: 1),
 
-        // Center: Speed Display (Bold Black on White)
+        // Center: Speed Display (Apple Fitness / Maps Typography)
         GestureDetector(
           onTap: _toggleDemoSimulation,
           onLongPress: _toggleDemoSimulation,
@@ -297,21 +297,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 '${pkt.vehicleSpeedKmh}',
                 style: const TextStyle(
                   color: Colors.black,
-                  fontSize: 110,
-                  fontWeight: FontWeight.w900,
-                  height: 0.85,
-                  letterSpacing: -5.0,
+                  fontSize: 114,
+                  fontWeight: FontWeight.w800,
+                  height: 0.82,
+                  letterSpacing: -4.5,
                   fontFamily: '-apple-system',
+                  fontFeatures: [FontFeature.tabularFigures()],
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 10),
               const Text(
-                'KM / H',
+                'KM/H',
                 style: TextStyle(
-                  color: Colors.black,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 6.0,
+                  color: Color(0xFF8E8E93),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 2.0,
                   fontFamily: '-apple-system',
                 ),
               ),
@@ -321,7 +322,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
         const Spacer(flex: 1),
 
-        // Naked G-G Friction Reticle (No Card / Container)
+        // Naked G-G Friction Reticle (Apple Precision Instrument)
         GgFrictionReticle(
           accelXG: pkt.accelXG,
           accelYG: pkt.accelYG,
@@ -350,14 +351,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Positioned(
           top: 14,
           left: 44,
-          child: _buildLeanBadge(leftLean.round()),
+          child: _buildLeanBadge(leftLean.round(), isLeft: true),
         ),
 
         // Top Right: Lean Badge Right
         Positioned(
           top: 14,
           right: 44,
-          child: _buildLeanBadge(rightLean.round()),
+          child: _buildLeanBadge(rightLean.round(), isLeft: false),
         ),
 
         // Center Top: Speed Display
@@ -373,21 +374,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   '${pkt.vehicleSpeedKmh}',
                   style: const TextStyle(
                     color: Colors.black,
-                    fontSize: 76,
-                    fontWeight: FontWeight.w900,
+                    fontSize: 78,
+                    fontWeight: FontWeight.w800,
                     height: 0.85,
                     letterSpacing: -3.0,
                     fontFamily: '-apple-system',
+                    fontFeatures: [FontFeature.tabularFigures()],
                   ),
                 ),
                 const SizedBox(height: 4),
                 const Text(
-                  'KM / H',
+                  'KM/H',
                   style: TextStyle(
-                    color: Colors.black,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 4.0,
+                    color: Color(0xFF8E8E93),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.8,
                     fontFamily: '-apple-system',
                   ),
                 ),
@@ -420,16 +422,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // ================= COMMON COMPONENT BUILDERS =================
 
-  Widget _buildLeanBadge(int angle) {
+  Widget _buildLeanBadge(int angle, {required bool isLeft}) {
+    final isActive = angle > 0;
     return Text(
       '$angle°',
-      style: const TextStyle(
-        color: Colors.black,
-        fontSize: 58,
-        fontWeight: FontWeight.w900,
+      style: TextStyle(
+        color: isActive ? Colors.black : const Color(0xFFC7C7CC),
+        fontSize: 54,
+        fontWeight: isActive ? FontWeight.w800 : FontWeight.w600,
         letterSpacing: -2.0,
         height: 1.0,
         fontFamily: '-apple-system',
+        fontFeatures: const [FontFeature.tabularFigures()],
       ),
     );
   }

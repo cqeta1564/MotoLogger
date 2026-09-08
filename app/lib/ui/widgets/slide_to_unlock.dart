@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// Horizontal Slide to Unlock slider widget.
-/// 
-/// The user drags the black thumb from left to right.
-/// If released before completion, it springs back smoothly.
-/// When reaching the end threshold, it triggers [onUnlocked] with haptic feedback.
+/// Authentic Apple iOS "Slide to Unlock" slider.
+///
+/// Features:
+/// 1. Classic animated shimmering light passing across the text.
+/// 2. Sleek tactile knob with Apple multi-layer drop shadows and iOS chevron.
+/// 3. Frosted pill track in Apple System Grouped style (#F2F2F7).
+/// 4. Smooth spring-back physics and heavy impact haptic feedback on unlock.
 class SlideToUnlock extends StatefulWidget {
   final VoidCallback onUnlocked;
   final String label;
@@ -16,7 +18,7 @@ class SlideToUnlock extends StatefulWidget {
     super.key,
     required this.onUnlocked,
     this.label = 'PŘEJETÍM ODEMKNOUT ➔',
-    this.height = 68.0,
+    this.height = 64.0,
     this.width = double.infinity,
   });
 
@@ -25,9 +27,10 @@ class SlideToUnlock extends StatefulWidget {
 }
 
 class _SlideToUnlockState extends State<SlideToUnlock>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   double _dragPosition = 0.0;
   late final AnimationController _resetController;
+  late final AnimationController _shimmerController;
   Animation<double>? _resetAnimation;
 
   @override
@@ -43,11 +46,18 @@ class _SlideToUnlockState extends State<SlideToUnlock>
           });
         }
       });
+
+    // Continuous smooth Apple shimmer sweep across the label
+    _shimmerController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2400),
+    )..repeat();
   }
 
   @override
   void dispose() {
     _resetController.dispose();
+    _shimmerController.dispose();
     super.dispose();
   }
 
@@ -59,7 +69,7 @@ class _SlideToUnlockState extends State<SlideToUnlock>
   }
 
   void _onHorizontalDragEnd(DragEndDetails details, double maxDrag) {
-    if (_dragPosition >= maxDrag * 0.85) {
+    if (_dragPosition >= maxDrag * 0.82) {
       // Completed unlock!
       HapticFeedback.heavyImpact();
       widget.onUnlocked();
@@ -81,7 +91,7 @@ class _SlideToUnlockState extends State<SlideToUnlock>
 
   @override
   Widget build(BuildContext context) {
-    const thumbPadding = 6.0;
+    const thumbPadding = 5.0;
     final thumbSize = widget.height - (thumbPadding * 2);
 
     return LayoutBuilder(
@@ -98,36 +108,61 @@ class _SlideToUnlockState extends State<SlideToUnlock>
             decoration: BoxDecoration(
               color: const Color(0xFFF2F2F7),
               borderRadius: BorderRadius.circular(widget.height / 2),
-              border: Border.all(color: const Color(0xFFE5E5EA), width: 1.5),
+              border: Border.all(color: const Color(0xFFE5E5EA), width: 1.0),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.03),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 12,
+                  offset: const Offset(0, 3),
                 ),
               ],
             ),
             child: Stack(
               alignment: Alignment.centerLeft,
               children: [
-                // Centered Label (fades slightly as thumb covers it)
+                // Centered Shimmering Label (Iconic Apple "Slide to unlock" shimmer effect)
                 Center(
                   child: Opacity(
-                    opacity: (1.0 - progress * 1.2).clamp(0.0, 1.0),
-                    child: Text(
-                      widget.label,
-                      style: const TextStyle(
-                        color: Color(0xFF8E8E93),
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 2.0,
-                        fontFamily: '-apple-system',
+                    opacity: (1.0 - progress * 1.3).clamp(0.0, 1.0),
+                    child: AnimatedBuilder(
+                      animation: _shimmerController,
+                      builder: (context, child) {
+                        final val = _shimmerController.value;
+                        return ShaderMask(
+                          shaderCallback: (bounds) {
+                            return LinearGradient(
+                              begin: Alignment.centerLeft,
+                              end: Alignment.centerRight,
+                              colors: const [
+                                Color(0xFF8E8E93),
+                                Color(0xFF1C1C1E),
+                                Color(0xFF8E8E93),
+                              ],
+                              stops: [
+                                (val - 0.25).clamp(0.0, 1.0),
+                                val.clamp(0.0, 1.0),
+                                (val + 0.25).clamp(0.0, 1.0),
+                              ],
+                            ).createShader(bounds);
+                          },
+                          blendMode: BlendMode.srcIn,
+                          child: child,
+                        );
+                      },
+                      child: Text(
+                        widget.label,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 2.2,
+                          fontFamily: '-apple-system',
+                        ),
                       ),
                     ),
                   ),
                 ),
 
-                // Draggable Black Thumb
+                // Draggable Tactile Apple Knob
                 Positioned(
                   left: thumbPadding + _dragPosition,
                   child: GestureDetector(
@@ -137,21 +172,30 @@ class _SlideToUnlockState extends State<SlideToUnlock>
                       width: thumbSize,
                       height: thumbSize,
                       decoration: BoxDecoration(
-                        color: Colors.black,
+                        color: const Color(0xFF000000),
                         shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.20),
+                          width: 0.8,
+                        ),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.25),
-                            blurRadius: 8,
-                            offset: const Offset(0, 3),
+                            color: Colors.black.withValues(alpha: 0.22),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.08),
+                            blurRadius: 3,
+                            offset: const Offset(0, 1),
                           ),
                         ],
                       ),
                       child: const Center(
                         child: Icon(
-                          Icons.arrow_forward,
+                          Icons.chevron_right_rounded,
                           color: Colors.white,
-                          size: 24,
+                          size: 30,
                         ),
                       ),
                     ),
