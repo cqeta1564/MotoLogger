@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 /// Animated corner gradient wash that breathes and transitions color
 /// based on real-time motorcycle lean angle from IMU / BNO085.
 /// 
-/// Renders smooth color blends (barevný přeliv) radiating from the upper corners:
-/// Green -> Yellow -> Orange -> Racing Red -> Pure White fade,
+/// Renders a logarithmic canopy edge originating from the top-center edge
+/// and sweeping down the sides (Green -> Yellow -> Orange -> Racing Red),
 /// exactly matching the rider's telemetry proposal.
 class CornerGradientBreather extends StatefulWidget {
   final double leanAngleDeg; // Negative for left, positive for right
@@ -86,8 +86,8 @@ class _CornerGradientPainter extends CustomPainter {
 
     final isLandscape = w > h;
 
-    // 1. LEFT CORNER GRADIENT (Green -> Yellow -> Orange -> Red)
-    _drawCorner(
+    // 1. LEFT CORNER: Logarithmic canopy from top center down to left edge
+    _drawLogarithmicCorner(
       canvas: canvas,
       size: size,
       isLeft: true,
@@ -96,8 +96,8 @@ class _CornerGradientPainter extends CustomPainter {
       isLandscape: isLandscape,
     );
 
-    // 2. RIGHT CORNER GRADIENT (Green -> Yellow -> Orange -> Red)
-    _drawCorner(
+    // 2. RIGHT CORNER: Logarithmic canopy from top center down to right edge
+    _drawLogarithmicCorner(
       canvas: canvas,
       size: size,
       isLeft: false,
@@ -107,7 +107,7 @@ class _CornerGradientPainter extends CustomPainter {
     );
   }
 
-  void _drawCorner({
+  void _drawLogarithmicCorner({
     required Canvas canvas,
     required Size size,
     required bool isLeft,
@@ -118,88 +118,128 @@ class _CornerGradientPainter extends CustomPainter {
     final w = size.width;
     final h = size.height;
 
-    // Lean ratio normalized: 0.0 at upright (0 deg), 1.0 at 45+ deg
     final leanRatio = (leanDeg / 45.0).clamp(0.0, 1.0);
     final isOppositeActive = oppositeLeanDeg > 4.0;
 
-    // Corner radius: base size covers corner badges, expands deeply on lean
-    final minDim = min(w, h);
-    final baseRadius = isLandscape ? minDim * 0.55 : minDim * 0.58;
-    final expandedRadius = baseRadius * (1.0 + 0.55 * leanRatio) + (16.0 * breath * (0.6 + 0.4 * leanRatio));
+    // Dynamic anchor points:
+    // P0: Top edge (starts near center of top edge)
+    // P3: Side edge (reaches down the left/right edge)
+    final double xTop;
+    final double yBottom;
 
-    // Dynamic Alpha:
-    // Upright / Idle: Visible, soothing ambient glow (~0.28 + breath)
-    // Leaning: Vivid flare up to ~0.78 for instant peripheral recognition
-    double baseAlpha = 0.28 + 0.42 * leanRatio + 0.08 * breath;
-    if (isOppositeActive && leanDeg < 2.0) {
-      baseAlpha *= 0.40; // Soften idle side while motorcycle is leaning the other way
+    if (isLandscape) {
+      final baseTop = w * 0.36;
+      final baseBottom = h * 0.76;
+      xTop = baseTop + (w * 0.08 * leanRatio) + (6.0 * breath);
+      yBottom = (baseBottom + (h * 0.16 * leanRatio) + (8.0 * breath)).clamp(0.0, h);
+    } else {
+      // In portrait: starts at the center of the top edge (w * 0.50)
+      final baseTop = w * 0.50;
+      final baseBottom = h * 0.44;
+      xTop = (baseTop + (w * 0.04 * (isLeft ? leanRatio : -leanRatio)) + (4.0 * breath * (isLeft ? 1 : -1))).clamp(w * 0.36, w * 0.64);
+      yBottom = (baseBottom + (h * 0.14 * leanRatio) + (10.0 * breath)).clamp(0.0, h * 0.72);
     }
-    baseAlpha = baseAlpha.clamp(0.10, 0.80);
 
-    // Colors matching proposal sketch:
+    // Alpha intensity
+    double baseAlpha = 0.32 + 0.44 * leanRatio + 0.08 * breath;
+    if (isOppositeActive && leanDeg < 2.0) {
+      baseAlpha *= 0.35;
+    }
+    baseAlpha = baseAlpha.clamp(0.12, 0.86);
+
+    // Build the logarithmic curve path
+    final path = Path();
+    final curvePath = Path();
+
+    if (isLeft) {
+      final p0 = Offset(xTop, 0);
+      final p1 = Offset(xTop * 0.70, yBottom * 0.18);
+      final p2 = Offset(w * 0.06, yBottom * 0.56);
+      final p3 = Offset(0, yBottom);
+
+      curvePath.moveTo(p0.dx, p0.dy);
+      curvePath.cubicTo(p1.dx, p1.dy, p2.dx, p2.dy, p3.dx, p3.dy);
+
+      path.moveTo(0, 0);
+      path.lineTo(p0.dx, p0.dy);
+      path.cubicTo(p1.dx, p1.dy, p2.dx, p2.dy, p3.dx, p3.dy);
+      path.lineTo(0, p3.dy);
+      path.close();
+    } else {
+      // Right side
+      final startX = isLandscape ? (w - xTop) : xTop;
+      final p0 = Offset(startX, 0);
+      final p1 = Offset(w - (xTop * 0.70), yBottom * 0.18);
+      final p2 = Offset(w - (w * 0.06), yBottom * 0.56);
+      final p3 = Offset(w, yBottom);
+
+      curvePath.moveTo(p0.dx, p0.dy);
+      curvePath.cubicTo(p1.dx, p1.dy, p2.dx, p2.dy, p3.dx, p3.dy);
+
+      path.moveTo(w, 0);
+      path.lineTo(p0.dx, p0.dy);
+      path.cubicTo(p1.dx, p1.dy, p2.dx, p2.dy, p3.dx, p3.dy);
+      path.lineTo(w, p3.dy);
+      path.close();
+    }
+
+    // Palette matching proposal:
     // Corner: Apple Mint Green
-    // Mid: Electric Yellow
-    // Outer arc: Amber Orange
-    // Crest: Racing Red
+    // Mid: Vibrant Electric Yellow
+    // Wave: Amber Orange
+    // Leading Logarithmic Edge: Racing Red
     const green = Color(0xFF30D158);
     const yellow = Color(0xFFFFD60A);
     const orange = Color(0xFFFF9500);
     const red = Color(0xFFFF3B30);
-    final transparentWhite = Colors.white.withValues(alpha: 0.0);
 
-    // Progressive color intensity based on lean:
     final redWeight = (leanRatio * 1.3).clamp(0.0, 1.0);
     final orangeWeight = ((leanRatio - 0.10) / 0.60).clamp(0.0, 1.0);
 
-    final colors = <Color>[
-      green.withValues(alpha: (baseAlpha * 0.95).clamp(0.0, 1.0)),
-      Color.lerp(green, yellow, 0.6)!.withValues(alpha: (baseAlpha * 0.90).clamp(0.0, 1.0)),
-      yellow.withValues(alpha: (baseAlpha * 0.85).clamp(0.0, 1.0)),
-      Color.lerp(orange, red, redWeight)!.withValues(alpha: (baseAlpha * (0.45 + 0.55 * orangeWeight)).clamp(0.0, 1.0)),
-      red.withValues(alpha: (baseAlpha * redWeight).clamp(0.0, 1.0)),
-      transparentWhite,
-    ];
+    // 1. Fill the corner canopy with smooth color blend
+    final startOffset = isLeft ? Offset.zero : Offset(w, 0);
+    final endOffset = isLeft ? Offset(xTop * 0.85, yBottom * 0.85) : Offset(w - (xTop * 0.85), yBottom * 0.85);
 
-    final stops = <double>[
-      0.0,
-      0.22,
-      0.48,
-      0.72,
-      0.88,
-      1.0,
-    ];
-
-    canvas.save();
-
-    final originX = isLeft ? 0.0 : w;
-    canvas.translate(originX, 0.0);
-
-    // Elliptical shape matching the rider's contour sketch:
-    // In portrait: stretch downward along screen edge (1.35x)
-    // In landscape: stretch horizontally across top edge (1.30x)
-    if (isLandscape) {
-      canvas.scale(isLeft ? 1.30 : -1.30, 1.0);
-    } else {
-      canvas.scale(isLeft ? 1.0 : -1.0, 1.35);
-    }
-
-    final shader = ui.Gradient.radial(
-      Offset.zero,
-      expandedRadius,
-      colors,
-      stops,
-      TileMode.clamp,
+    final fillShader = ui.Gradient.linear(
+      startOffset,
+      endOffset,
+      [
+        green.withValues(alpha: (baseAlpha * 0.90).clamp(0.0, 1.0)),
+        Color.lerp(green, yellow, 0.6)!.withValues(alpha: (baseAlpha * 0.85).clamp(0.0, 1.0)),
+        yellow.withValues(alpha: (baseAlpha * 0.80).clamp(0.0, 1.0)),
+        Color.lerp(orange, red, redWeight)!.withValues(alpha: (baseAlpha * (0.50 + 0.50 * orangeWeight)).clamp(0.0, 1.0)),
+        red.withValues(alpha: (baseAlpha * (0.35 + 0.65 * redWeight)).clamp(0.0, 1.0)),
+        Colors.white.withValues(alpha: 0.0),
+      ],
+      const [0.0, 0.25, 0.52, 0.75, 0.92, 1.0],
     );
 
-    final paint = Paint()
-      ..shader = shader
+    final fillPaint = Paint()
+      ..shader = fillShader
       ..style = PaintingStyle.fill;
 
-    // Draw smooth quadrant extending from the corner
-    final rect = Rect.fromLTWH(0, 0, expandedRadius, expandedRadius);
-    canvas.drawRect(rect, paint);
+    canvas.drawPath(path, fillPaint);
 
-    canvas.restore();
+    // 2. Soft Glowing Wave along the logarithmic edge (Barevný přeliv na hraně)
+    // Outer wide glow (Amber Orange / Red)
+    final outerGlowPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 36.0 + 14.0 * leanRatio
+      ..strokeCap = StrokeCap.round
+      ..color = Color.lerp(orange, red, redWeight)!.withValues(alpha: (baseAlpha * (0.28 + 0.45 * orangeWeight)).clamp(0.0, 0.72))
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 20.0);
+
+    canvas.drawPath(curvePath, outerGlowPaint);
+
+    // Inner bright crest glow (Racing Red)
+    final innerCrestPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 14.0 + 8.0 * leanRatio
+      ..strokeCap = StrokeCap.round
+      ..color = red.withValues(alpha: (baseAlpha * (0.40 + 0.55 * redWeight)).clamp(0.0, 0.88))
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8.0);
+
+    canvas.drawPath(curvePath, innerCrestPaint);
   }
 
   @override
