@@ -2,14 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../core/theme/app_theme.dart';
 import '../../services/telemetry_manager.dart';
-import '../../services/ble_service.dart';
 import '../widgets/corner_gradient_breather.dart';
 import '../widgets/gg_friction_reticle.dart';
 import '../widgets/slide_to_unlock.dart';
 
 /// The core motorcycle telemetry activity screen ("Jízda").
 /// 
-/// Built strictly to user directives:
+/// Strictly built to user directives:
 /// - Light Apple design with pure white background (#FFFFFF).
 /// - Dynamic corner color blends ("barevný přeliv") that breathe with lean angle.
 /// - Bold black typography on white canvas for outdoor sunlight legibility.
@@ -34,6 +33,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   bool _isLocked = true;
+  bool _isPaused = false;
   bool _hasPromptedTareThisSession = false;
 
   @override
@@ -136,7 +136,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     onPressed: () async {
                       Navigator.of(ctx).pop();
                       await widget.telemetryManager.startRecording();
-                      setState(() => _isLocked = true);
+                      setState(() {
+                        _isLocked = true;
+                        _isPaused = false;
+                      });
                     },
                     child: const Text(
                       'START JÍZDY',
@@ -159,6 +162,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _onLockAgain() {
+    HapticFeedback.lightImpact();
     setState(() {
       _isLocked = true;
     });
@@ -167,19 +171,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _onPausePressed() {
     HapticFeedback.mediumImpact();
     widget.telemetryManager.pauseRecording();
+    setState(() {
+      _isPaused = true;
+    });
   }
 
   void _onContinuePressed() {
     HapticFeedback.mediumImpact();
     widget.telemetryManager.resumeRecording();
-    // Auto re-lock screen when continuing ride
-    setState(() => _isLocked = true);
+    setState(() {
+      _isPaused = false;
+      _isLocked = true; // Auto re-lock when ride resumes
+    });
   }
 
   Future<void> _onStopAndSavePressed() async {
     HapticFeedback.heavyImpact();
     await widget.telemetryManager.stopRecording();
     setState(() {
+      _isPaused = false;
       _isLocked = false;
       _hasPromptedTareThisSession = false;
     });
@@ -193,15 +203,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  void _toggleDemoSimulation() {
+    HapticFeedback.selectionClick();
+    final isMocking = widget.telemetryManager.bleService.state.name == 'connected';
+    widget.telemetryManager.bleService.enableMockMode(!isMocking);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(!isMocking ? 'Demo simulace aktivována' : 'Demo simulace vypnuta'),
+        duration: const Duration(milliseconds: 1200),
+        backgroundColor: Colors.black87,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: widget.telemetryManager,
       builder: (context, _) {
         final pkt = widget.telemetryManager.latestPacket;
-        final isBleConnected = widget.telemetryManager.bleService.state == BleConnectionState.connected;
-        final isRecording = widget.telemetryManager.isRecording;
-        final isPaused = widget.telemetryManager.isPaused;
 
         // Lean calculations: negative is left, positive is right
         final currentLean = pkt.leanAngleDeg;
@@ -225,86 +245,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ),
 
-                  // 2. Demo simulation toggle & Lock status in corner (subtle)
-                  Positioned(
-                    top: MediaQuery.of(context).padding.top + 8,
-                    left: 0,
-                    right: 0,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          // Demo simulation toggle
-                          GestureDetector(
-                            onTap: () {
-                              final isMocking = widget.telemetryManager.bleService.state == BleConnectionState.connected;
-                              widget.telemetryManager.bleService.enableMockMode(!isMocking);
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.85),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: const Color(0xFFE5E5EA)),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.bolt,
-                                    size: 14,
-                                    color: isBleConnected ? AppTheme.accent : const Color(0xFF8E8E93),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    isBleConnected ? 'DEMO AKTIVNÍ' : 'DEMO',
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w800,
-                                      color: isBleConnected ? AppTheme.accent : const Color(0xFF8E8E93),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-
-                          // Manual re-lock button if currently unlocked
-                          if (!_isLocked)
-                            GestureDetector(
-                              onTap: _onLockAgain,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.85),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: const Color(0xFFE5E5EA)),
-                                ),
-                                child: const Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.lock_outline, size: 14, color: Colors.black),
-                                    SizedBox(width: 4),
-                                    Text(
-                                      'ZAMKNOUT',
-                                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.black),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  // 3. Layout Content
+                  // 2. Main Content
                   Positioned.fill(
                     child: SafeArea(
                       child: isLandscape
-                          ? _buildLandscapeLayout(pkt, leftLean, rightLean, isRecording, isPaused)
-                          : _buildPortraitLayout(pkt, leftLean, rightLean, isRecording, isPaused),
+                          ? _buildLandscapeLayout(pkt, leftLean, rightLean)
+                          : _buildPortraitLayout(pkt, leftLean, rightLean),
                     ),
                   ),
                 ],
@@ -321,16 +267,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
     dynamic pkt,
     double leftLean,
     double rightLean,
-    bool isRecording,
-    bool isPaused,
   ) {
     return Column(
       children: [
-        const SizedBox(height: 12),
+        const SizedBox(height: 16),
 
         // Top Row: Lean Badges (Left & Right)
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
+          padding: const EdgeInsets.symmetric(horizontal: 28),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -343,32 +287,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
         const Spacer(flex: 1),
 
         // Center: Speed Display (Bold Black on White)
-        Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              '${pkt.vehicleSpeedKmh}',
-              style: const TextStyle(
-                color: Colors.black,
-                fontSize: 110,
-                fontWeight: FontWeight.w900,
-                height: 0.85,
-                letterSpacing: -5.0,
-                fontFamily: '-apple-system',
+        GestureDetector(
+          onLongPress: _toggleDemoSimulation,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '${pkt.vehicleSpeedKmh}',
+                style: const TextStyle(
+                  color: Colors.black,
+                  fontSize: 110,
+                  fontWeight: FontWeight.w900,
+                  height: 0.85,
+                  letterSpacing: -5.0,
+                  fontFamily: '-apple-system',
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'KM / H',
-              style: TextStyle(
-                color: Colors.black,
-                fontSize: 17,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 6.0,
-                fontFamily: '-apple-system',
+              const SizedBox(height: 8),
+              const Text(
+                'KM / H',
+                style: TextStyle(
+                  color: Colors.black,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 6.0,
+                  fontFamily: '-apple-system',
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
 
         const Spacer(flex: 1),
@@ -384,7 +331,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         const Spacer(flex: 2),
 
         // Bottom Controls: Locked Slider OR Unlocked Navigation & Action Buttons
-        _buildBottomControlsArea(isRecording, isPaused, isLandscape: false),
+        _buildBottomControlsArea(isLandscape: false),
       ],
     );
   }
@@ -394,55 +341,56 @@ class _DashboardScreenState extends State<DashboardScreen> {
     dynamic pkt,
     double leftLean,
     double rightLean,
-    bool isRecording,
-    bool isPaused,
   ) {
     return Stack(
       alignment: Alignment.center,
       children: [
         // Top Left: Lean Badge Left
         Positioned(
-          top: 10,
-          left: 36,
+          top: 14,
+          left: 44,
           child: _buildLeanBadge(leftLean.round(), 'NÁKLON L'),
         ),
 
         // Top Right: Lean Badge Right
         Positioned(
-          top: 10,
-          right: 36,
+          top: 14,
+          right: 44,
           child: _buildLeanBadge(rightLean.round(), 'NÁKLON P'),
         ),
 
         // Center Top: Speed Display
         Positioned(
-          top: 8,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                '${pkt.vehicleSpeedKmh}',
-                style: const TextStyle(
-                  color: Colors.black,
-                  fontSize: 76,
-                  fontWeight: FontWeight.w900,
-                  height: 0.85,
-                  letterSpacing: -3.0,
-                  fontFamily: '-apple-system',
+          top: 10,
+          child: GestureDetector(
+            onLongPress: _toggleDemoSimulation,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '${pkt.vehicleSpeedKmh}',
+                  style: const TextStyle(
+                    color: Colors.black,
+                    fontSize: 76,
+                    fontWeight: FontWeight.w900,
+                    height: 0.85,
+                    letterSpacing: -3.0,
+                    fontFamily: '-apple-system',
+                  ),
                 ),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'KM / H',
-                style: TextStyle(
-                  color: Colors.black,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 4.0,
-                  fontFamily: '-apple-system',
+                const SizedBox(height: 4),
+                const Text(
+                  'KM / H',
+                  style: TextStyle(
+                    color: Colors.black,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 4.0,
+                    fontFamily: '-apple-system',
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
 
@@ -462,7 +410,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           bottom: 0,
           left: 0,
           right: 0,
-          child: _buildBottomControlsArea(isRecording, isPaused, isLandscape: true),
+          child: _buildBottomControlsArea(isLandscape: true),
         ),
       ],
     );
@@ -500,7 +448,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildBottomControlsArea(bool isRecording, bool isPaused, {required bool isLandscape}) {
+  Widget _buildBottomControlsArea({required bool isLandscape}) {
     if (_isLocked) {
       // Locked State: Show Slide to Unlock Bar
       return Padding(
@@ -527,7 +475,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           // Action Buttons: Pause OR [Stop/Save + Continue]
           Padding(
             padding: EdgeInsets.symmetric(horizontal: isLandscape ? 80 : 20, vertical: 8),
-            child: isPaused
+            child: _isPaused
                 ? Row(
                     children: [
                       // Stop & Save Button (Crimson Red)
@@ -624,6 +572,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   isActive: false,
                   onTap: () => widget.onNavigateTab?.call(2),
                 ),
+                _buildNavItem(
+                  icon: Icons.lock_outline_rounded,
+                  label: 'Zamknout',
+                  isActive: false,
+                  onTap: _onLockAgain,
+                ),
               ],
             ),
           ),
@@ -641,21 +595,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final color = isActive ? Colors.black : const Color(0xFF8E8E93);
     return InkWell(
       onTap: onTap,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, color: color, size: 24),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: TextStyle(
-              color: color,
-              fontSize: 11,
-              fontWeight: isActive ? FontWeight.w900 : FontWeight.w600,
-              fontFamily: '-apple-system',
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: color, size: 23),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontSize: 11,
+                fontWeight: isActive ? FontWeight.w900 : FontWeight.w600,
+                fontFamily: '-apple-system',
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
