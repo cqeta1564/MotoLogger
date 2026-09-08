@@ -168,7 +168,7 @@ class BleService {
       _mockTimer = Timer.periodic(const Duration(milliseconds: 40), (timer) {
         time += 0.04;
         // Generate realistic motorcycle lean curve (sweeper corners)
-        double lean = 42.0 * sin(time * 0.4);
+        double lean = 44.0 * sin(time * 0.8);
         double pitch = 4.0 * cos(time * 0.8);
         int rpm = (5000 + 4500 * sin(time * 0.5).abs()).toInt();
         int speed = (60 + 55 * sin(time * 0.5).abs()).toInt();

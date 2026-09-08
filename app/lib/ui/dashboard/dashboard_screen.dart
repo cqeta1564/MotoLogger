@@ -288,6 +288,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
         // Center: Speed Display (Bold Black on White)
         GestureDetector(
+          onTap: _toggleDemoSimulation,
           onLongPress: _toggleDemoSimulation,
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -363,6 +364,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Positioned(
           top: 10,
           child: GestureDetector(
+            onTap: _toggleDemoSimulation,
             onLongPress: _toggleDemoSimulation,
             child: Column(
               mainAxisSize: MainAxisSize.min,
