@@ -278,8 +278,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _buildLeanBadge(leftLean.round(), 'NÁKLON L'),
-              _buildLeanBadge(rightLean.round(), 'NÁKLON P'),
+              _buildLeanBadge(leftLean.round()),
+              _buildLeanBadge(rightLean.round()),
             ],
           ),
         ),
@@ -350,14 +350,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Positioned(
           top: 14,
           left: 44,
-          child: _buildLeanBadge(leftLean.round(), 'NÁKLON L'),
+          child: _buildLeanBadge(leftLean.round()),
         ),
 
         // Top Right: Lean Badge Right
         Positioned(
           top: 14,
           right: 44,
-          child: _buildLeanBadge(rightLean.round(), 'NÁKLON P'),
+          child: _buildLeanBadge(rightLean.round()),
         ),
 
         // Center Top: Speed Display
@@ -420,33 +420,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // ================= COMMON COMPONENT BUILDERS =================
 
-  Widget _buildLeanBadge(int angle, String label) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          '$angle°',
-          style: const TextStyle(
-            color: Colors.black,
-            fontSize: 54,
-            fontWeight: FontWeight.w900,
-            letterSpacing: -1.5,
-            height: 1.0,
-            fontFamily: '-apple-system',
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          label,
-          style: const TextStyle(
-            color: Color(0xFF8E8E93),
-            fontSize: 11,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 1.8,
-            fontFamily: '-apple-system',
-          ),
-        ),
-      ],
+  Widget _buildLeanBadge(int angle) {
+    return Text(
+      '$angle°',
+      style: const TextStyle(
+        color: Colors.black,
+        fontSize: 58,
+        fontWeight: FontWeight.w900,
+        letterSpacing: -2.0,
+        height: 1.0,
+        fontFamily: '-apple-system',
+      ),
     );
   }
 
