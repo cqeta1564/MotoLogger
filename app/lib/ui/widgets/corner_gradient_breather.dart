@@ -121,41 +121,35 @@ class _CornerGradientPainter extends CustomPainter {
     // 100% clean: if motorcycle is upright (<= 1.0 deg), render zero color
     if (leanDeg <= 1.0) return;
 
-    // Smooth entry curve from 1.0 to 5.0 degrees
-    final activation = Curves.easeOut.transform(((leanDeg - 1.0) / 4.0).clamp(0.0, 1.0));
-    final leanRatio = ((leanDeg - 1.0) / 44.0).clamp(0.0, 1.0);
+    // Normalized progress from 1.0 deg to 45.0 deg
+    final t = ((leanDeg - 1.0) / 44.0).clamp(0.0, 1.0);
 
-    // Dynamic anchor points:
-    // P0: Top edge (starts near center of top edge)
-    // P3: Side edge (reaches down the left/right edge)
-    final double xTop;
-    final double yBottom;
+    // Spatial expansion factor: starts tiny at 1.0 deg and smoothly grows outward
+    final sizeFactor = pow(t, 0.88).toDouble();
 
-    if (isLandscape) {
-      final baseTop = w * 0.36;
-      final baseBottom = h * 0.76;
-      xTop = baseTop + (w * 0.08 * leanRatio) + (6.0 * breath);
-      yBottom = (baseBottom + (h * 0.16 * leanRatio) + (8.0 * breath)).clamp(0.0, h);
-    } else {
-      // In portrait: starts at the center of the top edge (w * 0.50)
-      final baseTop = w * 0.50;
-      final baseBottom = h * 0.44;
-      xTop = (baseTop + (w * 0.04 * (isLeft ? leanRatio : -leanRatio)) + (4.0 * breath * (isLeft ? 1 : -1))).clamp(w * 0.36, w * 0.64);
-      yBottom = (baseBottom + (h * 0.14 * leanRatio) + (10.0 * breath)).clamp(0.0, h * 0.72);
-    }
+    // Max reach along top edge and side edge at full lean (45 deg+)
+    final double maxTop = isLandscape ? (w * 0.38) : (w * 0.50);
+    final double maxBottom = isLandscape ? (h * 0.80) : (h * 0.48);
 
-    // Alpha intensity: completely 0.0 at <= 1.0 deg, ramping up to ~0.88 at deep lean
-    final baseAlpha = (activation * (0.35 + 0.45 * leanRatio + 0.08 * breath)).clamp(0.0, 0.88);
+    // Dynamic reach scaling directly from corner
+    final topReach = (maxTop * sizeFactor + 4.0 * breath * sizeFactor).clamp(0.0, maxTop + 6.0);
+    final bottomReach = (maxBottom * sizeFactor + 6.0 * breath * sizeFactor).clamp(0.0, maxBottom + 8.0);
 
-    // Build the logarithmic curve path
+    if (topReach < 1.0 || bottomReach < 1.0) return;
+
+    // Alpha intensity: smoothly ramps up without sudden pop
+    final alphaActivation = Curves.easeOut.transform(((leanDeg - 1.0) / 5.0).clamp(0.0, 1.0));
+    final baseAlpha = (alphaActivation * (0.28 + 0.52 * t + 0.08 * breath)).clamp(0.0, 0.88);
+
+    // Build the logarithmic curve path connecting top edge to side edge
     final path = Path();
     final curvePath = Path();
 
     if (isLeft) {
-      final p0 = Offset(xTop, 0);
-      final p1 = Offset(xTop * 0.70, yBottom * 0.18);
-      final p2 = Offset(w * 0.06, yBottom * 0.56);
-      final p3 = Offset(0, yBottom);
+      final p0 = Offset(topReach, 0);
+      final p1 = Offset(topReach * 0.65, bottomReach * 0.18);
+      final p2 = Offset(topReach * 0.12, bottomReach * 0.62);
+      final p3 = Offset(0, bottomReach);
 
       curvePath.moveTo(p0.dx, p0.dy);
       curvePath.cubicTo(p1.dx, p1.dy, p2.dx, p2.dy, p3.dx, p3.dy);
@@ -167,11 +161,10 @@ class _CornerGradientPainter extends CustomPainter {
       path.close();
     } else {
       // Right side
-      final startX = isLandscape ? (w - xTop) : xTop;
-      final p0 = Offset(startX, 0);
-      final p1 = Offset(w - (xTop * 0.70), yBottom * 0.18);
-      final p2 = Offset(w - (w * 0.06), yBottom * 0.56);
-      final p3 = Offset(w, yBottom);
+      final p0 = Offset(w - topReach, 0);
+      final p1 = Offset(w - (topReach * 0.65), bottomReach * 0.18);
+      final p2 = Offset(w - (topReach * 0.12), bottomReach * 0.62);
+      final p3 = Offset(w, bottomReach);
 
       curvePath.moveTo(p0.dx, p0.dy);
       curvePath.cubicTo(p1.dx, p1.dy, p2.dx, p2.dy, p3.dx, p3.dy);
@@ -193,53 +186,60 @@ class _CornerGradientPainter extends CustomPainter {
     const orange = Color(0xFFFF9500);
     const red = Color(0xFFFF3B30);
 
-    final redWeight = (leanRatio * 1.3).clamp(0.0, 1.0);
-    final orangeWeight = ((leanRatio - 0.10) / 0.60).clamp(0.0, 1.0);
+    final double yellowMix = (t / 0.30).clamp(0.0, 1.0);
+    final double orangeMix = ((t - 0.20) / 0.40).clamp(0.0, 1.0);
+    final double redMix = ((t - 0.55) / 0.45).clamp(0.0, 1.0);
 
-    // 1. Fill the corner canopy with smooth color blend
+    final cCorner = green.withValues(alpha: (baseAlpha * 0.92).clamp(0.0, 1.0));
+    final cMid = Color.lerp(green, yellow, yellowMix)!.withValues(alpha: (baseAlpha * 0.85).clamp(0.0, 1.0));
+    final cWarm = Color.lerp(yellow, orange, orangeMix)!.withValues(alpha: (baseAlpha * (0.50 + 0.40 * orangeMix)).clamp(0.0, 1.0));
+    final cEdge = Color.lerp(orange, red, redMix)!.withValues(alpha: (baseAlpha * (0.30 + 0.65 * redMix)).clamp(0.0, 1.0));
+    final cFade = Colors.white.withValues(alpha: 0.0);
+
+    // 1. Fill the corner canopy with smooth feathered dissipation
     final startOffset = isLeft ? Offset.zero : Offset(w, 0);
-    final endOffset = isLeft ? Offset(xTop * 0.85, yBottom * 0.85) : Offset(w - (xTop * 0.85), yBottom * 0.85);
+    final endOffset = isLeft
+        ? Offset(topReach * 0.88, bottomReach * 0.88)
+        : Offset(w - (topReach * 0.88), bottomReach * 0.88);
 
     final fillShader = ui.Gradient.linear(
       startOffset,
       endOffset,
-      [
-        green.withValues(alpha: (baseAlpha * 0.90).clamp(0.0, 1.0)),
-        Color.lerp(green, yellow, 0.6)!.withValues(alpha: (baseAlpha * 0.85).clamp(0.0, 1.0)),
-        yellow.withValues(alpha: (baseAlpha * 0.80).clamp(0.0, 1.0)),
-        Color.lerp(orange, red, redWeight)!.withValues(alpha: (baseAlpha * (0.50 + 0.50 * orangeWeight)).clamp(0.0, 1.0)),
-        red.withValues(alpha: (baseAlpha * (0.35 + 0.65 * redWeight)).clamp(0.0, 1.0)),
-        Colors.white.withValues(alpha: 0.0),
-      ],
-      const [0.0, 0.25, 0.52, 0.75, 0.92, 1.0],
+      [cCorner, cMid, cWarm, cEdge, cFade],
+      const [0.0, 0.28, 0.58, 0.85, 1.0],
     );
 
+    // Soft blur feathering on the fill removes hard vector edges
     final fillPaint = Paint()
       ..shader = fillShader
-      ..style = PaintingStyle.fill;
+      ..style = PaintingStyle.fill
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, (3.0 + 8.0 * sizeFactor).clamp(2.0, 12.0));
 
     canvas.drawPath(path, fillPaint);
 
-    // 2. Soft Glowing Wave along the logarithmic edge (Barevný přeliv na hraně)
-    // Outer wide glow (Amber Orange / Red)
-    final outerGlowPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 36.0 + 14.0 * leanRatio
-      ..strokeCap = StrokeCap.round
-      ..color = Color.lerp(orange, red, redWeight)!.withValues(alpha: (baseAlpha * (0.28 + 0.45 * orangeWeight)).clamp(0.0, 0.72))
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 20.0);
+    // 2. Soft Glowing Wave along the leading edge (only as lean deepens)
+    if (orangeMix > 0.05) {
+      final outerGlowPaint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = (10.0 + 24.0 * t) * sizeFactor
+        ..strokeCap = StrokeCap.round
+        ..color = Color.lerp(orange, red, redMix)!
+            .withValues(alpha: (baseAlpha * 0.35 * orangeMix).clamp(0.0, 0.65))
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, 12.0 * sizeFactor + 4.0);
 
-    canvas.drawPath(curvePath, outerGlowPaint);
+      canvas.drawPath(curvePath, outerGlowPaint);
+    }
 
-    // Inner bright crest glow (Racing Red)
-    final innerCrestPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 14.0 + 8.0 * leanRatio
-      ..strokeCap = StrokeCap.round
-      ..color = red.withValues(alpha: (baseAlpha * (0.40 + 0.55 * redWeight)).clamp(0.0, 0.88))
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8.0);
+    if (redMix > 0.05) {
+      final innerCrestPaint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = (4.0 + 10.0 * redMix) * sizeFactor
+        ..strokeCap = StrokeCap.round
+        ..color = red.withValues(alpha: (baseAlpha * 0.55 * redMix).clamp(0.0, 0.85))
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, 6.0 * sizeFactor + 2.0);
 
-    canvas.drawPath(curvePath, innerCrestPaint);
+      canvas.drawPath(curvePath, innerCrestPaint);
+    }
   }
 
   @override
