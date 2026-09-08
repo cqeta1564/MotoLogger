@@ -49,7 +49,7 @@ class _GForcePainter extends CustomPainter {
 
     // Crosshairs
     final axisPaint = Paint()
-      ..color = AppTheme.textMuted.withOpacity(0.3)
+      ..color = AppTheme.textMuted.withValues(alpha: 0.3)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.0;
 
@@ -80,7 +80,7 @@ class _GForcePainter extends CustomPainter {
       ballCenter,
       10,
       Paint()
-        ..color = ballColor.withOpacity(0.25)
+        ..color = ballColor.withValues(alpha: 0.25)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
     );
 

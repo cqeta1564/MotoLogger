@@ -111,10 +111,10 @@ class _CornerGradientPainter extends CustomPainter {
         center: const Alignment(-1.1, -1.1),
         radius: 1.0,
         colors: [
-          leftColor.withOpacity((leftAlphaFactor * 1.1).clamp(0.0, 0.75)),
-          leftColor.withOpacity((leftAlphaFactor * 0.6).clamp(0.0, 0.45)),
-          leftColor.withOpacity((leftAlphaFactor * 0.2).clamp(0.0, 0.20)),
-          Colors.white.withOpacity(0.0),
+          leftColor.withValues(alpha: (leftAlphaFactor * 1.1).clamp(0.0, 0.75)),
+          leftColor.withValues(alpha: (leftAlphaFactor * 0.6).clamp(0.0, 0.45)),
+          leftColor.withValues(alpha: (leftAlphaFactor * 0.2).clamp(0.0, 0.20)),
+          Colors.white.withValues(alpha: 0.0),
         ],
         stops: const [0.0, 0.35, 0.65, 1.0],
       ).createShader(Rect.fromCircle(center: Offset.zero, radius: leftRadius));
@@ -131,10 +131,10 @@ class _CornerGradientPainter extends CustomPainter {
         center: const Alignment(1.1, -1.1),
         radius: 1.0,
         colors: [
-          rightColor.withOpacity((rightAlphaFactor * 1.1).clamp(0.0, 0.75)),
-          rightColor.withOpacity((rightAlphaFactor * 0.6).clamp(0.0, 0.45)),
-          rightColor.withOpacity((rightAlphaFactor * 0.2).clamp(0.0, 0.20)),
-          Colors.white.withOpacity(0.0),
+          rightColor.withValues(alpha: (rightAlphaFactor * 1.1).clamp(0.0, 0.75)),
+          rightColor.withValues(alpha: (rightAlphaFactor * 0.6).clamp(0.0, 0.45)),
+          rightColor.withValues(alpha: (rightAlphaFactor * 0.2).clamp(0.0, 0.20)),
+          Colors.white.withValues(alpha: 0.0),
         ],
         stops: const [0.0, 0.35, 0.65, 1.0],
       ).createShader(Rect.fromCircle(center: Offset(w, 0), radius: rightRadius));

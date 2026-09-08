@@ -21,7 +21,7 @@ class RpmTachometer extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: isShiftLight ? AppTheme.danger.withOpacity(0.2) : AppTheme.surface,
+        color: isShiftLight ? AppTheme.danger.withValues(alpha: 0.2) : AppTheme.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isShiftLight ? AppTheme.danger : AppTheme.surfaceLight,

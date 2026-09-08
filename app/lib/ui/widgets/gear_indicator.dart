@@ -27,7 +27,7 @@ class GearSpeedWidget extends StatelessWidget {
             color: AppTheme.surface,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: isNeutral ? AppTheme.success.withOpacity(0.5) : AppTheme.surfaceLight,
+              color: isNeutral ? AppTheme.success.withValues(alpha: 0.5) : AppTheme.surfaceLight,
               width: 2,
             ),
           ),

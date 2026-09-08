@@ -101,7 +101,7 @@ class _SlideToUnlockState extends State<SlideToUnlock>
               border: Border.all(color: const Color(0xFFE5E5EA), width: 1.5),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.03),
+                  color: Colors.black.withValues(alpha: 0.03),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 ),
@@ -141,7 +141,7 @@ class _SlideToUnlockState extends State<SlideToUnlock>
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.25),
+                            color: Colors.black.withValues(alpha: 0.25),
                             blurRadius: 8,
                             offset: const Offset(0, 3),
                           ),

@@ -58,7 +58,7 @@ class SettingsScreen extends StatelessWidget {
                     children: [
                       const Text('Demo Simulation Mode', style: TextStyle(color: AppTheme.textPrimary)),
                       Switch(
-                        activeColor: AppTheme.primary,
+                        activeThumbColor: AppTheme.primary,
                         value: isConnected,
                         onChanged: (val) {
                           ble.enableMockMode(val);

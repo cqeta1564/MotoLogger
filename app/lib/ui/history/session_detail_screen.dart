@@ -182,7 +182,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
             dotData: const FlDotData(show: false),
             belowBarData: BarAreaData(
               show: true,
-              color: AppTheme.primary.withOpacity(0.1),
+              color: AppTheme.primary.withValues(alpha: 0.1),
             ),
           ),
         ],
@@ -217,7 +217,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
             dotData: const FlDotData(show: false),
             belowBarData: BarAreaData(
               show: true,
-              color: AppTheme.accent.withOpacity(0.1),
+              color: AppTheme.accent.withValues(alpha: 0.1),
             ),
           ),
         ],
