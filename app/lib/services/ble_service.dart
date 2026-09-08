@@ -31,6 +31,7 @@ class BleService {
   StreamSubscription? _connectionSubscription;
   Timer? _mockTimer;
   bool _mockMode = false;
+  bool get isMockMode => _mockMode;
 
   void _setState(BleConnectionState newState) {
     _state = newState;
@@ -197,7 +198,26 @@ class BleService {
       });
     } else {
       _mockTimer?.cancel();
+      _mockTimer = null;
       _setState(BleConnectionState.disconnected);
+      _telemetryController.add(const TelemetryPacket(
+        timestampMs: 0,
+        leanAngleDeg: 0.0,
+        pitchDeg: 0.0,
+        accelXG: 0.0,
+        accelYG: 0.0,
+        accelZG: 1.0,
+        gyroXDps: 0.0,
+        gyroYDps: 0.0,
+        gyroZDps: 0.0,
+        engineRpm: 0,
+        vehicleSpeedKmh: 0,
+        throttlePosPct: 0,
+        coolantTempC: 0,
+        gear: 0,
+        batteryVoltage: 12.6,
+        statusFlags: 0,
+      ));
     }
   }
 

@@ -205,8 +205,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _toggleDemoSimulation() {
     HapticFeedback.selectionClick();
-    final isMocking = widget.telemetryManager.bleService.state.name == 'connected';
+    final isMocking = widget.telemetryManager.bleService.isMockMode;
     widget.telemetryManager.bleService.enableMockMode(!isMocking);
+    if (isMocking) {
+      widget.telemetryManager.resetPeaks();
+    }
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(!isMocking ? 'Demo simulace aktivována' : 'Demo simulace vypnuta'),
@@ -227,6 +230,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         final currentLean = pkt.leanAngleDeg;
         final leftLean = currentLean < 0 ? -currentLean : 0.0;
         final rightLean = currentLean > 0 ? currentLean : 0.0;
+        final maxLeftLean = widget.telemetryManager.maxLeanLeft.abs();
+        final maxRightLean = widget.telemetryManager.maxLeanRight.abs();
 
         return Scaffold(
           backgroundColor: Colors.white,
@@ -249,8 +254,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   Positioned.fill(
                     child: SafeArea(
                       child: isLandscape
-                          ? _buildLandscapeLayout(pkt, leftLean, rightLean)
-                          : _buildPortraitLayout(pkt, leftLean, rightLean),
+                          ? _buildLandscapeLayout(pkt, leftLean, rightLean, maxLeftLean, maxRightLean)
+                          : _buildPortraitLayout(pkt, leftLean, rightLean, maxLeftLean, maxRightLean),
                     ),
                   ),
                 ],
@@ -267,19 +272,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
     dynamic pkt,
     double leftLean,
     double rightLean,
+    double maxLeftLean,
+    double maxRightLean,
   ) {
     return Column(
       children: [
         const SizedBox(height: 18),
 
-        // Top Row: Apple Precision Lean Badges (Left & Right)
+        // Top Row: Apple Precision Lean Badges (Left & Right) with Peak Hold
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 28),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildLeanBadge(leftLean.round(), isLeft: true),
-              _buildLeanBadge(rightLean.round(), isLeft: false),
+              _buildLeanBadge(leftLean.round(), maxLeftLean.round(), isLeft: true),
+              _buildLeanBadge(rightLean.round(), maxRightLean.round(), isLeft: false),
             ],
           ),
         ),
@@ -343,6 +351,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     dynamic pkt,
     double leftLean,
     double rightLean,
+    double maxLeftLean,
+    double maxRightLean,
   ) {
     return Stack(
       alignment: Alignment.center,
@@ -351,14 +361,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Positioned(
           top: 14,
           left: 44,
-          child: _buildLeanBadge(leftLean.round(), isLeft: true),
+          child: _buildLeanBadge(leftLean.round(), maxLeftLean.round(), isLeft: true),
         ),
 
         // Top Right: Lean Badge Right
         Positioned(
           top: 14,
           right: 44,
-          child: _buildLeanBadge(rightLean.round(), isLeft: false),
+          child: _buildLeanBadge(rightLean.round(), maxRightLean.round(), isLeft: false),
         ),
 
         // Center Top: Speed Display
@@ -422,19 +432,83 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // ================= COMMON COMPONENT BUILDERS =================
 
-  Widget _buildLeanBadge(int angle, {required bool isLeft}) {
+  Widget _buildLeanBadge(int angle, int maxAngle, {required bool isLeft}) {
     final isActive = angle > 0;
-    return Text(
-      '$angle°',
-      style: TextStyle(
-        color: isActive ? Colors.black : const Color(0xFFC7C7CC),
-        fontSize: 54,
-        fontWeight: isActive ? FontWeight.w800 : FontWeight.w600,
-        letterSpacing: -2.0,
-        height: 1.0,
-        fontFamily: '-apple-system',
-        fontFeatures: const [FontFeature.tabularFigures()],
-      ),
+    final hasMax = maxAngle > 0;
+
+    return Column(
+      crossAxisAlignment: isLeft ? CrossAxisAlignment.start : CrossAxisAlignment.end,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Live Lean Angle
+        Text(
+          '$angle°',
+          style: TextStyle(
+            color: isActive ? Colors.black : const Color(0xFFC7C7CC),
+            fontSize: 54,
+            fontWeight: isActive ? FontWeight.w800 : FontWeight.w600,
+            letterSpacing: -2.0,
+            height: 1.0,
+            fontFamily: '-apple-system',
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+        ),
+        const SizedBox(height: 5),
+
+        // Apple Tactile Peak Chip ("MAX XX°")
+        GestureDetector(
+          onTap: () {
+            HapticFeedback.selectionClick();
+          },
+          onLongPress: () {
+            HapticFeedback.heavyImpact();
+            widget.telemetryManager.resetPeaks();
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Maximální náklony byly vynulovány'),
+                duration: Duration(seconds: 1),
+                backgroundColor: Colors.black87,
+              ),
+            );
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF2F2F7),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: hasMax ? const Color(0xFFE5E5EA) : Colors.transparent,
+                width: 0.8,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'MAX ',
+                  style: TextStyle(
+                    color: Color(0xFF8E8E93),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.8,
+                    fontFamily: '-apple-system',
+                  ),
+                ),
+                Text(
+                  '$maxAngle°',
+                  style: TextStyle(
+                    color: hasMax ? Colors.black : const Color(0xFFC7C7CC),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    fontFamily: '-apple-system',
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 

@@ -169,6 +169,14 @@ class TelemetryManager extends ChangeNotifier {
     }
   }
 
+  void resetPeaks() {
+    _maxLeanLeft = 0.0;
+    _maxLeanRight = 0.0;
+    _topSpeed = 0.0;
+    _maxG = 0.0;
+    notifyListeners();
+  }
+
   Future<void> stopRecording() async {
     if (!_isRecording || _currentSessionId == null) return;
 
