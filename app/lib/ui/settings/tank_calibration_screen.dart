@@ -104,13 +104,13 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
       listenable: widget.telemetryManager,
       builder: (context, _) {
         return Scaffold(
-          backgroundColor: const Color(0xFF0C0C0E),
+          backgroundColor: const Color(0xFFF2F2F7),
           appBar: AppBar(
-            backgroundColor: const Color(0xFF0C0C0E),
+            backgroundColor: const Color(0xFFF2F2F7),
             elevation: 0,
             leading: CupertinoButton(
               padding: EdgeInsets.zero,
-              child: const Icon(CupertinoIcons.xmark_circle_fill, color: Colors.white60, size: 28),
+              child: const Icon(CupertinoIcons.xmark_circle_fill, color: Color(0xFF8E8E93), size: 28),
               onPressed: () => Navigator.of(context).pop(),
             ),
             title: const Text(
@@ -119,7 +119,7 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
                 fontFamily: '.SF Pro Display',
                 fontSize: 17,
                 fontWeight: FontWeight.w600,
-                color: Colors.white,
+                color: Colors.black,
                 letterSpacing: -0.3,
               ),
             ),
@@ -163,7 +163,7 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
                         style: TextStyle(
                           fontFamily: '.SF Pro Text',
                           fontSize: 13,
-                          color: Colors.white38,
+                          color: Colors.black45,
                           decoration: TextDecoration.underline,
                         ),
                       ),
@@ -184,22 +184,21 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        color: const Color(0xFFE5E5EA),
+        borderRadius: BorderRadius.circular(12),
       ),
-      padding: const EdgeInsets.all(4),
+      padding: const EdgeInsets.all(3),
       child: CupertinoSlidingSegmentedControl<int>(
         groupValue: _selectedModeIndex,
         backgroundColor: Colors.transparent,
-        thumbColor: const Color(0xFF2C2C2E),
+        thumbColor: Colors.white,
         children: {
           0: Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: const [
-                Icon(Icons.two_wheeler_rounded, size: 16, color: Colors.white),
+                Icon(Icons.two_wheeler_rounded, size: 16, color: Colors.black87),
                 SizedBox(width: 6),
                 Text(
                   'Na bočním stojánku',
@@ -207,7 +206,7 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
                     fontFamily: '.SF Pro Text',
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: Colors.white,
+                    color: Colors.black,
                   ),
                 ),
               ],
@@ -218,7 +217,7 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: const [
-                Icon(Icons.straighten_rounded, size: 16, color: Colors.white),
+                Icon(Icons.straighten_rounded, size: 16, color: Colors.black87),
                 SizedBox(width: 6),
                 Text(
                   'Rovně (svisle)',
@@ -226,7 +225,7 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
                     fontFamily: '.SF Pro Text',
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: Colors.white,
+                    color: Colors.black,
                   ),
                 ),
               ],
@@ -247,44 +246,15 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // 1. Outline Animation of placing phone on fuel tank cap
+        // Outline Animation of placing phone on fuel tank cap
         PhonePlacementAnimation(isPlaced: _isStable),
 
         const SizedBox(height: 20),
 
-        // 2. Humorous builder's yellow spirit level
+        // Humorous builder's yellow spirit level
         ConstructionSpiritLevelWidget(
           onAngleChanged: (angle) => setState(() => _phoneRollDeg = angle),
           onStabilityChanged: (stable) => setState(() => _isStable = stable),
-        ),
-
-        const SizedBox(height: 16),
-
-        // Simple, clean rider guidance
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            color: const Color(0xFF161618),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
-          ),
-          child: Row(
-            children: const [
-              Icon(CupertinoIcons.sparkles, color: CupertinoColors.activeBlue, size: 18),
-              SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  'Motorka stojí bezpečně na stojánku. Položte telefon na víko a aplikace sama dopočte rovnou polohu.',
-                  style: TextStyle(
-                    fontFamily: '.SF Pro Text',
-                    fontSize: 13,
-                    color: Colors.white70,
-                    height: 1.35,
-                  ),
-                ),
-              ),
-            ],
-          ),
         ),
       ],
     );
@@ -294,9 +264,16 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: const Color(0xFF161618),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        border: Border.all(color: Colors.black.withValues(alpha: 0.06)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         children: [
@@ -320,18 +297,18 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
               fontFamily: '.SF Pro Display',
               fontSize: 18,
               fontWeight: FontWeight.w700,
-              color: Colors.white,
+              color: Colors.black,
               letterSpacing: -0.3,
             ),
           ),
           const SizedBox(height: 8),
           const Text(
-            'Podržte motocykl přesně svisle v rukách nebo jej postavte na rovný paddock / servisní stojan. Poté stiskněte tlačítko níže.',
+            'Podržte motocykl přesně svisle nebo jej postavte na rovný paddock stojan. Poté potvrďte tlačítkem.',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontFamily: '.SF Pro Text',
               fontSize: 13.5,
-              color: Colors.white70,
+              color: Colors.black54,
               height: 1.4,
             ),
           ),
@@ -350,9 +327,9 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
         boxShadow: [
           BoxShadow(
             color: isReady
-                ? CupertinoColors.activeGreen.withValues(alpha: 0.35)
-                : CupertinoColors.activeBlue.withValues(alpha: 0.25),
-            blurRadius: 16,
+                ? CupertinoColors.activeGreen.withValues(alpha: 0.3)
+                : CupertinoColors.activeBlue.withValues(alpha: 0.2),
+            blurRadius: 14,
             offset: const Offset(0, 4),
           ),
         ],
@@ -397,16 +374,17 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
       decoration: BoxDecoration(
-        color: CupertinoColors.activeGreen.withValues(alpha: 0.18),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: CupertinoColors.activeGreen.withValues(alpha: 0.6),
+          color: CupertinoColors.activeGreen,
           width: 1.5,
         ),
         boxShadow: [
           BoxShadow(
-            color: CupertinoColors.activeGreen.withValues(alpha: 0.25),
-            blurRadius: 16,
+            color: CupertinoColors.activeGreen.withValues(alpha: 0.15),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -422,7 +400,7 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
                 fontFamily: '.SF Pro Text',
                 fontSize: 14.5,
                 fontWeight: FontWeight.w700,
-                color: Colors.white,
+                color: Color(0xFF1B8738),
               ),
             ),
           ),

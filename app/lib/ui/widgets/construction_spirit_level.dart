@@ -137,15 +137,15 @@ class _ConstructionSpiritLevelWidgetState extends State<ConstructionSpiritLevelW
 
     if (_isStable) {
       statusText = 'Na milimetr přesně! V lajně. 🎯';
-      statusColor = CupertinoColors.activeGreen;
+      statusColor = const Color(0xFF248A3D);
       statusIcon = Icons.check_circle_rounded;
     } else if (_filteredRollDeg.abs() > 20.0) {
       statusText = 'Křivý jak šavle! Položte na nádrž.';
-      statusColor = CupertinoColors.systemYellow;
+      statusColor = const Color(0xFFD97706);
       statusIcon = Icons.handyman_rounded;
     } else {
       statusText = 'Ustaluji bublinu v libele...';
-      statusColor = Colors.white70;
+      statusColor = Colors.black54;
       statusIcon = Icons.hourglass_top_rounded;
     }
 
@@ -161,9 +161,9 @@ class _ConstructionSpiritLevelWidgetState extends State<ConstructionSpiritLevelW
             borderRadius: BorderRadius.circular(12),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.5),
+                color: Colors.black.withValues(alpha: 0.12),
                 blurRadius: 16,
-                offset: const Offset(0, 6),
+                offset: const Offset(0, 5),
               ),
             ],
           ),
@@ -187,13 +187,13 @@ class _ConstructionSpiritLevelWidgetState extends State<ConstructionSpiritLevelW
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
           decoration: BoxDecoration(
             color: _isStable
-                ? CupertinoColors.activeGreen.withValues(alpha: 0.15)
-                : const Color(0xFF1E1E22),
+                ? CupertinoColors.activeGreen.withValues(alpha: 0.12)
+                : Colors.black.withValues(alpha: 0.05),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: _isStable
-                  ? CupertinoColors.activeGreen.withValues(alpha: 0.4)
-                  : Colors.white.withValues(alpha: 0.1),
+                  ? CupertinoColors.activeGreen.withValues(alpha: 0.35)
+                  : Colors.black.withValues(alpha: 0.08),
               width: 1,
             ),
           ),
@@ -305,12 +305,12 @@ class _ConstructionLevelPainter extends CustomPainter {
     // Hanging hole on the left
     canvas.drawOval(
       Rect.fromCenter(center: Offset(42, h / 2), width: 14, height: 26),
-      Paint()..color = const Color(0xFF141416),
+      Paint()..color = const Color(0xFFF2F2F7),
     );
     canvas.drawOval(
       Rect.fromCenter(center: Offset(42, h / 2), width: 14, height: 26),
       Paint()
-        ..color = const Color(0xFF48484A)
+        ..color = const Color(0xFFC7C7CC)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.8,
     );
@@ -318,12 +318,12 @@ class _ConstructionLevelPainter extends CustomPainter {
     // Hanging hole on the right
     canvas.drawOval(
       Rect.fromCenter(center: Offset(w - 42, h / 2), width: 14, height: 26),
-      Paint()..color = const Color(0xFF141416),
+      Paint()..color = const Color(0xFFF2F2F7),
     );
     canvas.drawOval(
       Rect.fromCenter(center: Offset(w - 42, h / 2), width: 14, height: 26),
       Paint()
-        ..color = const Color(0xFF48484A)
+        ..color = const Color(0xFFC7C7CC)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.8,
     );

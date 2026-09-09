@@ -44,12 +44,19 @@ class _PhonePlacementAnimationState extends State<PhonePlacementAnimation>
           width: double.infinity,
           height: 190,
           decoration: BoxDecoration(
-            color: const Color(0xFF161618),
+            color: Colors.white,
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: Colors.white.withValues(alpha: 0.08),
-              width: 1.2,
+              color: Colors.black.withValues(alpha: 0.06),
+              width: 1.0,
             ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.03),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
+              ),
+            ],
           ),
           child: CustomPaint(
             painter: _PhonePlacementPainter(
@@ -79,20 +86,20 @@ class _PhonePlacementPainter extends CustomPainter {
 
     // Line styles
     final outlinePaint = Paint()
-      ..color = const Color(0xFF8E8E93)
+      ..color = const Color(0xFF1C1C1E)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.2
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
 
     final capPaint = Paint()
-      ..color = CupertinoColors.systemCyan
+      ..color = CupertinoColors.activeBlue
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.4
       ..strokeCap = StrokeCap.round;
 
     final phonePaint = Paint()
-      ..color = Colors.white
+      ..color = const Color(0xFF1C1C1E)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.2
       ..strokeCap = StrokeCap.round;
@@ -120,14 +127,14 @@ class _PhonePlacementPainter extends CustomPainter {
     canvas.drawPath(
       underTankPath,
       Paint()
-        ..color = const Color(0xFF3A3A3C)
+        ..color = const Color(0xFFC7C7CC)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.8,
     );
 
     // Handlebar & fork hint at front
     final forkPaint = Paint()
-      ..color = const Color(0xFF48484A)
+      ..color = const Color(0xFF8E8E93)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0
       ..strokeCap = StrokeCap.round;
@@ -139,10 +146,10 @@ class _PhonePlacementPainter extends CustomPainter {
     final capRect = Rect.fromCenter(center: capCenter, width: 44, height: 8);
     canvas.drawOval(
       capRect,
-      Paint()..color = const Color(0xFF2C2C2E),
+      Paint()..color = const Color(0xFFE5E5EA),
     );
     canvas.drawOval(capRect, capPaint);
-    canvas.drawCircle(capCenter, 2.5, Paint()..color = CupertinoColors.systemCyan);
+    canvas.drawCircle(capCenter, 2.5, Paint()..color = CupertinoColors.activeBlue);
 
     // 3. Animation cycle of phone descending onto cap
     // Progress:
@@ -173,7 +180,7 @@ class _PhonePlacementPainter extends CustomPainter {
     // Contact pulse rings when phone touches the cap
     if (pulseScale > 0.0) {
       final ringPaint = Paint()
-        ..color = CupertinoColors.systemCyan.withValues(alpha: (1.0 - pulseScale) * 0.7)
+        ..color = CupertinoColors.activeBlue.withValues(alpha: (1.0 - pulseScale) * 0.6)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.5;
       canvas.drawOval(
@@ -197,11 +204,11 @@ class _PhonePlacementPainter extends CustomPainter {
     // Phone fill and stroke
     canvas.drawRRect(
       phoneRect,
-      Paint()..color = const Color(0xFF1C1C1E).withValues(alpha: phoneAlpha),
+      Paint()..color = Colors.white.withValues(alpha: phoneAlpha),
     );
     canvas.drawRRect(
       phoneRect,
-      phonePaint..color = Colors.white.withValues(alpha: phoneAlpha),
+      phonePaint..color = const Color(0xFF1C1C1E).withValues(alpha: phoneAlpha),
     );
 
     // Glowing screen indicator
@@ -211,21 +218,21 @@ class _PhonePlacementPainter extends CustomPainter {
     );
     canvas.drawRRect(
       screenRect,
-      Paint()..color = CupertinoColors.systemCyan.withValues(alpha: 0.85 * phoneAlpha),
+      Paint()..color = CupertinoColors.activeBlue.withValues(alpha: 0.18 * phoneAlpha),
     );
 
     // Camera bump / notch dot
     canvas.drawCircle(
       Offset(cx - 20, phoneY),
       1.5,
-      Paint()..color = Colors.white.withValues(alpha: phoneAlpha),
+      Paint()..color = const Color(0xFF1C1C1E).withValues(alpha: phoneAlpha),
     );
 
     // Downward guidance arrow when phone is hovering
     if (progress < 0.40) {
       final arrowAlpha = (1.0 - (progress / 0.40)).clamp(0.0, 1.0);
       final arrowPaint = Paint()
-        ..color = CupertinoColors.systemCyan.withValues(alpha: arrowAlpha * 0.8)
+        ..color = CupertinoColors.activeBlue.withValues(alpha: arrowAlpha * 0.8)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2.0
         ..strokeCap = StrokeCap.round;
@@ -245,7 +252,7 @@ class _PhonePlacementPainter extends CustomPainter {
           fontSize: 10,
           fontWeight: FontWeight.w700,
           letterSpacing: 0.8,
-          color: Colors.white54,
+          color: Color(0xFF8E8E93),
         ),
       ),
       textDirection: TextDirection.ltr,
