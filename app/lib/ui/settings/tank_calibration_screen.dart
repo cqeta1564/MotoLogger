@@ -102,36 +102,57 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
             ),
             centerTitle: true,
           ),
-          body: SafeArea(
-            child: SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Column(
+          body: OrientationBuilder(
+            builder: (context, orientation) {
+              final isLandscape = orientation == Orientation.landscape;
+              // Aligns button bottom to exact physical pixel height of Dashboard action buttons
+              final bottomSpacing = isLandscape ? 64.0 : 102.0;
+
+              return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Unified segmented selector between Side-Stand and Upright mode
-                  _buildModeSelector(),
+                  Expanded(
+                    child: SafeArea(
+                      bottom: false,
+                      child: SingleChildScrollView(
+                        physics: const BouncingScrollPhysics(),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            // Unified segmented selector between Side-Stand and Upright mode
+                            _buildModeSelector(),
 
-                  const SizedBox(height: 20),
+                            const SizedBox(height: 20),
 
-                  // Mode-specific content
-                  if (_selectedModeIndex == 0)
-                    _buildStandModeContent()
-                  else
-                    _buildUprightModeContent(),
+                            // Mode-specific content
+                            if (_selectedModeIndex == 0)
+                              _buildStandModeContent()
+                            else
+                              _buildUprightModeContent(),
 
-                  const SizedBox(height: 24),
+                            const SizedBox(height: 16),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
 
-                  // Action Button or Success Banner
-                  if (_showSuccessBanner)
-                    _buildSuccessBanner()
-                  else
-                    _buildActionButton(),
-
-                  const SizedBox(height: 16),
+                  // Fixed Bottom Action Area (aligned to exact vertical level of Dashboard buttons)
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      isLandscape ? 80 : 20,
+                      8,
+                      isLandscape ? 80 : 20,
+                      bottomSpacing,
+                    ),
+                    child: _showSuccessBanner
+                        ? _buildSuccessBanner()
+                        : _buildActionButton(),
+                  ),
                 ],
-              ),
-            ),
+              );
+            },
           ),
         );
       },
