@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../core/theme/app_theme.dart';
 import '../../services/telemetry_manager.dart';
 import '../widgets/construction_spirit_level.dart';
 import '../widgets/phone_placement_animation.dart';
@@ -277,10 +278,16 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
   Widget _buildActionButton() {
     final isStandMode = _selectedModeIndex == 0;
     final isReady = isStandMode ? _isStable : true;
+    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
+    final buttonHeight = isLandscape
+        ? AppTheme.primaryButtonHeightLandscape
+        : AppTheme.primaryButtonHeight;
 
     return Container(
+      width: double.infinity,
+      height: buttonHeight,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AppTheme.primaryButtonRadius),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: isReady ? 0.12 : 0.04),
@@ -290,8 +297,8 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
         ],
       ),
       child: CupertinoButton(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        borderRadius: BorderRadius.circular(16),
+        padding: EdgeInsets.zero,
+        borderRadius: BorderRadius.circular(AppTheme.primaryButtonRadius),
         color: isReady ? const Color(0xFF1C1C1E) : const Color(0xFFAEAEC2),
         onPressed: _isCalibrating
             ? null
@@ -326,11 +333,18 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
   }
 
   Widget _buildSuccessBanner() {
+    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
+    final bannerHeight = isLandscape
+        ? AppTheme.primaryButtonHeightLandscape
+        : AppTheme.primaryButtonHeight;
+
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+      width: double.infinity,
+      height: bannerHeight,
+      padding: const EdgeInsets.symmetric(horizontal: 20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AppTheme.primaryButtonRadius),
         border: Border.all(
           color: const Color(0xFF1C1C1E),
           width: 1.5,

@@ -33,6 +33,11 @@ class AppTheme {
   static const Color appleBorder = Color(0xFFE5E5EA);
   static const Color appleGroupedBg = Color(0xFFF2F2F7);
 
+  // Apple Primary Button Metrics (Unified across whole app)
+  static const double primaryButtonHeight = 56.0;
+  static const double primaryButtonHeightLandscape = 50.0;
+  static const double primaryButtonRadius = 16.0;
+
   static ThemeData get lightTheme {
     return ThemeData(
       useMaterial3: true,

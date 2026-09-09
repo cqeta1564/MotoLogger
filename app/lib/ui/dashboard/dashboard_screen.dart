@@ -511,18 +511,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildRecordingActionButton(bool isLandscape) {
     final isRecording = widget.telemetryManager.isRecording;
     final isPaused = widget.telemetryManager.isPaused;
+    final buttonHeight = isLandscape
+        ? AppTheme.primaryButtonHeightLandscape
+        : AppTheme.primaryButtonHeight;
 
     if (!isRecording) {
       // 1. Not recording: prominent Apple Green Start button
       return SizedBox(
         width: isLandscape ? 460 : double.infinity,
-        height: isLandscape ? 50 : 56,
+        height: buttonHeight,
         child: ElevatedButton.icon(
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(0xFF34C759),
             foregroundColor: Colors.white,
             elevation: 0,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppTheme.primaryButtonRadius),
+            ),
             shadowColor: const Color(0x6034C759),
           ),
           icon: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 26),
@@ -542,72 +547,83 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     if (isPaused) {
-      // 2. Paused: Stop & Save (Red) + Continue (Green)
-      return Row(
-        children: [
-          // Stop & Save Button (Crimson Red)
-          Expanded(
-            child: ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFF3B30),
-                foregroundColor: Colors.white,
-                elevation: 0,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                shadowColor: const Color(0x60FF3B30),
-              ),
-              icon: const Icon(Icons.stop_rounded, size: 22),
-              label: const Text(
-                'UKONČIT & ULOŽIT',
-                style: TextStyle(
-                  fontWeight: FontWeight.w900,
-                  fontSize: 13,
-                  letterSpacing: 0.8,
-                  fontFamily: '-apple-system',
+      // 2. Paused: Stop & Save (Red) + Continue (Green) - exactly same unified height
+      return SizedBox(
+        width: isLandscape ? 460 : double.infinity,
+        height: buttonHeight,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Stop & Save Button (Crimson Red)
+            Expanded(
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFF3B30),
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  padding: EdgeInsets.zero,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppTheme.primaryButtonRadius),
+                  ),
+                  shadowColor: const Color(0x60FF3B30),
                 ),
-              ),
-              onPressed: _onStopAndSavePressed,
-            ),
-          ),
-          const SizedBox(width: 14),
-          // Continue Button (Apple Green)
-          Expanded(
-            child: ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF34C759),
-                foregroundColor: Colors.white,
-                elevation: 0,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                shadowColor: const Color(0x6034C759),
-              ),
-              icon: const Icon(Icons.play_arrow_rounded, size: 24),
-              label: const Text(
-                'POKRAČOVAT',
-                style: TextStyle(
-                  fontWeight: FontWeight.w900,
-                  fontSize: 13,
-                  letterSpacing: 0.8,
-                  fontFamily: '-apple-system',
+                icon: const Icon(Icons.stop_rounded, size: 22),
+                label: const Text(
+                  'UKONČIT & ULOŽIT',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 13,
+                    letterSpacing: 0.8,
+                    fontFamily: '-apple-system',
+                  ),
                 ),
+                onPressed: _onStopAndSavePressed,
               ),
-              onPressed: _onContinuePressed,
             ),
-          ),
-        ],
+            const SizedBox(width: 14),
+            // Continue Button (Apple Green)
+            Expanded(
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF34C759),
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  padding: EdgeInsets.zero,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppTheme.primaryButtonRadius),
+                  ),
+                  shadowColor: const Color(0x6034C759),
+                ),
+                icon: const Icon(Icons.play_arrow_rounded, size: 24),
+                label: const Text(
+                  'POKRAČOVAT',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 13,
+                    letterSpacing: 0.8,
+                    fontFamily: '-apple-system',
+                  ),
+                ),
+                onPressed: _onContinuePressed,
+              ),
+            ),
+          ],
+        ),
       );
     }
 
     // 3. Actively recording: Pause button (Apple Dark Slate with Orange pause icon)
     return SizedBox(
       width: isLandscape ? 460 : double.infinity,
-      height: isLandscape ? 50 : 56,
+      height: buttonHeight,
       child: ElevatedButton.icon(
         style: ElevatedButton.styleFrom(
           backgroundColor: const Color(0xFF1C1C1E),
           foregroundColor: Colors.white,
           elevation: 0,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppTheme.primaryButtonRadius),
+          ),
         ),
         icon: const Icon(Icons.pause_rounded, color: Color(0xFFFF9500), size: 24),
         label: const Text(
