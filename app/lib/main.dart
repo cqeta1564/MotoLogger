@@ -7,6 +7,7 @@ import 'services/telemetry_manager.dart';
 import 'ui/dashboard/dashboard_screen.dart';
 import 'ui/history/history_screen.dart';
 import 'ui/settings/settings_screen.dart';
+import 'ui/widgets/apple_tab_bar.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -67,23 +68,9 @@ class _MotoLoggerAppState extends State<MotoLoggerApp> {
         body: screens[_selectedTabIndex],
         bottomNavigationBar: _selectedTabIndex == 0
             ? null
-            : BottomNavigationBar(
+            : AppleTabBar(
                 currentIndex: _selectedTabIndex,
-                onTap: (idx) => setState(() => _selectedTabIndex = idx),
-                items: const [
-                  BottomNavigationBarItem(
-                    icon: Icon(Icons.two_wheeler_rounded),
-                    label: 'Jízda',
-                  ),
-                  BottomNavigationBarItem(
-                    icon: Icon(Icons.bar_chart_rounded),
-                    label: 'Historie',
-                  ),
-                  BottomNavigationBarItem(
-                    icon: Icon(Icons.settings_rounded),
-                    label: 'Nastavení',
-                  ),
-                ],
+                onTabSelected: (idx) => setState(() => _selectedTabIndex = idx),
               ),
       ),
     );

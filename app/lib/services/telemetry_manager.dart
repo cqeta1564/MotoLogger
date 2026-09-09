@@ -36,6 +36,7 @@ class TelemetryManager extends ChangeNotifier {
   final List<FusedSample> _sampleBuffer = [];
   Timer? _batchFlushTimer;
   StreamSubscription? _bleSub;
+  StreamSubscription? _bleStateSub;
   StreamSubscription? _gpsSub;
 
   TelemetryPacket get latestPacket => _latestPacket;
@@ -59,6 +60,10 @@ class TelemetryManager extends ChangeNotifier {
   }
 
   void _initListeners() {
+    _bleStateSub = bleService.stateStream.listen((_) {
+      notifyListeners();
+    });
+
     _bleSub = bleService.telemetryStream.listen((packet) {
       _latestPacket = packet;
 
@@ -223,6 +228,7 @@ class TelemetryManager extends ChangeNotifier {
   void dispose() {
     _batchFlushTimer?.cancel();
     _bleSub?.cancel();
+    _bleStateSub?.cancel();
     _gpsSub?.cancel();
     super.dispose();
   }

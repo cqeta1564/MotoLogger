@@ -5,6 +5,7 @@ import '../../services/telemetry_manager.dart';
 import '../widgets/corner_gradient_breather.dart';
 import '../widgets/gg_friction_reticle.dart';
 import '../widgets/slide_to_unlock.dart';
+import '../widgets/apple_tab_bar.dart';
 
 /// The core motorcycle telemetry activity screen ("Jízda").
 /// 
@@ -608,75 +609,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
           ),
 
-          // Bottom Navigation Bar
-          Container(
-            height: isLandscape ? 58 : 72,
-            decoration: const BoxDecoration(
-              color: Color(0xFFF2F2F7),
-              border: Border(top: BorderSide(color: Color(0xFFE5E5EA), width: 1.2)),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildNavItem(
-                  icon: Icons.bar_chart_rounded,
-                  label: 'Historie',
-                  isActive: false,
-                  onTap: () => widget.onNavigateTab?.call(1),
+          // Unified Apple Tab Bar
+          AppleTabBar(
+            currentIndex: 0,
+            isLandscape: isLandscape,
+            onTabSelected: (idx) {
+              if (idx > 0) {
+                widget.onNavigateTab?.call(idx);
+              }
+            },
+            trailingAction: Expanded(
+              child: InkWell(
+                splashColor: Colors.transparent,
+                highlightColor: Colors.transparent,
+                onTap: _onLockAgain,
+                child: const Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.lock_outline_rounded, color: Color(0xFF8E8E93), size: 24),
+                    SizedBox(height: 3),
+                    Text(
+                      'Zamknout',
+                      style: TextStyle(
+                        color: Color(0xFF8E8E93),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: -0.2,
+                        fontFamily: '-apple-system',
+                      ),
+                    ),
+                  ],
                 ),
-                _buildNavItem(
-                  icon: Icons.two_wheeler_rounded,
-                  label: 'Jízda',
-                  isActive: true,
-                  onTap: () {},
-                ),
-                _buildNavItem(
-                  icon: Icons.settings_rounded,
-                  label: 'Nastavení',
-                  isActive: false,
-                  onTap: () => widget.onNavigateTab?.call(2),
-                ),
-                _buildNavItem(
-                  icon: Icons.lock_outline_rounded,
-                  label: 'Zamknout',
-                  isActive: false,
-                  onTap: _onLockAgain,
-                ),
-              ],
+              ),
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildNavItem({
-    required IconData icon,
-    required String label,
-    required bool isActive,
-    required VoidCallback onTap,
-  }) {
-    final color = isActive ? Colors.black : const Color(0xFF8E8E93);
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: color, size: 23),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: TextStyle(
-                color: color,
-                fontSize: 11,
-                fontWeight: isActive ? FontWeight.w900 : FontWeight.w600,
-                fontFamily: '-apple-system',
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

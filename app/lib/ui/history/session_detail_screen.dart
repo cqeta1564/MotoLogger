@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../core/theme/app_theme.dart';
@@ -6,6 +7,8 @@ import '../../models/session.dart';
 import '../../models/fused_sample.dart';
 import '../../services/database_service.dart';
 
+/// Detailed breakdown and telemetry inspection screen for a ride session.
+/// Formatted according to Apple Fitness & Health aesthetic.
 class SessionDetailScreen extends StatefulWidget {
   final RideSession session;
   final DatabaseService dbService;
@@ -32,17 +35,18 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF2F2F7),
       appBar: AppBar(
         title: Text(widget.session.title),
         actions: [
           IconButton(
-            icon: const Icon(Icons.share),
-            tooltip: 'Export CSV',
+            icon: const Icon(Icons.share_outlined, size: 22),
+            tooltip: 'Exportovat CSV',
             onPressed: _exportCsv,
           ),
           IconButton(
-            icon: const Icon(Icons.delete, color: AppTheme.danger),
-            tooltip: 'Delete Session',
+            icon: const Icon(Icons.delete_outline_rounded, color: AppTheme.appleRed, size: 22),
+            tooltip: 'Smazat jízdu',
             onPressed: _confirmDelete,
           ),
         ],
@@ -51,31 +55,31 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
         future: _samplesFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator(color: AppTheme.primary));
+            return const Center(child: CupertinoActivityIndicator(radius: 14));
           }
           final samples = snapshot.data ?? [];
 
           return SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Summary Card
+                // Apple Summary Card
                 _buildSummaryCard(),
                 const SizedBox(height: 16),
 
                 // Lean Angle Chart
                 _buildChartCard(
-                  title: 'LEAN ANGLE OVER TIME (°)',
-                  subtitle: 'Negative = Left Lean, Positive = Right Lean',
+                  title: 'PRŮBĚH NÁKLONU V ČASE (°)',
+                  subtitle: 'Záporné hodnoty = levý náklon • Kladné = pravý náklon',
                   chart: _buildLeanChart(samples),
                 ),
                 const SizedBox(height: 16),
 
                 // Speed Chart
                 _buildChartCard(
-                  title: 'SPEED OVER TIME (KM/H)',
-                  subtitle: 'Derived from high-speed CAN / GPS telemetry',
+                  title: 'RYCHLOST V ČASE (KM/H)',
+                  subtitle: 'Zaznamenáno z vysokofrekvenčního streamu a GPS',
                   chart: _buildSpeedChart(samples),
                 ),
                 const SizedBox(height: 24),
@@ -89,43 +93,150 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
 
   Widget _buildSummaryCard() {
     final s = widget.session;
-    return Card(
-      color: AppTheme.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildMetric('PEAK LEFT', '${s.maxLeanLeftDeg.abs().toStringAsFixed(1)}°', AppTheme.primary),
-                _buildMetric('PEAK RIGHT', '${s.maxLeanRightDeg.abs().toStringAsFixed(1)}°', AppTheme.accent),
-                _buildMetric('TOP SPEED', '${s.topSpeedKmh.toStringAsFixed(0)} km/h', AppTheme.textPrimary),
-                _buildMetric('MAX G', '${s.maxGForce.toStringAsFixed(2)}G', AppTheme.danger),
-              ],
-            ),
-            const Divider(color: AppTheme.surfaceLight, height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildMetric('DURATION', '${s.duration.inMinutes} min', AppTheme.textSecondary),
-                _buildMetric('SAMPLES', '${s.sampleCount}', AppTheme.textSecondary),
-                _buildMetric('DISTANCE', '${s.totalDistanceKm.toStringAsFixed(2)} km', AppTheme.textSecondary),
-              ],
-            ),
-          ],
-        ),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE5E5EA), width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        children: [
+          // Row 1: Key Primary Metrics
+          Row(
+            children: [
+              Expanded(
+                child: _buildMetricTile(
+                  label: 'ŠPIČKA VLEVO',
+                  value: '${s.maxLeanLeftDeg.abs().toStringAsFixed(1)}°',
+                  color: AppTheme.appleGreen,
+                ),
+              ),
+              Expanded(
+                child: _buildMetricTile(
+                  label: 'ŠPIČKA VPRAVO',
+                  value: '${s.maxLeanRightDeg.abs().toStringAsFixed(1)}°',
+                  color: AppTheme.appleOrange,
+                ),
+              ),
+              Expanded(
+                child: _buildMetricTile(
+                  label: 'MAX RYCHLOST',
+                  value: '${s.topSpeedKmh.toStringAsFixed(0)} km/h',
+                  color: AppTheme.appleBlack,
+                ),
+              ),
+              Expanded(
+                child: _buildMetricTile(
+                  label: 'MAXIMÁLNÍ G',
+                  value: '${s.maxGForce.toStringAsFixed(2)} G',
+                  color: AppTheme.appleRed,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          const Divider(color: Color(0xFFE5E5EA), height: 1),
+          const SizedBox(height: 14),
+
+          // Row 2: Secondary Ride Stats
+          Row(
+            children: [
+              Expanded(
+                child: _buildSecondaryTile(
+                  label: 'DOBA JÍZDY',
+                  value: '${s.duration.inMinutes} min ${s.duration.inSeconds % 60} s',
+                ),
+              ),
+              Expanded(
+                child: _buildSecondaryTile(
+                  label: 'POČET VZORKŮ',
+                  value: '${s.sampleCount}',
+                ),
+              ),
+              Expanded(
+                child: _buildSecondaryTile(
+                  label: 'VZDÁLENOST',
+                  value: '${s.totalDistanceKm.toStringAsFixed(2)} km',
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildMetric(String label, String val, Color col) {
+  Widget _buildMetricTile({
+    required String label,
+    required String value,
+    required Color color,
+  }) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(color: AppTheme.textMuted, fontSize: 9, fontWeight: FontWeight.bold)),
+        Text(
+          label,
+          style: const TextStyle(
+            color: AppTheme.appleMutedGray,
+            fontSize: 9.5,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.2,
+            fontFamily: '-apple-system',
+          ),
+        ),
         const SizedBox(height: 4),
-        Text(val, style: TextStyle(color: col, fontSize: 16, fontWeight: FontWeight.bold)),
+        Text(
+          value,
+          style: TextStyle(
+            color: color,
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.4,
+            fontFamily: '-apple-system',
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSecondaryTile({
+    required String label,
+    required String value,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: AppTheme.appleMutedGray,
+            fontSize: 9,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.2,
+            fontFamily: '-apple-system',
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          value,
+          style: const TextStyle(
+            color: AppTheme.appleBlack,
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            letterSpacing: -0.2,
+            fontFamily: '-apple-system',
+            fontFeatures: [FontFeature.tabularFigures()],
+          ),
+        ),
       ],
     );
   }
@@ -135,27 +246,59 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
     required String subtitle,
     required Widget chart,
   }) {
-    return Card(
-      color: AppTheme.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 2),
-            Text(subtitle, style: const TextStyle(color: AppTheme.textMuted, fontSize: 11)),
-            const SizedBox(height: 16),
-            SizedBox(height: 180, child: chart),
-          ],
-        ),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE5E5EA), width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              color: AppTheme.appleBlack,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.2,
+              fontFamily: '-apple-system',
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            subtitle,
+            style: const TextStyle(
+              color: AppTheme.appleMutedGray,
+              fontSize: 11,
+              letterSpacing: -0.1,
+              fontFamily: '-apple-system',
+            ),
+          ),
+          const SizedBox(height: 18),
+          SizedBox(height: 200, child: chart),
+        ],
       ),
     );
   }
 
   Widget _buildLeanChart(List<FusedSample> samples) {
-    if (samples.isEmpty) return const Center(child: Text('No chart data'));
+    if (samples.isEmpty) {
+      return const Center(
+        child: Text(
+          'Žádná data grafu',
+          style: TextStyle(color: AppTheme.appleMutedGray, fontSize: 13),
+        ),
+      );
+    }
 
     final step = (samples.length / 100).ceil().clamp(1, 1000);
     final spots = <FlSpot>[];
@@ -165,24 +308,81 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
 
     return LineChart(
       LineChartData(
+        lineTouchData: LineTouchData(
+          enabled: true,
+          touchTooltipData: LineTouchTooltipData(
+            tooltipRoundedRadius: 8,
+            tooltipPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            getTooltipItems: (touchedSpots) {
+              return touchedSpots.map((spot) {
+                final angle = spot.y;
+                final direction = angle < -0.5
+                    ? 'Levý náklon'
+                    : angle > 0.5
+                        ? 'Pravý náklon'
+                        : 'Přímo';
+                return LineTooltipItem(
+                  '${angle.abs().toStringAsFixed(1)}° • $direction',
+                  const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    fontFamily: '-apple-system',
+                  ),
+                );
+              }).toList();
+            },
+          ),
+        ),
         gridData: FlGridData(
           show: true,
-          getDrawingHorizontalLine: (val) => FlLine(color: AppTheme.surfaceLight, strokeWidth: 1),
-          getDrawingVerticalLine: (val) => FlLine(color: AppTheme.surfaceLight, strokeWidth: 1),
+          drawVerticalLine: false,
+          horizontalInterval: 15,
+          getDrawingHorizontalLine: (val) {
+            final isZero = val.abs() < 0.1;
+            return FlLine(
+              color: isZero ? const Color(0xFFC7C7CC) : const Color(0xFFF2F2F7),
+              strokeWidth: isZero ? 1.2 : 0.8,
+              dashArray: isZero ? [4, 4] : null,
+            );
+          },
         ),
-        titlesData: const FlTitlesData(show: false),
+        titlesData: FlTitlesData(
+          show: true,
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          bottomTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 32,
+              interval: 15,
+              getTitlesWidget: (val, meta) {
+                return Text(
+                  '${val.toInt()}°',
+                  style: const TextStyle(
+                    color: AppTheme.appleMutedGray,
+                    fontSize: 10,
+                    fontFamily: '-apple-system',
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
         borderData: FlBorderData(show: false),
         lineBarsData: [
           LineChartBarData(
             spots: spots,
             isCurved: true,
-            color: AppTheme.primary,
-            barWidth: 2,
+            curveSmoothness: 0.25,
+            color: AppTheme.appleBlue,
+            barWidth: 2.2,
             isStrokeCapRound: true,
             dotData: const FlDotData(show: false),
             belowBarData: BarAreaData(
               show: true,
-              color: AppTheme.primary.withValues(alpha: 0.1),
+              color: AppTheme.appleBlue.withValues(alpha: 0.08),
             ),
           ),
         ],
@@ -191,7 +391,14 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
   }
 
   Widget _buildSpeedChart(List<FusedSample> samples) {
-    if (samples.isEmpty) return const Center(child: Text('No chart data'));
+    if (samples.isEmpty) {
+      return const Center(
+        child: Text(
+          'Žádná data grafu',
+          style: TextStyle(color: AppTheme.appleMutedGray, fontSize: 13),
+        ),
+      );
+    }
 
     final step = (samples.length / 100).ceil().clamp(1, 1000);
     final spots = <FlSpot>[];
@@ -201,23 +408,70 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
 
     return LineChart(
       LineChartData(
+        lineTouchData: LineTouchData(
+          enabled: true,
+          touchTooltipData: LineTouchTooltipData(
+            tooltipRoundedRadius: 8,
+            tooltipPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            getTooltipItems: (touchedSpots) {
+              return touchedSpots.map((spot) {
+                return LineTooltipItem(
+                  '${spot.y.toStringAsFixed(0)} km/h',
+                  const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    fontFamily: '-apple-system',
+                  ),
+                );
+              }).toList();
+            },
+          ),
+        ),
         gridData: FlGridData(
           show: true,
-          getDrawingHorizontalLine: (val) => FlLine(color: AppTheme.surfaceLight, strokeWidth: 1),
-          getDrawingVerticalLine: (val) => FlLine(color: AppTheme.surfaceLight, strokeWidth: 1),
+          drawVerticalLine: false,
+          horizontalInterval: 30,
+          getDrawingHorizontalLine: (val) => const FlLine(
+            color: Color(0xFFF2F2F7),
+            strokeWidth: 0.8,
+          ),
         ),
-        titlesData: const FlTitlesData(show: false),
+        titlesData: FlTitlesData(
+          show: true,
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          bottomTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 34,
+              interval: 30,
+              getTitlesWidget: (val, meta) {
+                return Text(
+                  '${val.toInt()}',
+                  style: const TextStyle(
+                    color: AppTheme.appleMutedGray,
+                    fontSize: 10,
+                    fontFamily: '-apple-system',
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
         borderData: FlBorderData(show: false),
         lineBarsData: [
           LineChartBarData(
             spots: spots,
             isCurved: true,
-            color: AppTheme.accent,
-            barWidth: 2,
+            curveSmoothness: 0.25,
+            color: AppTheme.appleOrange,
+            barWidth: 2.2,
             dotData: const FlDotData(show: false),
             belowBarData: BarAreaData(
               show: true,
-              color: AppTheme.accent.withValues(alpha: 0.1),
+              color: AppTheme.appleOrange.withValues(alpha: 0.08),
             ),
           ),
         ],
@@ -227,21 +481,28 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
 
   Future<void> _exportCsv() async {
     final path = await widget.dbService.exportSessionToCsv(widget.session.id!);
-    await Share.shareXFiles([XFile(path)], text: 'MotoLogger Session CSV: ${widget.session.title}');
+    await Share.shareXFiles([XFile(path)], text: 'MotoLogger Jízda CSV: ${widget.session.title}');
   }
 
   Future<void> _confirmDelete() async {
-    final confirm = await showDialog<bool>(
+    final confirm = await showCupertinoDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.surface,
-        title: const Text('Delete Session?'),
-        content: const Text('Are you sure you want to delete this recorded ride? This action cannot be undone.'),
+      builder: (ctx) => CupertinoAlertDialog(
+        title: const Text('Smazat jízdu?'),
+        content: const Padding(
+          padding: EdgeInsets.only(top: 6),
+          child: Text('Opravdu si přejete smazat tento záznam jízdy? Tuto akci nelze vzít zpět.'),
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('CANCEL')),
-          TextButton(
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Zrušit'),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('DELETE', style: TextStyle(color: AppTheme.danger)),
+            child: const Text('Smazat'),
           ),
         ],
       ),
