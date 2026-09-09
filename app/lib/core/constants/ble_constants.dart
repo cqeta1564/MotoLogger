@@ -11,4 +11,5 @@ class BleConstants {
 
   // Mobile -> ESP32 Commands
   static const int cmdTareZero = 0x01; // Zero-tare IMU lean and pitch calibration
+  static const int cmdTareWithOffset = 0x02; // Set mounting roll offset in tenths of a degree (int16_t)
 }

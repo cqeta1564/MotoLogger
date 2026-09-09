@@ -17,6 +17,8 @@ public:
     bool begin();
     bool update(ImuSample& sample);
     void tareZero();
+    void setMountingOffsetDeg(float offset_deg);
+    float getMountingOffsetDeg() const { return roll_offset_deg_; }
     ImuSample getLatestSample();
 
     bool isReady() const { return is_initialized_; }

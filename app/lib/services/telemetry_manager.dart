@@ -29,6 +29,8 @@ class TelemetryManager extends ChangeNotifier {
   double _maxG = 0.0;
   double _totalDistanceKm = 0.0;
   int _sampleCount = 0;
+  double _mountingRollOffsetDeg = 0.0;
+  double _latestRawLeanDeg = 0.0;
 
   // Polar friction envelope: 36 angular sectors (every 10 deg)
   final List<double> _frictionEnvelope = List.filled(36, 0.15);
@@ -49,6 +51,8 @@ class TelemetryManager extends ChangeNotifier {
   double get maxG => _maxG;
   double get totalDistanceKm => _totalDistanceKm;
   int get sampleCount => _sampleCount;
+  double get mountingRollOffsetDeg => _mountingRollOffsetDeg;
+  double get latestRawLeanDeg => _latestRawLeanDeg;
   List<double> get frictionEnvelopeRadii => List.unmodifiable(_frictionEnvelope);
 
   TelemetryManager({
@@ -57,6 +61,17 @@ class TelemetryManager extends ChangeNotifier {
     required this.dbService,
   }) {
     _initListeners();
+    _loadSavedMountingOffset();
+  }
+
+  Future<void> _loadSavedMountingOffset() async {
+    try {
+      final saved = await dbService.getSetting('mounting_roll_offset');
+      if (saved != null) {
+        _mountingRollOffsetDeg = double.tryParse(saved) ?? 0.0;
+        notifyListeners();
+      }
+    } catch (_) {}
   }
 
   void _initListeners() {
@@ -65,27 +80,32 @@ class TelemetryManager extends ChangeNotifier {
     });
 
     _bleSub = bleService.telemetryStream.listen((packet) {
-      _latestPacket = packet;
+      _latestRawLeanDeg = packet.leanAngleDeg;
+
+      // Apply calibrated mounting offset
+      final calibratedRoll = packet.leanAngleDeg - _mountingRollOffsetDeg;
+      final adjustedPacket = packet.copyWith(leanAngleDeg: calibratedRoll);
+      _latestPacket = adjustedPacket;
 
       // Update real-time peak dynamics
-      if (packet.leanAngleDeg < _maxLeanLeft) {
-        _maxLeanLeft = packet.leanAngleDeg;
+      if (adjustedPacket.leanAngleDeg < _maxLeanLeft) {
+        _maxLeanLeft = adjustedPacket.leanAngleDeg;
       }
-      if (packet.leanAngleDeg > _maxLeanRight) {
-        _maxLeanRight = packet.leanAngleDeg;
+      if (adjustedPacket.leanAngleDeg > _maxLeanRight) {
+        _maxLeanRight = adjustedPacket.leanAngleDeg;
       }
-      if (packet.vehicleSpeedKmh > _topSpeed) {
-        _topSpeed = packet.vehicleSpeedKmh.toDouble();
+      if (adjustedPacket.vehicleSpeedKmh > _topSpeed) {
+        _topSpeed = adjustedPacket.vehicleSpeedKmh.toDouble();
       }
 
-      final currentG = sqrt(packet.accelXG * packet.accelXG + packet.accelYG * packet.accelYG);
+      final currentG = sqrt(adjustedPacket.accelXG * adjustedPacket.accelXG + adjustedPacket.accelYG * adjustedPacket.accelYG);
       if (currentG > _maxG) {
         _maxG = currentG;
       }
 
       // Update polar friction envelope for G-G diagram
       if (currentG > 0.05) {
-        double angle = atan2(packet.accelYG, packet.accelXG);
+        double angle = atan2(adjustedPacket.accelYG, adjustedPacket.accelXG);
         if (angle < 0) angle += 2 * pi;
         final sector = ((angle / (2 * pi)) * 36).floor() % 36;
         if (currentG > _frictionEnvelope[sector]) {
@@ -98,7 +118,7 @@ class TelemetryManager extends ChangeNotifier {
         _sampleCount++;
         final sample = FusedSample.fromTelemetryAndGps(
           sessionId: _currentSessionId!,
-          packet: packet,
+          packet: adjustedPacket,
           latitude: _latestPosition?.latitude ?? 0.0,
           longitude: _latestPosition?.longitude ?? 0.0,
           altitude: _latestPosition?.altitude ?? 0.0,
@@ -217,6 +237,39 @@ class TelemetryManager extends ChangeNotifier {
 
   Future<void> tareZero() async {
     await bleService.sendTareZero();
+  }
+
+  /// Calibrate mounting zero offset using the smartphone placed flat on fuel tank cap
+  /// [phoneRollDeg] is the real motorcycle tilt angle on the side stand measured by the phone.
+  Future<void> calibrateFromTank({required double phoneRollDeg}) async {
+    // Mounting offset is difference between sensor raw reading and true motorcycle tilt:
+    _mountingRollOffsetDeg = _latestRawLeanDeg - phoneRollDeg;
+
+    // Persist to local database
+    await dbService.saveSetting('mounting_roll_offset', _mountingRollOffsetDeg.toStringAsFixed(2));
+
+    // Send offset to ESP unit via BLE
+    await bleService.sendTareOffset(_mountingRollOffsetDeg);
+
+    // Immediately update latest packet with calibrated offset
+    final calibratedRoll = _latestRawLeanDeg - _mountingRollOffsetDeg;
+    _latestPacket = _latestPacket.copyWith(leanAngleDeg: calibratedRoll);
+
+    resetPeaks();
+    notifyListeners();
+  }
+
+  /// Reset mounting offset back to factory default 0.0°
+  Future<void> resetMountingOffset() async {
+    _mountingRollOffsetDeg = 0.0;
+    await dbService.saveSetting('mounting_roll_offset', '0.0');
+    await bleService.sendTareOffset(0.0);
+
+    final calibratedRoll = _latestRawLeanDeg;
+    _latestPacket = _latestPacket.copyWith(leanAngleDeg: calibratedRoll);
+
+    resetPeaks();
+    notifyListeners();
   }
 
   void resetFrictionEnvelope() {

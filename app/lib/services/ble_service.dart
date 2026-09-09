@@ -158,6 +158,29 @@ class BleService {
     }
   }
 
+  Future<bool> sendTareOffset(double offsetDeg) async {
+    if (_mockMode) {
+      debugPrint('[BLE MOCK] Tare mounting offset calibrated: ${offsetDeg.toStringAsFixed(1)}°');
+      return true;
+    }
+    if (_commandChar == null) return false;
+
+    try {
+      // Encode offset in tenths of a degree (int16_t, Little-Endian)
+      final offsetInt16 = (offsetDeg * 10).round().clamp(-32768, 32767);
+      final byteData = ByteData(3);
+      byteData.setUint8(0, BleConstants.cmdTareWithOffset);
+      byteData.setInt16(1, offsetInt16, Endian.little);
+
+      await _commandChar!.write(byteData.buffer.asUint8List(), withoutResponse: true);
+      debugPrint('[BLE] Sent Tare Offset command (${offsetDeg.toStringAsFixed(1)}°) to ESP32.');
+      return true;
+    } catch (e) {
+      debugPrint('[BLE] Failed to send Tare Offset command: $e');
+      return false;
+    }
+  }
+
   // Built-in Demo / Simulation generator for UI testing without real bike
   void enableMockMode(bool enable) {
     _mockMode = enable;

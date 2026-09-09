@@ -45,6 +45,15 @@ static void handleBleCommand(uint8_t cmd_id, const uint8_t* payload, size_t leng
             Serial.println("[BLE CMD] IMU Zero-Tare calibrated from mobile app!");
             break;
 
+        case 0x02: // Tare with mounting offset (int16_t tenths of degree)
+            if (payload && length >= 2) {
+                int16_t offset_x10 = static_cast<int16_t>(payload[0] | (payload[1] << 8));
+                float offset_deg = offset_x10 / 10.0f;
+                g_imu_mgr.setMountingOffsetDeg(offset_deg);
+                Serial.printf("[BLE CMD] IMU mounting offset set to: %.2f deg\n", offset_deg);
+            }
+            break;
+
         default:
             Serial.printf("[BLE CMD] Unknown command 0x%02X received.\n", cmd_id);
             break;

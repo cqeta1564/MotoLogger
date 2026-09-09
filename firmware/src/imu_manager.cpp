@@ -69,6 +69,12 @@ void ImuManager::tareZero() {
     portEXIT_CRITICAL(&imu_mux_);
 }
 
+void ImuManager::setMountingOffsetDeg(float offset_deg) {
+    portENTER_CRITICAL(&imu_mux_);
+    roll_offset_deg_ = offset_deg;
+    portEXIT_CRITICAL(&imu_mux_);
+}
+
 ImuSample ImuManager::getLatestSample() {
     ImuSample s;
     portENTER_CRITICAL(&imu_mux_);

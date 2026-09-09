@@ -107,4 +107,42 @@ class TelemetryPacket {
       statusFlags: 0,
     );
   }
+
+  TelemetryPacket copyWith({
+    int? timestampMs,
+    double? leanAngleDeg,
+    double? pitchDeg,
+    double? accelXG,
+    double? accelYG,
+    double? accelZG,
+    double? gyroXDps,
+    double? gyroYDps,
+    double? gyroZDps,
+    int? engineRpm,
+    int? vehicleSpeedKmh,
+    int? throttlePosPct,
+    int? coolantTempC,
+    int? gear,
+    double? batteryVoltage,
+    int? statusFlags,
+  }) {
+    return TelemetryPacket(
+      timestampMs: timestampMs ?? this.timestampMs,
+      leanAngleDeg: leanAngleDeg ?? this.leanAngleDeg,
+      pitchDeg: pitchDeg ?? this.pitchDeg,
+      accelXG: accelXG ?? this.accelXG,
+      accelYG: accelYG ?? this.accelYG,
+      accelZG: accelZG ?? this.accelZG,
+      gyroXDps: gyroXDps ?? this.gyroXDps,
+      gyroYDps: gyroYDps ?? this.gyroYDps,
+      gyroZDps: gyroZDps ?? this.gyroZDps,
+      engineRpm: engineRpm ?? this.engineRpm,
+      vehicleSpeedKmh: vehicleSpeedKmh ?? this.vehicleSpeedKmh,
+      throttlePosPct: throttlePosPct ?? this.throttlePosPct,
+      coolantTempC: coolantTempC ?? this.coolantTempC,
+      gear: gear ?? this.gear,
+      batteryVoltage: batteryVoltage ?? this.batteryVoltage,
+      statusFlags: statusFlags ?? this.statusFlags,
+    );
+  }
 }

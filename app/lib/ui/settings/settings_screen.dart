@@ -4,6 +4,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/constants/ble_constants.dart';
 import '../../services/telemetry_manager.dart';
 import '../../services/ble_service.dart';
+import 'tank_calibration_screen.dart';
 
 /// Settings, BLE device connection, and sensor calibration screen.
 /// Follows authentic Apple iOS Inset Grouped Settings guidelines.
@@ -167,25 +168,99 @@ class SettingsScreen extends StatelessWidget {
               // SECTION 2: Sensor Calibration
               _buildSectionHeader('KALIBRACE NÁKLONU'),
               _buildInsetGroup([
+                // Smart side-stand calibration
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    Navigator.of(context).push(
+                      CupertinoPageRoute(
+                        fullscreenDialog: true,
+                        builder: (context) => TankCalibrationScreen(
+                          telemetryManager: telemetryManager,
+                        ),
+                      ),
+                    );
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: AppTheme.appleBlue.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(
+                            Icons.two_wheeler_rounded,
+                            color: AppTheme.appleBlue,
+                            size: 24,
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Kalibrace na stojánku',
+                                style: TextStyle(
+                                  color: AppTheme.appleBlack,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: -0.3,
+                                  fontFamily: '-apple-system',
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                telemetryManager.mountingRollOffsetDeg != 0.0
+                                    ? 'Uložená korekce montáže: ${telemetryManager.mountingRollOffsetDeg > 0 ? "+" : ""}${telemetryManager.mountingRollOffsetDeg.toStringAsFixed(1)}°'
+                                    : 'Položte telefon na víko nádrže na stojánku',
+                                style: TextStyle(
+                                  color: telemetryManager.mountingRollOffsetDeg != 0.0
+                                      ? AppTheme.appleGreen
+                                      : AppTheme.appleMutedGray,
+                                  fontSize: 12.5,
+                                  fontWeight: telemetryManager.mountingRollOffsetDeg != 0.0
+                                      ? FontWeight.w600
+                                      : FontWeight.w400,
+                                  fontFamily: '-apple-system',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(
+                          CupertinoIcons.chevron_right,
+                          color: Color(0xFFC7C7CC),
+                          size: 18,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const Divider(color: Color(0xFFE5E5EA), height: 1, indent: 16, endIndent: 16),
                 Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text(
-                        'Před zahájením kalibrace postavte motocykl do přesně svislé polohy na rovném povrchu (např. na servisním stojanu).',
+                        'Rychlé nulování (svislá motorka)',
                         style: TextStyle(
-                          color: AppTheme.appleMutedGray,
-                          fontSize: 13,
-                          height: 1.4,
+                          color: AppTheme.appleBlack,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
                           letterSpacing: -0.2,
                           fontFamily: '-apple-system',
                         ),
                       ),
-                      const SizedBox(height: 16),
-                      CupertinoButton.filled(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        borderRadius: BorderRadius.circular(12),
+                      CupertinoButton(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        color: const Color(0xFFF2F2F7),
+                        borderRadius: BorderRadius.circular(16),
                         onPressed: () async {
                           await telemetryManager.tareZero();
                           if (context.mounted) {
@@ -199,7 +274,7 @@ class SettingsScreen extends StatelessWidget {
                                     Icon(Icons.check_circle_rounded, color: AppTheme.appleGreen, size: 20),
                                     SizedBox(width: 10),
                                     Text(
-                                      'Nulový náklon IMU byl úspěšně zkalibrován.',
+                                      'Nulový náklon byl zkalibrován.',
                                       style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
                                     ),
                                   ],
@@ -208,20 +283,14 @@ class SettingsScreen extends StatelessWidget {
                             );
                           }
                         },
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.tune_rounded, size: 18),
-                            SizedBox(width: 8),
-                            Text(
-                              'Vynulovat náklon (Tara)',
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                                fontFamily: '-apple-system',
-                              ),
-                            ),
-                          ],
+                        child: const Text(
+                          'Vynulovat',
+                          style: TextStyle(
+                            color: AppTheme.appleBlue,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            fontFamily: '-apple-system',
+                          ),
                         ),
                       ),
                     ],
