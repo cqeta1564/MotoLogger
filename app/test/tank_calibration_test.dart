@@ -2,8 +2,48 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:motologger/ui/widgets/motorcycle_tank_illustration.dart';
 import 'package:motologger/ui/widgets/apple_spirit_level.dart';
+import 'package:motologger/ui/widgets/phone_placement_animation.dart';
+import 'package:motologger/ui/widgets/construction_spirit_level.dart';
 
 void main() {
+  testWidgets('PhonePlacementAnimation renders correctly', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: PhonePlacementAnimation(isPlaced: false),
+        ),
+      ),
+    );
+
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.byType(PhonePlacementAnimation), findsOneWidget);
+  });
+
+  testWidgets('ConstructionSpiritLevelWidget renders simulated roll angle and status', (WidgetTester tester) async {
+    double? capturedAngle;
+    bool? capturedStability;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ConstructionSpiritLevelWidget(
+            simulatedRollDeg: -12.4,
+            onAngleChanged: (angle) => capturedAngle = angle,
+            onStabilityChanged: (stable) => capturedStability = stable,
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.byType(ConstructionSpiritLevelWidget), findsOneWidget);
+    expect(find.textContaining('V lajně'), findsOneWidget);
+    expect(capturedAngle, -12.4);
+    expect(capturedStability, true);
+  });
+
   testWidgets('MotorcycleTankIllustration renders correctly and displays angle badge', (WidgetTester tester) async {
     await tester.pumpWidget(
       const MaterialApp(

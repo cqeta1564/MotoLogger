@@ -2,12 +2,13 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/telemetry_manager.dart';
-import '../widgets/apple_spirit_level.dart';
-import '../widgets/motorcycle_tank_illustration.dart';
+import '../widgets/construction_spirit_level.dart';
+import '../widgets/phone_placement_animation.dart';
 
-/// Full-screen Apple HIG calibration experience for zero-lean calibration
-/// using the motorcycle resting on its side stand and the smartphone placed
-/// flat on the fuel tank cap.
+/// Clean, unified Apple HIG calibration experience for riders.
+/// Offers both:
+/// 1. Smart side-stand calibration with phone placement animation and classic yellow builder's level.
+/// 2. Fast upright calibration for riders holding the bike vertical or on a paddock stand.
 class TankCalibrationScreen extends StatefulWidget {
   final TelemetryManager telemetryManager;
 
@@ -21,41 +22,54 @@ class TankCalibrationScreen extends StatefulWidget {
 }
 
 class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
-  double _phoneRollDeg = -12.4; // Default realistic side stand lean
+  int _selectedModeIndex = 0; // 0: Na bočním stojánku, 1: Svisle na stojanu
+  double _phoneRollDeg = -12.4;
   bool _isStable = false;
   bool _isCalibrating = false;
-  bool _showSuccessBadge = false;
+  bool _showSuccessBanner = false;
 
-  double get _rawEspDeg => widget.telemetryManager.latestRawLeanDeg;
-  double get _calculatedOffset => _rawEspDeg - _phoneRollDeg;
-
-  Future<void> _handleCalibrate() async {
+  Future<void> _handleCalibrateStand() async {
     if (_isCalibrating) return;
 
-    setState(() {
-      _isCalibrating = true;
-    });
-
+    setState(() => _isCalibrating = true);
     HapticFeedback.mediumImpact();
 
-    // Calibrate offset and send via BLE to ESP unit
     await widget.telemetryManager.calibrateFromTank(phoneRollDeg: _phoneRollDeg);
 
     if (!mounted) return;
 
     setState(() {
       _isCalibrating = false;
-      _showSuccessBadge = true;
+      _showSuccessBanner = true;
     });
-
     HapticFeedback.heavyImpact();
 
-    // Auto-dismiss confirmation after 2.5s or allow user to close
-    Future.delayed(const Duration(milliseconds: 2800), () {
+    Future.delayed(const Duration(milliseconds: 2600), () {
       if (mounted) {
-        setState(() {
-          _showSuccessBadge = false;
-        });
+        setState(() => _showSuccessBanner = false);
+      }
+    });
+  }
+
+  Future<void> _handleCalibrateUpright() async {
+    if (_isCalibrating) return;
+
+    setState(() => _isCalibrating = true);
+    HapticFeedback.mediumImpact();
+
+    await widget.telemetryManager.tareZero();
+
+    if (!mounted) return;
+
+    setState(() {
+      _isCalibrating = false;
+      _showSuccessBanner = true;
+    });
+    HapticFeedback.heavyImpact();
+
+    Future.delayed(const Duration(milliseconds: 2600), () {
+      if (mounted) {
+        setState(() => _showSuccessBanner = false);
       }
     });
   }
@@ -75,7 +89,7 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
             Icon(Icons.refresh_rounded, color: CupertinoColors.systemCyan, size: 20),
             SizedBox(width: 10),
             Text(
-              'Korekce byla resetována na továrních 0.0°',
+              'Nulový náklon byl resetován na tovární výchozí stav.',
               style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
             ),
           ],
@@ -89,8 +103,6 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
     return ListenableBuilder(
       listenable: widget.telemetryManager,
       builder: (context, _) {
-        final currentSavedOffset = widget.telemetryManager.mountingRollOffsetDeg;
-
         return Scaffold(
           backgroundColor: const Color(0xFF0C0C0E),
           appBar: AppBar(
@@ -102,7 +114,7 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
               onPressed: () => Navigator.of(context).pop(),
             ),
             title: const Text(
-              'Kalibrace na stojánku',
+              'Srovnání náklonu',
               style: TextStyle(
                 fontFamily: '.SF Pro Display',
                 fontSize: 17,
@@ -116,60 +128,38 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
           body: SafeArea(
             child: SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Step Instructions Card
-                  _buildInstructionsCard(),
+                  // Unified segmented selector between Side-Stand and Upright mode
+                  _buildModeSelector(),
 
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 20),
 
-                  // Motorcycle & Smartphone Vector Illustration
-                  MotorcycleTankIllustration(
-                    leanAngleDeg: _phoneRollDeg,
-                    isCalibrated: _showSuccessBadge || currentSavedOffset != 0.0,
-                    isStable: _isStable,
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  // Apple Spirit Level ("Vodováha")
-                  AppleSpiritLevelWidget(
-                    onAngleChanged: (angle) {
-                      setState(() {
-                        _phoneRollDeg = angle;
-                      });
-                    },
-                    onStabilityChanged: (stable) {
-                      setState(() {
-                        _isStable = stable;
-                      });
-                    },
-                  ),
+                  // Mode-specific content
+                  if (_selectedModeIndex == 0)
+                    _buildStandModeContent()
+                  else
+                    _buildUprightModeContent(),
 
                   const SizedBox(height: 24),
 
-                  // Real-time Calibration Comparison Matrix
-                  _buildComparisonMatrix(currentSavedOffset),
-
-                  const SizedBox(height: 24),
-
-                  // Success Badge or Action Button
-                  if (_showSuccessBadge)
+                  // Action Button or Success Banner
+                  if (_showSuccessBanner)
                     _buildSuccessBanner()
                   else
-                    _buildCalibrateButton(),
+                    _buildActionButton(),
 
                   const SizedBox(height: 14),
 
-                  // Factory Reset Option
+                  // Factory reset option
                   Center(
                     child: CupertinoButton(
                       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
                       onPressed: _handleResetDefault,
                       child: const Text(
-                        'Obnovit tovární nulování (0.0°)',
+                        'Obnovit výchozí nulování',
                         style: TextStyle(
                           fontFamily: '.SF Pro Text',
                           fontSize: 13,
@@ -180,7 +170,7 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
                     ),
                   ),
 
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
                 ],
               ),
             ),
@@ -190,186 +180,176 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
     );
   }
 
-  Widget _buildInstructionsCard() {
+  Widget _buildModeSelector() {
     return Container(
-      padding: const EdgeInsets.all(16),
+      width: double.infinity,
       decoration: BoxDecoration(
-        color: const Color(0xFF161618),
-        borderRadius: BorderRadius.circular(18),
+        color: const Color(0xFF1C1C1E),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(
-                  color: CupertinoColors.activeBlue.withValues(alpha: 0.15),
-                  shape: BoxShape.circle,
+      padding: const EdgeInsets.all(4),
+      child: CupertinoSlidingSegmentedControl<int>(
+        groupValue: _selectedModeIndex,
+        backgroundColor: Colors.transparent,
+        thumbColor: const Color(0xFF2C2C2E),
+        children: {
+          0: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: const [
+                Icon(Icons.two_wheeler_rounded, size: 16, color: Colors.white),
+                SizedBox(width: 6),
+                Text(
+                  'Na bočním stojánku',
+                  style: TextStyle(
+                    fontFamily: '.SF Pro Text',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
                 ),
-                child: const Icon(
-                  CupertinoIcons.sparkles,
-                  color: CupertinoColors.activeBlue,
-                  size: 16,
+              ],
+            ),
+          ),
+          1: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: const [
+                Icon(Icons.straighten_rounded, size: 16, color: Colors.white),
+                SizedBox(width: 6),
+                Text(
+                  'Rovně (svisle)',
+                  style: TextStyle(
+                    fontFamily: '.SF Pro Text',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              const Text(
-                'POSTUP KALIBRACE',
-                style: TextStyle(
-                  fontFamily: '.SF Pro Text',
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.8,
-                  color: Colors.white70,
+              ],
+            ),
+          ),
+        },
+        onValueChanged: (val) {
+          if (val != null) {
+            setState(() => _selectedModeIndex = val);
+            HapticFeedback.selectionClick();
+          }
+        },
+      ),
+    );
+  }
+
+  Widget _buildStandModeContent() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // 1. Outline Animation of placing phone on fuel tank cap
+        PhonePlacementAnimation(isPlaced: _isStable),
+
+        const SizedBox(height: 20),
+
+        // 2. Humorous builder's yellow spirit level
+        ConstructionSpiritLevelWidget(
+          onAngleChanged: (angle) => setState(() => _phoneRollDeg = angle),
+          onStabilityChanged: (stable) => setState(() => _isStable = stable),
+        ),
+
+        const SizedBox(height: 16),
+
+        // Simple, clean rider guidance
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF161618),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+          ),
+          child: Row(
+            children: const [
+              Icon(CupertinoIcons.sparkles, color: CupertinoColors.activeBlue, size: 18),
+              SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Motorka stojí bezpečně na stojánku. Položte telefon na víko a aplikace sama dopočte rovnou polohu.',
+                  style: TextStyle(
+                    fontFamily: '.SF Pro Text',
+                    fontSize: 13,
+                    color: Colors.white70,
+                    height: 1.35,
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          _buildStepRow(1, 'Postavte motocykl na boční stojánek na rovný povrch.'),
-          const SizedBox(height: 8),
-          _buildStepRow(2, 'Položte telefon podélně na rovné víko nádrže.'),
-          const SizedBox(height: 8),
-          _buildStepRow(3, 'Počkejte, až se vodováha ustálí (zelená), a klepněte na tlačítko níže.'),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStepRow(int number, String text) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: 18,
-          height: 18,
-          margin: const EdgeInsets.only(top: 2),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.1),
-            shape: BoxShape.circle,
-          ),
-          alignment: Alignment.center,
-          child: Text(
-            '$number',
-            style: const TextStyle(
-              fontFamily: '.SF Pro Text',
-              fontSize: 10.5,
-              fontWeight: FontWeight.w700,
-              color: Colors.white70,
-            ),
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            text,
-            style: const TextStyle(
-              fontFamily: '.SF Pro Text',
-              fontSize: 13,
-              color: Colors.white70,
-              height: 1.35,
-            ),
-          ),
         ),
       ],
     );
   }
 
-  Widget _buildComparisonMatrix(double currentSavedOffset) {
+  Widget _buildUprightModeContent() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: const Color(0xFF161618),
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Column(
         children: [
-          _buildMetricRow(
-            label: 'Telefon na nádrži (naměřeno)',
-            value: '${_phoneRollDeg.toStringAsFixed(1)}°',
-            valueColor: _isStable ? CupertinoColors.activeGreen : Colors.white,
-            icon: Icons.smartphone_rounded,
-          ),
-          Divider(color: Colors.white.withValues(alpha: 0.06), height: 20),
-          _buildMetricRow(
-            label: 'Jednotka ESP (surový senzor)',
-            value: '${_rawEspDeg.toStringAsFixed(1)}°',
-            valueColor: CupertinoColors.systemCyan,
-            icon: Icons.memory_rounded,
-          ),
-          Divider(color: Colors.white.withValues(alpha: 0.06), height: 20),
-          _buildMetricRow(
-            label: 'Vypočtená korekce montáže',
-            value: '${_calculatedOffset > 0 ? "+" : ""}${_calculatedOffset.toStringAsFixed(1)}°',
-            valueColor: CupertinoColors.activeOrange,
-            icon: Icons.tune_rounded,
-            highlight: true,
-          ),
-          if (currentSavedOffset != 0.0) ...[
-            Divider(color: Colors.white.withValues(alpha: 0.06), height: 20),
-            _buildMetricRow(
-              label: 'Aktuálně uložená korekce',
-              value: '${currentSavedOffset > 0 ? "+" : ""}${currentSavedOffset.toStringAsFixed(1)}°',
-              valueColor: Colors.white60,
-              icon: Icons.save_rounded,
+          Container(
+            width: 72,
+            height: 72,
+            decoration: BoxDecoration(
+              color: CupertinoColors.activeBlue.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
             ),
-          ],
+            child: const Icon(
+              Icons.balance_rounded,
+              size: 38,
+              color: CupertinoColors.activeBlue,
+            ),
+          ),
+          const SizedBox(height: 18),
+          const Text(
+            'Svislé srovnání',
+            style: TextStyle(
+              fontFamily: '.SF Pro Display',
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+              letterSpacing: -0.3,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Podržte motocykl přesně svisle v rukách nebo jej postavte na rovný paddock / servisní stojan. Poté stiskněte tlačítko níže.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontFamily: '.SF Pro Text',
+              fontSize: 13.5,
+              color: Colors.white70,
+              height: 1.4,
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildMetricRow({
-    required String label,
-    required String value,
-    required Color valueColor,
-    required IconData icon,
-    bool highlight = false,
-  }) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Row(
-          children: [
-            Icon(icon, size: 16, color: Colors.white38),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: TextStyle(
-                fontFamily: '.SF Pro Text',
-                fontSize: 13,
-                fontWeight: highlight ? FontWeight.w600 : FontWeight.w400,
-                color: highlight ? Colors.white : Colors.white70,
-              ),
-            ),
-          ],
-        ),
-        Text(
-          value,
-          style: TextStyle(
-            fontFamily: '.SF Pro Display',
-            fontSize: 15,
-            fontWeight: FontWeight.w700,
-            color: valueColor,
-            fontFeatures: const [FontFeature.tabularFigures()],
-          ),
-        ),
-      ],
-    );
-  }
+  Widget _buildActionButton() {
+    final isStandMode = _selectedModeIndex == 0;
+    final isReady = isStandMode ? _isStable : true;
 
-  Widget _buildCalibrateButton() {
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: _isStable
+            color: isReady
                 ? CupertinoColors.activeGreen.withValues(alpha: 0.35)
                 : CupertinoColors.activeBlue.withValues(alpha: 0.25),
             blurRadius: 16,
@@ -380,19 +360,25 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
       child: CupertinoButton(
         padding: const EdgeInsets.symmetric(vertical: 16),
         borderRadius: BorderRadius.circular(16),
-        color: _isStable ? CupertinoColors.activeGreen : CupertinoColors.activeBlue,
-        onPressed: _isCalibrating ? null : _handleCalibrate,
+        color: isReady ? CupertinoColors.activeGreen : CupertinoColors.activeBlue,
+        onPressed: _isCalibrating
+            ? null
+            : (isStandMode ? _handleCalibrateStand : _handleCalibrateUpright),
         child: _isCalibrating
             ? const CupertinoActivityIndicator(color: Colors.white)
             : Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.sync_rounded, color: Colors.white, size: 20),
+                  Icon(
+                    isReady ? Icons.check_circle_rounded : Icons.tune_rounded,
+                    color: Colors.white,
+                    size: 20,
+                  ),
                   const SizedBox(width: 10),
                   Text(
-                    _isStable
-                        ? 'SYNCHRONIZOVAT S JEDNOTKOU'
-                        : 'ZKALIBROVAT NÁKLON',
+                    isStandMode
+                        ? (isReady ? 'SROVNAT NULOVÝ BOD' : 'ČEKÁM NA USTÁLENÍ...')
+                        : 'SROVNAT VE SVISLÉ POLOZE',
                     style: const TextStyle(
                       fontFamily: '.SF Pro Text',
                       fontSize: 15,
@@ -419,7 +405,7 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
         ),
         boxShadow: [
           BoxShadow(
-            color: CupertinoColors.activeGreen.withValues(alpha: 0.2),
+            color: CupertinoColors.activeGreen.withValues(alpha: 0.25),
             blurRadius: 16,
           ),
         ],
@@ -431,10 +417,10 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
           SizedBox(width: 12),
           Expanded(
             child: Text(
-              'Úspěšně zkalibrováno a uloženo do jednotky!',
+              'Srovnáno, je to v lajně! Jednotka je připravená.',
               style: TextStyle(
                 fontFamily: '.SF Pro Text',
-                fontSize: 14,
+                fontSize: 14.5,
                 fontWeight: FontWeight.w700,
                 color: Colors.white,
               ),

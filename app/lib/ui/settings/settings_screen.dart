@@ -165,10 +165,9 @@ class SettingsScreen extends StatelessWidget {
 
               const SizedBox(height: 24),
 
-              // SECTION 2: Sensor Calibration
+              // SECTION 2: Calibration
               _buildSectionHeader('KALIBRACE NÁKLONU'),
               _buildInsetGroup([
-                // Smart side-stand calibration
                 GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: () {
@@ -204,7 +203,7 @@ class SettingsScreen extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               const Text(
-                                'Kalibrace na stojánku',
+                                'Srovnání nulového náklonu',
                                 style: TextStyle(
                                   color: AppTheme.appleBlack,
                                   fontSize: 16,
@@ -216,8 +215,8 @@ class SettingsScreen extends StatelessWidget {
                               const SizedBox(height: 2),
                               Text(
                                 telemetryManager.mountingRollOffsetDeg != 0.0
-                                    ? 'Uložená korekce montáže: ${telemetryManager.mountingRollOffsetDeg > 0 ? "+" : ""}${telemetryManager.mountingRollOffsetDeg.toStringAsFixed(1)}°'
-                                    : 'Položte telefon na víko nádrže na stojánku',
+                                    ? 'Zkalibrováno (uloženo v jednotce)'
+                                    : 'Na bočním stojánku nebo ve svislé poloze',
                                 style: TextStyle(
                                   color: telemetryManager.mountingRollOffsetDeg != 0.0
                                       ? AppTheme.appleGreen
@@ -241,81 +240,20 @@ class SettingsScreen extends StatelessWidget {
                     ),
                   ),
                 ),
-                const Divider(color: Color(0xFFE5E5EA), height: 1, indent: 16, endIndent: 16),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Rychlé nulování (svislá motorka)',
-                        style: TextStyle(
-                          color: AppTheme.appleBlack,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          letterSpacing: -0.2,
-                          fontFamily: '-apple-system',
-                        ),
-                      ),
-                      CupertinoButton(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        color: const Color(0xFFF2F2F7),
-                        borderRadius: BorderRadius.circular(16),
-                        onPressed: () async {
-                          await telemetryManager.tareZero();
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                behavior: SnackBarBehavior.floating,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                backgroundColor: const Color(0xFF1C1C1E),
-                                content: const Row(
-                                  children: [
-                                    Icon(Icons.check_circle_rounded, color: AppTheme.appleGreen, size: 20),
-                                    SizedBox(width: 10),
-                                    Text(
-                                      'Nulový náklon byl zkalibrován.',
-                                      style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          }
-                        },
-                        child: const Text(
-                          'Vynulovat',
-                          style: TextStyle(
-                            color: AppTheme.appleBlue,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            fontFamily: '-apple-system',
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
               ]),
 
               const SizedBox(height: 24),
 
-              // SECTION 3: System Specifications
-              _buildSectionHeader('SYSTÉMOVÉ PARAMETRY'),
+              // SECTION 3: Device Status
+              _buildSectionHeader('STAV ZAŘÍZENÍ'),
               _buildInsetGroup([
-                _buildSpecTile('Cílový hardware', 'MotoLogger (ESP32-S3)'),
+                _buildSpecTile('Stav telemetrie', isConnected ? 'Aktivní přenos' : 'Čeká na připojení'),
                 const Divider(color: Color(0xFFE5E5EA), height: 1, indent: 16, endIndent: 16),
-                _buildSpecTile('Senzor IMU', 'CEVA / Hillcrest BNO085 9-DoF'),
+                _buildSpecTile('Záznam jízdy', 'Automatický při rozjezdu'),
                 const Divider(color: Color(0xFFE5E5EA), height: 1, indent: 16, endIndent: 16),
-                _buildSpecTile('Fúze senzorů', 'Game Rotation Vector (100 Hz)'),
+                _buildSpecTile('Paměťová karta', 'Připravena k zápisu'),
                 const Divider(color: Color(0xFFE5E5EA), height: 1, indent: 16, endIndent: 16),
-                _buildSpecTile('Frekvence BLE streamu', '25 Hz (28 bajtů / paket)'),
-                const Divider(color: Color(0xFFE5E5EA), height: 1, indent: 16, endIndent: 16),
-                _buildSpecTile('Přenosová rychlost CAN', '500 kbps (TWAI ovladač)'),
-                const Divider(color: Color(0xFFE5E5EA), height: 1, indent: 16, endIndent: 16),
-                _buildSpecTile('Záznam na SD kartu', 'Bezeztrátový DMA zápis (100 Hz)'),
-                const Divider(color: Color(0xFFE5E5EA), height: 1, indent: 16, endIndent: 16),
-                _buildSpecTile('Správa napájení', 'Automatické uspání po 15 s (0 mA)'),
+                _buildSpecTile('Úsporný režim', 'Automatické uspání po 15 s'),
               ]),
 
               const SizedBox(height: 24),
