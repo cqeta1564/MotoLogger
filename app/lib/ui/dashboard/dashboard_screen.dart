@@ -35,9 +35,7 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  bool _isLocked = true;
-  bool _isPaused = false;
-  bool _hasPromptedTareThisSession = false;
+  bool _isLocked = false;
   bool _wasStopped = true;
   Timer? _autoLockTimer;
 
@@ -45,12 +43,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void initState() {
     super.initState();
     widget.telemetryManager.addListener(_onTelemetryUpdate);
-    // Prompt Tare Zero setup if not currently recording
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!widget.telemetryManager.isRecording && !_hasPromptedTareThisSession) {
-        _showPreRideCalibrationDialog();
-      }
-    });
   }
 
   @override
@@ -74,6 +66,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _autoLockTimer ??= Timer(const Duration(milliseconds: 2500), () {
           if (mounted && !_isLocked) {
             HapticFeedback.lightImpact();
+            // Automatically begin recording if not yet recording so no ride data is missed
+            if (!widget.telemetryManager.isRecording) {
+              widget.telemetryManager.startRecording();
+            }
             setState(() {
               _isLocked = true;
               _wasStopped = false;
@@ -82,114 +78,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         });
       }
     }
-  }
-
-  void _showPreRideCalibrationDialog() {
-    _hasPromptedTareThisSession = true;
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) {
-        return AlertDialog(
-          backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-          title: const Row(
-            children: [
-              Icon(Icons.two_wheeler, color: Colors.black, size: 28),
-              SizedBox(width: 10),
-              Text(
-                'PŘÍPRAVA NA JÍZDU',
-                style: TextStyle(
-                  color: Colors.black,
-                  fontWeight: FontWeight.w900,
-                  fontSize: 17,
-                  letterSpacing: 0.5,
-                ),
-              ),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                'Srovnejte motorku do svislé polohy a proveďte kalibraci nulového náklonu (Tare Zero).',
-                style: TextStyle(color: Color(0xFF1C1C1E), fontSize: 14, height: 1.4),
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFF2F2F7),
-                  foregroundColor: Colors.black,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    side: const BorderSide(color: Color(0xFFE5E5EA)),
-                  ),
-                ),
-                icon: const Icon(Icons.tune, color: Colors.black),
-                label: const Text(
-                  'ZKALIBROVAT (TARE ZERO)',
-                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
-                ),
-                onPressed: () async {
-                  HapticFeedback.mediumImpact();
-                  await widget.telemetryManager.tareZero();
-                  if (ctx.mounted) {
-                    ScaffoldMessenger.of(ctx).showSnackBar(
-                      const SnackBar(
-                        content: Text('Senzor byl úspěšně zkalibrován (Tare Zero)!'),
-                        duration: Duration(seconds: 2),
-                        backgroundColor: Colors.black87,
-                      ),
-                    );
-                  }
-                },
-              ),
-            ],
-          ),
-          actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          actions: [
-            Row(
-              children: [
-                Expanded(
-                  child: TextButton(
-                    onPressed: () => Navigator.of(ctx).pop(),
-                    child: const Text('POZDĚJI', style: TextStyle(color: Color(0xFF8E8E93), fontWeight: FontWeight.w700)),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  flex: 2,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.black,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    ),
-                    onPressed: () async {
-                      Navigator.of(ctx).pop();
-                      await widget.telemetryManager.startRecording();
-                      setState(() {
-                        _isLocked = true;
-                        _isPaused = false;
-                      });
-                    },
-                    child: const Text(
-                      'START JÍZDY',
-                      style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, letterSpacing: 0.8),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        );
-      },
-    );
   }
 
   void _onUnlocked() {
@@ -212,14 +100,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  Future<void> _onStartRidePressed() async {
+    HapticFeedback.heavyImpact();
+    _autoLockTimer?.cancel();
+    _autoLockTimer = null;
+    await widget.telemetryManager.startRecording();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Záznam jízdy byl zahájen!'),
+          duration: Duration(milliseconds: 1500),
+          backgroundColor: Color(0xFF34C759),
+        ),
+      );
+    }
+  }
+
   void _onPausePressed() {
     HapticFeedback.mediumImpact();
     _autoLockTimer?.cancel();
     _autoLockTimer = null;
     widget.telemetryManager.pauseRecording();
-    setState(() {
-      _isPaused = true;
-    });
   }
 
   void _onContinuePressed() {
@@ -228,7 +129,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _autoLockTimer = null;
     widget.telemetryManager.resumeRecording();
     setState(() {
-      _isPaused = false;
       _isLocked = true; // Auto re-lock when ride resumes
     });
   }
@@ -239,9 +139,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _autoLockTimer = null;
     await widget.telemetryManager.stopRecording();
     setState(() {
-      _isPaused = false;
       _isLocked = false;
-      _hasPromptedTareThisSession = false;
     });
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -586,76 +484,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Action Buttons: Pause OR [Stop/Save + Continue]
+          // Action Buttons depending on Recording State:
+          // 1. Not recording -> [ ZAHÁJIT JÍZDU ]
+          // 2. Recording & Paused -> [ UKONČIT & ULOŽIT ] and [ POKRAČOVAT ]
+          // 3. Recording & Active -> [ POZASTAVIT JÍZDU ]
           Padding(
             padding: EdgeInsets.symmetric(horizontal: isLandscape ? 80 : 20, vertical: 8),
-            child: _isPaused
-                ? Row(
-                    children: [
-                      // Stop & Save Button (Crimson Red)
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFFF3B30),
-                            foregroundColor: Colors.white,
-                            elevation: 0,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                            shadowColor: const Color(0x60FF3B30),
-                          ),
-                          icon: const Icon(Icons.stop, size: 22),
-                          label: const Text(
-                            'UKONČIT & ULOŽIT',
-                            style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 0.8),
-                          ),
-                          onPressed: _onStopAndSavePressed,
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      // Continue Button (Apple Green)
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF34C759),
-                            foregroundColor: Colors.white,
-                            elevation: 0,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                            shadowColor: const Color(0x6034C759),
-                          ),
-                          icon: const Icon(Icons.play_arrow, size: 22),
-                          label: const Text(
-                            'POKRAČOVAT',
-                            style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 0.8),
-                          ),
-                          onPressed: _onContinuePressed,
-                        ),
-                      ),
-                    ],
-                  )
-                : SizedBox(
-                    width: isLandscape ? 460 : double.infinity,
-                    height: isLandscape ? 50 : 56,
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF1C1C1E),
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      ),
-                      icon: const Icon(Icons.pause, color: Color(0xFFFF9500), size: 22),
-                      label: const Text(
-                        'POZASTAVIT JÍZDU',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w900,
-                          fontSize: 14,
-                          letterSpacing: 1.2,
-                        ),
-                      ),
-                      onPressed: _onPausePressed,
-                    ),
-                  ),
+            child: _buildRecordingActionButton(isLandscape),
           ),
 
           // Unified Apple Tab Bar
@@ -669,6 +504,123 @@ class _DashboardScreenState extends State<DashboardScreen> {
             },
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildRecordingActionButton(bool isLandscape) {
+    final isRecording = widget.telemetryManager.isRecording;
+    final isPaused = widget.telemetryManager.isPaused;
+
+    if (!isRecording) {
+      // 1. Not recording: prominent Apple Green Start button
+      return SizedBox(
+        width: isLandscape ? 460 : double.infinity,
+        height: isLandscape ? 50 : 56,
+        child: ElevatedButton.icon(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF34C759),
+            foregroundColor: Colors.white,
+            elevation: 0,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shadowColor: const Color(0x6034C759),
+          ),
+          icon: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 26),
+          label: const Text(
+            'ZAHÁJIT JÍZDU',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w900,
+              fontSize: 14,
+              letterSpacing: 1.2,
+              fontFamily: '-apple-system',
+            ),
+          ),
+          onPressed: _onStartRidePressed,
+        ),
+      );
+    }
+
+    if (isPaused) {
+      // 2. Paused: Stop & Save (Red) + Continue (Green)
+      return Row(
+        children: [
+          // Stop & Save Button (Crimson Red)
+          Expanded(
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFF3B30),
+                foregroundColor: Colors.white,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                shadowColor: const Color(0x60FF3B30),
+              ),
+              icon: const Icon(Icons.stop_rounded, size: 22),
+              label: const Text(
+                'UKONČIT & ULOŽIT',
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 13,
+                  letterSpacing: 0.8,
+                  fontFamily: '-apple-system',
+                ),
+              ),
+              onPressed: _onStopAndSavePressed,
+            ),
+          ),
+          const SizedBox(width: 14),
+          // Continue Button (Apple Green)
+          Expanded(
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF34C759),
+                foregroundColor: Colors.white,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                shadowColor: const Color(0x6034C759),
+              ),
+              icon: const Icon(Icons.play_arrow_rounded, size: 24),
+              label: const Text(
+                'POKRAČOVAT',
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 13,
+                  letterSpacing: 0.8,
+                  fontFamily: '-apple-system',
+                ),
+              ),
+              onPressed: _onContinuePressed,
+            ),
+          ),
+        ],
+      );
+    }
+
+    // 3. Actively recording: Pause button (Apple Dark Slate with Orange pause icon)
+    return SizedBox(
+      width: isLandscape ? 460 : double.infinity,
+      height: isLandscape ? 50 : 56,
+      child: ElevatedButton.icon(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: const Color(0xFF1C1C1E),
+          foregroundColor: Colors.white,
+          elevation: 0,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        ),
+        icon: const Icon(Icons.pause_rounded, color: Color(0xFFFF9500), size: 24),
+        label: const Text(
+          'POZASTAVIT JÍZDU',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w900,
+            fontSize: 14,
+            letterSpacing: 1.2,
+            fontFamily: '-apple-system',
+          ),
+        ),
+        onPressed: _onPausePressed,
       ),
     );
   }
