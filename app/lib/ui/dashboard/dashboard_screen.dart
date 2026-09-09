@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../core/theme/app_theme.dart';
@@ -15,6 +16,7 @@ import '../widgets/apple_tab_bar.dart';
 /// - Bold black typography on white canvas for outdoor sunlight legibility.
 /// - Naked G-G friction reticle directly on the canvas without any container box.
 /// - Locked by default with Slide-to-Unlock.
+/// - Screen automatically locks once the rider sets off and rides for a brief moment.
 /// - When unlocked: Bottom nav bar + Pause button above it.
 /// - When paused: Splits into Stop/Save (red) and Continue (green).
 /// - Pre-ride Tare Zero calibration modal on session start.
@@ -36,16 +38,50 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _isLocked = true;
   bool _isPaused = false;
   bool _hasPromptedTareThisSession = false;
+  bool _wasStopped = true;
+  Timer? _autoLockTimer;
 
   @override
   void initState() {
     super.initState();
+    widget.telemetryManager.addListener(_onTelemetryUpdate);
     // Prompt Tare Zero setup if not currently recording
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!widget.telemetryManager.isRecording && !_hasPromptedTareThisSession) {
         _showPreRideCalibrationDialog();
       }
     });
+  }
+
+  @override
+  void dispose() {
+    widget.telemetryManager.removeListener(_onTelemetryUpdate);
+    _autoLockTimer?.cancel();
+    super.dispose();
+  }
+
+  void _onTelemetryUpdate() {
+    final speed = widget.telemetryManager.latestPacket.vehicleSpeedKmh;
+    if (speed < 10.0) {
+      _wasStopped = true;
+      _autoLockTimer?.cancel();
+      _autoLockTimer = null;
+    } else {
+      // Speed >= 10 km/h
+      if (!_isLocked && _wasStopped) {
+        // The rider just set off from standstill ("rozjel se")!
+        // Lock screen after riding for 2.5 seconds:
+        _autoLockTimer ??= Timer(const Duration(milliseconds: 2500), () {
+          if (mounted && !_isLocked) {
+            HapticFeedback.lightImpact();
+            setState(() {
+              _isLocked = true;
+              _wasStopped = false;
+            });
+          }
+        });
+      }
+    }
   }
 
   void _showPreRideCalibrationDialog() {
@@ -157,20 +193,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _onUnlocked() {
+    _autoLockTimer?.cancel();
+    _autoLockTimer = null;
     setState(() {
       _isLocked = false;
     });
-  }
-
-  void _onLockAgain() {
-    HapticFeedback.lightImpact();
-    setState(() {
-      _isLocked = true;
-    });
+    // If the rider unlocks while already in motion (>= 10 km/h), allow 7s grace period to interact
+    final speed = widget.telemetryManager.latestPacket.vehicleSpeedKmh;
+    if (speed >= 10.0) {
+      _autoLockTimer = Timer(const Duration(seconds: 7), () {
+        if (mounted && !_isLocked) {
+          HapticFeedback.lightImpact();
+          setState(() {
+            _isLocked = true;
+          });
+        }
+      });
+    }
   }
 
   void _onPausePressed() {
     HapticFeedback.mediumImpact();
+    _autoLockTimer?.cancel();
+    _autoLockTimer = null;
     widget.telemetryManager.pauseRecording();
     setState(() {
       _isPaused = true;
@@ -179,6 +224,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _onContinuePressed() {
     HapticFeedback.mediumImpact();
+    _autoLockTimer?.cancel();
+    _autoLockTimer = null;
     widget.telemetryManager.resumeRecording();
     setState(() {
       _isPaused = false;
@@ -188,6 +235,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _onStopAndSavePressed() async {
     HapticFeedback.heavyImpact();
+    _autoLockTimer?.cancel();
+    _autoLockTimer = null;
     await widget.telemetryManager.stopRecording();
     setState(() {
       _isPaused = false;
@@ -618,30 +667,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 widget.onNavigateTab?.call(idx);
               }
             },
-            trailingAction: Expanded(
-              child: InkWell(
-                splashColor: Colors.transparent,
-                highlightColor: Colors.transparent,
-                onTap: _onLockAgain,
-                child: const Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.lock_outline_rounded, color: Color(0xFF8E8E93), size: 24),
-                    SizedBox(height: 3),
-                    Text(
-                      'Zamknout',
-                      style: TextStyle(
-                        color: Color(0xFF8E8E93),
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: -0.2,
-                        fontFamily: '-apple-system',
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
           ),
         ],
       ),

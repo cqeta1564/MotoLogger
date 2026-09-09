@@ -8,18 +8,15 @@ import 'package:flutter/services.dart';
 /// - Precision hairline top divider (#E5E5EA)
 /// - SF Pro typography with bold active state and muted inactive state
 /// - Built-in tactile haptic feedback on tab changes
-/// - Optional trailing action (e.g. "Zamknout" for Dashboard)
 class AppleTabBar extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onTabSelected;
-  final Widget? trailingAction;
   final bool isLandscape;
 
   const AppleTabBar({
     super.key,
     required this.currentIndex,
     required this.onTabSelected,
-    this.trailingAction,
     this.isLandscape = false,
   });
 
@@ -53,7 +50,6 @@ class AppleTabBar extends StatelessWidget {
               label: 'Nastavení',
               index: 2,
             ),
-            if (trailingAction != null) trailingAction!,
           ],
         ),
       ),

@@ -71,7 +71,7 @@ class _SlideToUnlockState extends State<SlideToUnlock>
   }
 
   void _onHorizontalDragEnd(DragEndDetails details, double maxDrag) {
-    if (_dragPosition >= maxDrag * 0.82) {
+    if (_dragPosition >= maxDrag * 0.70) {
       // Completed unlock!
       HapticFeedback.heavyImpact();
       widget.onUnlocked();
@@ -106,70 +106,71 @@ class _SlideToUnlockState extends State<SlideToUnlock>
         return SizedBox(
           width: totalWidth,
           height: widget.height,
-          child: Container(
-            decoration: BoxDecoration(
-              color: const Color(0xFFF2F2F7),
-              borderRadius: BorderRadius.circular(widget.height / 2),
-              border: Border.all(color: const Color(0xFFE5E5EA), width: 1.0),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.04),
-                  blurRadius: 12,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-            ),
-            child: Stack(
-              alignment: Alignment.centerLeft,
-              children: [
-                // Centered Shimmering Label (Iconic Apple "Slide to unlock" shimmer effect)
-                Center(
-                  child: Opacity(
-                    opacity: (1.0 - progress * 1.3).clamp(0.0, 1.0),
-                    child: AnimatedBuilder(
-                      animation: shimmerController,
-                      builder: (context, child) {
-                        final val = shimmerController.value;
-                        return ShaderMask(
-                          shaderCallback: (bounds) {
-                            return LinearGradient(
-                              begin: Alignment.centerLeft,
-                              end: Alignment.centerRight,
-                              colors: const [
-                                Color(0xFF8E8E93),
-                                Color(0xFF1C1C1E),
-                                Color(0xFF8E8E93),
-                              ],
-                              stops: [
-                                (val - 0.25).clamp(0.0, 1.0),
-                                val.clamp(0.0, 1.0),
-                                (val + 0.25).clamp(0.0, 1.0),
-                              ],
-                            ).createShader(bounds);
-                          },
-                          blendMode: BlendMode.srcIn,
-                          child: child,
-                        );
-                      },
-                      child: Text(
-                        widget.label,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 2.2,
-                          fontFamily: '-apple-system',
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onHorizontalDragUpdate: (d) => _onHorizontalDragUpdate(d, maxDrag),
+            onHorizontalDragEnd: (d) => _onHorizontalDragEnd(d, maxDrag),
+            child: Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFFF2F2F7),
+                borderRadius: BorderRadius.circular(widget.height / 2),
+                border: Border.all(color: const Color(0xFFE5E5EA), width: 1.0),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.04),
+                    blurRadius: 12,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: Stack(
+                alignment: Alignment.centerLeft,
+                children: [
+                  // Centered Shimmering Label (Iconic Apple "Slide to unlock" shimmer effect)
+                  Center(
+                    child: Opacity(
+                      opacity: (1.0 - progress * 1.3).clamp(0.0, 1.0),
+                      child: AnimatedBuilder(
+                        animation: shimmerController,
+                        builder: (context, child) {
+                          final val = shimmerController.value;
+                          return ShaderMask(
+                            shaderCallback: (bounds) {
+                              return LinearGradient(
+                                begin: Alignment.centerLeft,
+                                end: Alignment.centerRight,
+                                colors: const [
+                                  Color(0xFF8E8E93),
+                                  Color(0xFF1C1C1E),
+                                  Color(0xFF8E8E93),
+                                ],
+                                stops: [
+                                  (val - 0.25).clamp(0.0, 1.0),
+                                  val.clamp(0.0, 1.0),
+                                  (val + 0.25).clamp(0.0, 1.0),
+                                ],
+                              ).createShader(bounds);
+                            },
+                            blendMode: BlendMode.srcIn,
+                            child: child,
+                          );
+                        },
+                        child: Text(
+                          widget.label,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 2.2,
+                            fontFamily: '-apple-system',
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
 
-                // Draggable Tactile Apple Knob
-                Positioned(
-                  left: thumbPadding + _dragPosition,
-                  child: GestureDetector(
-                    onHorizontalDragUpdate: (d) => _onHorizontalDragUpdate(d, maxDrag),
-                    onHorizontalDragEnd: (d) => _onHorizontalDragEnd(d, maxDrag),
+                  // Draggable Tactile Apple Knob
+                  Positioned(
+                    left: thumbPadding + _dragPosition,
                     child: Container(
                       width: thumbSize,
                       height: thumbSize,
@@ -202,8 +203,8 @@ class _SlideToUnlockState extends State<SlideToUnlock>
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         );

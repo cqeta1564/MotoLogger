@@ -65,21 +65,21 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 // Apple Summary Card
-                _buildSummaryCard(),
+                _buildSummaryCard(samples),
                 const SizedBox(height: 16),
 
                 // Lean Angle Chart
                 _buildChartCard(
-                  title: 'PRŮBĚH NÁKLONU V ČASE (°)',
-                  subtitle: 'Záporné hodnoty = levý náklon • Kladné = pravý náklon',
+                  title: 'PRŮBĚH NÁKLONU V ČASE',
+                  subtitle: 'Klopení motocyklu v zatáčkách',
                   chart: _buildLeanChart(samples),
                 ),
                 const SizedBox(height: 16),
 
                 // Speed Chart
                 _buildChartCard(
-                  title: 'RYCHLOST V ČASE (KM/H)',
-                  subtitle: 'Zaznamenáno z vysokofrekvenčního streamu a GPS',
+                  title: 'RYCHLOST V ČASE',
+                  subtitle: 'Průběh rychlosti během jízdy',
                   chart: _buildSpeedChart(samples),
                 ),
                 const SizedBox(height: 24),
@@ -91,8 +91,18 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
     );
   }
 
-  Widget _buildSummaryCard() {
+  Widget _buildSummaryCard(List<FusedSample> samples) {
     final s = widget.session;
+    final double avgSpeedKmh;
+    if (samples.isNotEmpty) {
+      final totalSpeed = samples.map((e) => e.vehicleSpeedKmh).reduce((a, b) => a + b);
+      avgSpeedKmh = totalSpeed / samples.length;
+    } else if (s.duration.inSeconds > 5) {
+      avgSpeedKmh = s.totalDistanceKm / (s.duration.inSeconds / 3600.0);
+    } else {
+      avgSpeedKmh = 0.0;
+    }
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -157,8 +167,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
               ),
               Expanded(
                 child: _buildSecondaryTile(
-                  label: 'POČET VZORKŮ',
-                  value: '${s.sampleCount}',
+                  label: 'PRŮMĚRNÁ RYCHLOST',
+                  value: '${avgSpeedKmh.round()} km/h',
                 ),
               ),
               Expanded(
@@ -317,12 +327,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
               return touchedSpots.map((spot) {
                 final angle = spot.y;
                 final direction = angle < -0.5
-                    ? 'Levý náklon'
+                    ? 'vlevo'
                     : angle > 0.5
-                        ? 'Pravý náklon'
-                        : 'Přímo';
+                        ? 'vpravo'
+                        : 'přímo';
                 return LineTooltipItem(
-                  '${angle.abs().toStringAsFixed(1)}° • $direction',
+                  '${angle.abs().toStringAsFixed(1)}° $direction',
                   const TextStyle(
                     color: Colors.white,
                     fontSize: 11,
@@ -355,14 +365,24 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              reservedSize: 32,
+              reservedSize: 44,
               interval: 15,
               getTitlesWidget: (val, meta) {
+                final intVal = val.toInt();
+                final String label;
+                if (intVal < 0) {
+                  label = '${intVal.abs()}° L';
+                } else if (intVal > 0) {
+                  label = '$intVal° P';
+                } else {
+                  label = '0°';
+                }
                 return Text(
-                  '${val.toInt()}°',
+                  label,
                   style: const TextStyle(
                     color: AppTheme.appleMutedGray,
                     fontSize: 10,
+                    fontWeight: FontWeight.w600,
                     fontFamily: '-apple-system',
                   ),
                 );
