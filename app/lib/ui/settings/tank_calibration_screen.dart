@@ -74,30 +74,6 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
     });
   }
 
-  Future<void> _handleResetDefault() async {
-    HapticFeedback.lightImpact();
-    await widget.telemetryManager.resetMountingOffset();
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        backgroundColor: const Color(0xFF1C1C1E),
-        content: const Row(
-          children: [
-            Icon(Icons.refresh_rounded, color: CupertinoColors.systemCyan, size: 20),
-            SizedBox(width: 10),
-            Text(
-              'Nulový náklon byl resetován na tovární výchozí stav.',
-              style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
@@ -150,25 +126,6 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
                     _buildSuccessBanner()
                   else
                     _buildActionButton(),
-
-                  const SizedBox(height: 14),
-
-                  // Factory reset option
-                  Center(
-                    child: CupertinoButton(
-                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                      onPressed: _handleResetDefault,
-                      child: const Text(
-                        'Obnovit výchozí nulování',
-                        style: TextStyle(
-                          fontFamily: '.SF Pro Text',
-                          fontSize: 13,
-                          color: Colors.black45,
-                          decoration: TextDecoration.underline,
-                        ),
-                      ),
-                    ),
-                  ),
 
                   const SizedBox(height: 16),
                 ],
@@ -281,13 +238,13 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
             width: 72,
             height: 72,
             decoration: BoxDecoration(
-              color: CupertinoColors.activeBlue.withValues(alpha: 0.12),
+              color: const Color(0xFFE5E5EA),
               shape: BoxShape.circle,
             ),
             child: const Icon(
               Icons.balance_rounded,
               size: 38,
-              color: CupertinoColors.activeBlue,
+              color: Color(0xFF1C1C1E),
             ),
           ),
           const SizedBox(height: 18),
@@ -326,18 +283,16 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: isReady
-                ? CupertinoColors.activeGreen.withValues(alpha: 0.3)
-                : CupertinoColors.activeBlue.withValues(alpha: 0.2),
-            blurRadius: 14,
-            offset: const Offset(0, 4),
+            color: Colors.black.withValues(alpha: isReady ? 0.12 : 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
       child: CupertinoButton(
         padding: const EdgeInsets.symmetric(vertical: 16),
         borderRadius: BorderRadius.circular(16),
-        color: isReady ? CupertinoColors.activeGreen : CupertinoColors.activeBlue,
+        color: isReady ? const Color(0xFF1C1C1E) : const Color(0xFFAEAEC2),
         onPressed: _isCalibrating
             ? null
             : (isStandMode ? _handleCalibrateStand : _handleCalibrateUpright),
@@ -347,7 +302,7 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(
-                    isReady ? Icons.check_circle_rounded : Icons.tune_rounded,
+                    isReady ? Icons.check_rounded : Icons.tune_rounded,
                     color: Colors.white,
                     size: 20,
                   ),
@@ -377,30 +332,30 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: CupertinoColors.activeGreen,
+          color: const Color(0xFF1C1C1E),
           width: 1.5,
         ),
         boxShadow: [
           BoxShadow(
-            color: CupertinoColors.activeGreen.withValues(alpha: 0.15),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: const [
-          Icon(Icons.check_circle_rounded, color: CupertinoColors.activeGreen, size: 24),
+          Icon(Icons.check_circle_rounded, color: Color(0xFF1C1C1E), size: 24),
           SizedBox(width: 12),
           Expanded(
             child: Text(
-              'Srovnáno, je to v lajně! Jednotka je připravená.',
+              'Srovnáno. Jednotka je připravená.',
               style: TextStyle(
                 fontFamily: '.SF Pro Text',
                 fontSize: 14.5,
                 fontWeight: FontWeight.w700,
-                color: Color(0xFF1B8738),
+                color: Color(0xFF1C1C1E),
               ),
             ),
           ),

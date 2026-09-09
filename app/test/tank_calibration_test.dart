@@ -39,7 +39,6 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
 
     expect(find.byType(ConstructionSpiritLevelWidget), findsOneWidget);
-    expect(find.textContaining('V lajně'), findsOneWidget);
     expect(capturedAngle, -12.4);
     expect(capturedStability, true);
   });

@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:math';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:sensors_plus/sensors_plus.dart';
@@ -130,91 +129,30 @@ class _ConstructionSpiritLevelWidgetState extends State<ConstructionSpiritLevelW
 
   @override
   Widget build(BuildContext context) {
-    // Humorous builder status tagline
-    String statusText;
-    Color statusColor;
-    IconData statusIcon;
-
-    if (_isStable) {
-      statusText = 'Na milimetr přesně! V lajně. 🎯';
-      statusColor = const Color(0xFF248A3D);
-      statusIcon = Icons.check_circle_rounded;
-    } else if (_filteredRollDeg.abs() > 20.0) {
-      statusText = 'Křivý jak šavle! Položte na nádrž.';
-      statusColor = const Color(0xFFD97706);
-      statusIcon = Icons.handyman_rounded;
-    } else {
-      statusText = 'Ustaluji bublinu v libele...';
-      statusColor = Colors.black54;
-      statusIcon = Icons.hourglass_top_rounded;
-    }
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // The Classic Builder's Spirit Level
-        Container(
-          width: double.infinity,
-          height: 86,
-          margin: const EdgeInsets.symmetric(horizontal: 4),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.12),
-                blurRadius: 16,
-                offset: const Offset(0, 5),
-              ),
-            ],
+    return Container(
+      width: double.infinity,
+      height: 86,
+      margin: const EdgeInsets.symmetric(horizontal: 4),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.12),
+            blurRadius: 16,
+            offset: const Offset(0, 5),
           ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: CustomPaint(
-              size: const Size(double.infinity, 86),
-              painter: _ConstructionLevelPainter(
-                rollDeg: _filteredRollDeg,
-                isStable: _isStable,
-              ),
-            ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: CustomPaint(
+          size: const Size(double.infinity, 86),
+          painter: _ConstructionLevelPainter(
+            rollDeg: _filteredRollDeg,
+            isStable: _isStable,
           ),
         ),
-
-        const SizedBox(height: 12),
-
-        // Builder's humorous status badge
-        AnimatedContainer(
-          duration: const Duration(milliseconds: 250),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-          decoration: BoxDecoration(
-            color: _isStable
-                ? CupertinoColors.activeGreen.withValues(alpha: 0.12)
-                : Colors.black.withValues(alpha: 0.05),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: _isStable
-                  ? CupertinoColors.activeGreen.withValues(alpha: 0.35)
-                  : Colors.black.withValues(alpha: 0.08),
-              width: 1,
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(statusIcon, size: 15, color: statusColor),
-              const SizedBox(width: 8),
-              Text(
-                statusText,
-                style: TextStyle(
-                  fontFamily: '.SF Pro Text',
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w600,
-                  color: statusColor,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
+      ),
     );
   }
 }

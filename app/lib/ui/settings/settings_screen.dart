@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/services.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/constants/ble_constants.dart';
 import '../../services/telemetry_manager.dart';
@@ -235,6 +236,80 @@ class SettingsScreen extends StatelessWidget {
                           CupertinoIcons.chevron_right,
                           color: Color(0xFFC7C7CC),
                           size: 18,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const Divider(color: Color(0xFFE5E5EA), height: 1, indent: 16, endIndent: 16),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () async {
+                    HapticFeedback.lightImpact();
+                    await telemetryManager.resetMountingOffset();
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        backgroundColor: const Color(0xFF1C1C1E),
+                        content: const Row(
+                          children: [
+                            Icon(Icons.refresh_rounded, color: Colors.white, size: 20),
+                            SizedBox(width: 10),
+                            Text(
+                              'Nulový náklon byl resetován na výchozí stav.',
+                              style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF2F2F7),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(
+                            Icons.refresh_rounded,
+                            color: AppTheme.appleBlack,
+                            size: 22,
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Obnovit výchozí nulování',
+                                style: TextStyle(
+                                  color: AppTheme.appleBlack,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: -0.3,
+                                  fontFamily: '-apple-system',
+                                ),
+                              ),
+                              SizedBox(height: 2),
+                              Text(
+                                'Resetuje korekci montážního úhlu na 0.0°',
+                                style: TextStyle(
+                                  color: AppTheme.appleMutedGray,
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w400,
+                                  fontFamily: '-apple-system',
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),

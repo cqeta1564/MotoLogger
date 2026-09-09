@@ -1,5 +1,4 @@
 import 'dart:math';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 /// Minimalist line-art / outline vector animation showing a smartphone
@@ -40,24 +39,9 @@ class _PhonePlacementAnimationState extends State<PhonePlacementAnimation>
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, child) {
-        return Container(
+        return SizedBox(
           width: double.infinity,
-          height: 190,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: Colors.black.withValues(alpha: 0.06),
-              width: 1.0,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.03),
-                blurRadius: 10,
-                offset: const Offset(0, 3),
-              ),
-            ],
-          ),
+          height: 160,
           child: CustomPaint(
             painter: _PhonePlacementPainter(
               progress: _controller.value,
@@ -84,24 +68,24 @@ class _PhonePlacementPainter extends CustomPainter {
     final cx = size.width * 0.5;
     final cy = size.height * 0.55;
 
-    // Line styles
+    // Line styles - Pure monochrome grey
     final outlinePaint = Paint()
-      ..color = const Color(0xFF1C1C1E)
+      ..color = const Color(0xFF48484A)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.2
+      ..strokeWidth = 2.0
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
 
     final capPaint = Paint()
-      ..color = CupertinoColors.activeBlue
+      ..color = const Color(0xFF8E8E93)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.4
+      ..strokeWidth = 2.0
       ..strokeCap = StrokeCap.round;
 
     final phonePaint = Paint()
-      ..color = const Color(0xFF1C1C1E)
+      ..color = const Color(0xFF3A3A3C)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.2
+      ..strokeWidth = 2.0
       ..strokeCap = StrokeCap.round;
 
     // 1. Draw Motorcycle Outline (Handlebars + Muscular Tank + Seat start)
@@ -129,14 +113,14 @@ class _PhonePlacementPainter extends CustomPainter {
       Paint()
         ..color = const Color(0xFFC7C7CC)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.8,
+        ..strokeWidth = 1.6,
     );
 
     // Handlebar & fork hint at front
     final forkPaint = Paint()
       ..color = const Color(0xFF8E8E93)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0
+      ..strokeWidth = 1.8
       ..strokeCap = StrokeCap.round;
     canvas.drawLine(Offset(cx - 110, cy - 8), Offset(cx - 128, cy + 28), forkPaint);
     canvas.drawLine(Offset(cx - 106, cy - 22), Offset(cx - 120, cy - 34), forkPaint);
@@ -149,7 +133,7 @@ class _PhonePlacementPainter extends CustomPainter {
       Paint()..color = const Color(0xFFE5E5EA),
     );
     canvas.drawOval(capRect, capPaint);
-    canvas.drawCircle(capCenter, 2.5, Paint()..color = CupertinoColors.activeBlue);
+    canvas.drawCircle(capCenter, 2.0, Paint()..color = const Color(0xFF8E8E93));
 
     // 3. Animation cycle of phone descending onto cap
     // Progress:
@@ -180,7 +164,7 @@ class _PhonePlacementPainter extends CustomPainter {
     // Contact pulse rings when phone touches the cap
     if (pulseScale > 0.0) {
       final ringPaint = Paint()
-        ..color = CupertinoColors.activeBlue.withValues(alpha: (1.0 - pulseScale) * 0.6)
+        ..color = const Color(0xFF8E8E93).withValues(alpha: (1.0 - pulseScale) * 0.4)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.5;
       canvas.drawOval(
@@ -208,33 +192,33 @@ class _PhonePlacementPainter extends CustomPainter {
     );
     canvas.drawRRect(
       phoneRect,
-      phonePaint..color = const Color(0xFF1C1C1E).withValues(alpha: phoneAlpha),
+      phonePaint..color = const Color(0xFF3A3A3C).withValues(alpha: phoneAlpha),
     );
 
-    // Glowing screen indicator
+    // Glowing screen indicator (neutral light grey)
     final screenRect = RRect.fromRectAndRadius(
       Rect.fromCenter(center: Offset(cx, phoneY), width: phoneWidth - 10, height: phoneHeight - 6),
       const Radius.circular(2),
     );
     canvas.drawRRect(
       screenRect,
-      Paint()..color = CupertinoColors.activeBlue.withValues(alpha: 0.18 * phoneAlpha),
+      Paint()..color = const Color(0xFFE5E5EA).withValues(alpha: 0.8 * phoneAlpha),
     );
 
     // Camera bump / notch dot
     canvas.drawCircle(
       Offset(cx - 20, phoneY),
       1.5,
-      Paint()..color = const Color(0xFF1C1C1E).withValues(alpha: phoneAlpha),
+      Paint()..color = const Color(0xFF8E8E93).withValues(alpha: phoneAlpha),
     );
 
-    // Downward guidance arrow when phone is hovering
+    // Downward guidance arrow when phone is hovering (neutral grey)
     if (progress < 0.40) {
       final arrowAlpha = (1.0 - (progress / 0.40)).clamp(0.0, 1.0);
       final arrowPaint = Paint()
-        ..color = CupertinoColors.activeBlue.withValues(alpha: arrowAlpha * 0.8)
+        ..color = const Color(0xFF8E8E93).withValues(alpha: arrowAlpha * 0.7)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.0
+        ..strokeWidth = 1.8
         ..strokeCap = StrokeCap.round;
 
       final arrowY = phoneY + 16;
@@ -257,7 +241,7 @@ class _PhonePlacementPainter extends CustomPainter {
       ),
       textDirection: TextDirection.ltr,
     )..layout();
-    labelPainter.paint(canvas, Offset(cx - labelPainter.width / 2, size.height - 22));
+    labelPainter.paint(canvas, Offset(cx - labelPainter.width / 2, size.height - 18));
   }
 
   @override
