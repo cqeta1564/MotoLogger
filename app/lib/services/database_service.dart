@@ -152,6 +152,12 @@ class DatabaseService {
     final dir = await getApplicationDocumentsDirectory();
     final file = File(join(dir.path, 'Ride_Session_${session.id}_${session.startTime.millisecondsSinceEpoch}.csv'));
 
+    final content = generateCsvString(samples: samples);
+    await file.writeAsString(content);
+    return file.path;
+  }
+
+  String generateCsvString({required List<FusedSample> samples}) {
     final buffer = StringBuffer();
     buffer.writeln('timestamp_ms,recorded_at,latitude,longitude,altitude_m,gps_speed_kmh,bearing_deg,'
                    'lean_angle_deg,pitch_deg,accel_x_g,accel_y_g,accel_z_g,gyro_x_dps,gyro_y_dps,gyro_z_dps,'
@@ -167,8 +173,80 @@ class DatabaseService {
                      '${s.batteryVoltage.toStringAsFixed(2)}');
     }
 
-    await file.writeAsString(buffer.toString());
+    return buffer.toString();
+  }
+
+  // Export Session to standard GPX 1.1 with MotoLogger & Garmin extensions
+  Future<String> exportSessionToGpx(int sessionId) async {
+    final session = await getSessionById(sessionId);
+    final samples = await getSamplesForSession(sessionId);
+    if (session == null) throw Exception('Session not found');
+
+    final dir = await getApplicationDocumentsDirectory();
+    final file = File(join(dir.path, 'Ride_Session_${session.id}_${session.startTime.millisecondsSinceEpoch}.gpx'));
+
+    final content = generateGpxString(session: session, samples: samples);
+    await file.writeAsString(content);
     return file.path;
+  }
+
+  String generateGpxString({required RideSession session, required List<FusedSample> samples}) {
+    final buffer = StringBuffer();
+    buffer.writeln('<?xml version="1.0" encoding="UTF-8"?>');
+    buffer.writeln('<gpx version="1.1" creator="MotoLogger - Motorcycle Telemetry System"');
+    buffer.writeln('  xmlns="http://www.topografix.com/GPX/1/1"');
+    buffer.writeln('  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"');
+    buffer.writeln('  xmlns:gpxtpx="http://www.garmin.com/xmlschemas/TrackPointExtension/v1"');
+    buffer.writeln('  xmlns:motologger="http://motologger.org/gpx/1.0"');
+    buffer.writeln('  xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">');
+    buffer.writeln('  <metadata>');
+    buffer.writeln('    <name>${_escapeXml(session.title)}</name>');
+    buffer.writeln('    <time>${session.startTime.toUtc().toIso8601String()}</time>');
+    buffer.writeln('  </metadata>');
+    buffer.writeln('  <trk>');
+    buffer.writeln('    <name>${_escapeXml(session.title)}</name>');
+    buffer.writeln('    <trkseg>');
+
+    for (final s in samples) {
+      if (s.latitude == 0.0 && s.longitude == 0.0) continue;
+
+      final speedMs = (s.gpsSpeedKmh / 3.6).toStringAsFixed(2);
+      buffer.writeln('      <trkpt lat="${s.latitude}" lon="${s.longitude}">');
+      buffer.writeln('        <ele>${s.altitude.toStringAsFixed(1)}</ele>');
+      buffer.writeln('        <time>${s.recordedAt.toUtc().toIso8601String()}</time>');
+      buffer.writeln('        <extensions>');
+      buffer.writeln('          <gpxtpx:TrackPointExtension>');
+      buffer.writeln('            <gpxtpx:speed>$speedMs</gpxtpx:speed>');
+      buffer.writeln('            <gpxtpx:course>${s.bearing.toStringAsFixed(1)}</gpxtpx:course>');
+      buffer.writeln('          </gpxtpx:TrackPointExtension>');
+      buffer.writeln('          <motologger:lean_angle_deg>${s.leanAngleDeg.toStringAsFixed(2)}</motologger:lean_angle_deg>');
+      buffer.writeln('          <motologger:pitch_deg>${s.pitchDeg.toStringAsFixed(2)}</motologger:pitch_deg>');
+      buffer.writeln('          <motologger:vehicle_speed_kmh>${s.vehicleSpeedKmh}</motologger:vehicle_speed_kmh>');
+      buffer.writeln('          <motologger:engine_rpm>${s.engineRpm}</motologger:engine_rpm>');
+      buffer.writeln('          <motologger:throttle_pos_pct>${s.throttlePosPct}</motologger:throttle_pos_pct>');
+      buffer.writeln('          <motologger:gear>${s.gear}</motologger:gear>');
+      buffer.writeln('          <motologger:coolant_temp_c>${s.coolantTempC}</motologger:coolant_temp_c>');
+      buffer.writeln('          <motologger:accel_x_g>${s.accelXG.toStringAsFixed(3)}</motologger:accel_x_g>');
+      buffer.writeln('          <motologger:accel_y_g>${s.accelYG.toStringAsFixed(3)}</motologger:accel_y_g>');
+      buffer.writeln('          <motologger:accel_z_g>${s.accelZG.toStringAsFixed(3)}</motologger:accel_z_g>');
+      buffer.writeln('        </extensions>');
+      buffer.writeln('      </trkpt>');
+    }
+
+    buffer.writeln('    </trkseg>');
+    buffer.writeln('  </trk>');
+    buffer.writeln('</gpx>');
+
+    return buffer.toString();
+  }
+
+  String _escapeXml(String text) {
+    return text
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&apos;');
   }
 
   Future<void> deleteSession(int id) async {

@@ -49,6 +49,69 @@ class _HistoryScreenState extends State<HistoryScreen> {
     return '$mins min $secs s';
   }
 
+  Future<void> _showExportSheet(RideSession s) async {
+    showCupertinoModalPopup<void>(
+      context: context,
+      builder: (ctx) => CupertinoActionSheet(
+        title: Text('Export jízdy: ${s.title}'),
+        message: const Text('Vyberte formát pro uložení nebo sdílení'),
+        actions: [
+          CupertinoActionSheetAction(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              try {
+                final path = await widget.dbService.exportSessionToGpx(s.id!);
+                await Share.shareXFiles([XFile(path)], text: 'MotoLogger Jízda GPX: ${s.title}');
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(backgroundColor: AppTheme.appleRed, content: Text('Chyba při exportu GPX: $e')),
+                  );
+                }
+              }
+            },
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.map_outlined, color: AppTheme.appleBlue, size: 20),
+                SizedBox(width: 8),
+                Text('Exportovat GPX (Strava, Garmin, Mapy)'),
+              ],
+            ),
+          ),
+          CupertinoActionSheetAction(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              try {
+                final path = await widget.dbService.exportSessionToCsv(s.id!);
+                await Share.shareXFiles([XFile(path)], text: 'MotoLogger Jízda CSV: ${s.title}');
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(backgroundColor: AppTheme.appleRed, content: Text('Chyba při exportu CSV: $e')),
+                  );
+                }
+              }
+            },
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.table_chart_outlined, color: AppTheme.appleGreen, size: 20),
+                SizedBox(width: 8),
+                Text('Exportovat CSV (MoTeC i2, RaceRender)'),
+              ],
+            ),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          isDefaultAction: true,
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('Zrušit'),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -316,11 +379,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     IconButton(
                       visualDensity: VisualDensity.compact,
                       icon: const Icon(Icons.share_outlined, size: 18, color: AppTheme.appleMutedGray),
-                      tooltip: 'Exportovat CSV',
-                      onPressed: () async {
-                        final path = await widget.dbService.exportSessionToCsv(s.id!);
-                        await Share.shareXFiles([XFile(path)], text: 'MotoLogger Jízda: ${s.title}');
-                      },
+                      tooltip: 'Exportovat data',
+                      onPressed: () => _showExportSheet(s),
                     ),
                   ],
                 ),

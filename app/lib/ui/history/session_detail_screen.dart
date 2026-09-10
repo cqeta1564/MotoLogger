@@ -6,6 +6,8 @@ import '../../core/theme/app_theme.dart';
 import '../../models/session.dart';
 import '../../models/fused_sample.dart';
 import '../../services/database_service.dart';
+import '../widgets/gps_track_map_card.dart';
+import '../widgets/gg_friction_card.dart';
 
 /// Detailed breakdown and telemetry inspection screen for a ride session.
 /// Formatted according to Apple Fitness & Health aesthetic.
@@ -41,8 +43,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.share_outlined, size: 22),
-            tooltip: 'Exportovat CSV',
-            onPressed: _exportCsv,
+            tooltip: 'Exportovat data',
+            onPressed: _showExportSheet,
           ),
           IconButton(
             icon: const Icon(Icons.delete_outline_rounded, color: AppTheme.appleRed, size: 22),
@@ -66,6 +68,14 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
               children: [
                 // Apple Summary Card
                 _buildSummaryCard(samples),
+                const SizedBox(height: 16),
+
+                // GPS Track Trajectory Map Card
+                GpsTrackMapCard(samples: samples),
+                const SizedBox(height: 16),
+
+                // Post-Ride G-G Friction Diagram Card
+                GgFrictionCard(samples: samples),
                 const SizedBox(height: 16),
 
                 // Lean Angle Chart
@@ -499,9 +509,81 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
     );
   }
 
+  Future<void> _showExportSheet() async {
+    showCupertinoModalPopup<void>(
+      context: context,
+      builder: (ctx) => CupertinoActionSheet(
+        title: const Text('Exportovat telemetrická data'),
+        message: const Text('Vyberte požadovaný formát pro analýzu nebo zobrazení v mapách'),
+        actions: [
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _exportGpx();
+            },
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.map_outlined, color: AppTheme.appleBlue, size: 20),
+                SizedBox(width: 8),
+                Text('Exportovat GPX (Strava, Garmin, Mapy)'),
+              ],
+            ),
+          ),
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _exportCsv();
+            },
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.table_chart_outlined, color: AppTheme.appleGreen, size: 20),
+                SizedBox(width: 8),
+                Text('Exportovat CSV (MoTeC i2, RaceRender)'),
+              ],
+            ),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          isDefaultAction: true,
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('Zrušit'),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _exportGpx() async {
+    try {
+      final path = await widget.dbService.exportSessionToGpx(widget.session.id!);
+      await Share.shareXFiles([XFile(path)], text: 'MotoLogger Jízda GPX: ${widget.session.title}');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: AppTheme.appleRed,
+            content: Text('Chyba při exportu GPX: $e'),
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _exportCsv() async {
-    final path = await widget.dbService.exportSessionToCsv(widget.session.id!);
-    await Share.shareXFiles([XFile(path)], text: 'MotoLogger Jízda CSV: ${widget.session.title}');
+    try {
+      final path = await widget.dbService.exportSessionToCsv(widget.session.id!);
+      await Share.shareXFiles([XFile(path)], text: 'MotoLogger Jízda CSV: ${widget.session.title}');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: AppTheme.appleRed,
+            content: Text('Chyba při exportu CSV: $e'),
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _confirmDelete() async {
