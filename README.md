@@ -8,6 +8,23 @@
 
 An end-to-end, high-performance motorcycle telemetry and data acquisition system. Features a custom **ESP32-S3 hardware logger**, **100 Hz BNO085 IMU fusion** for vibration-resistant lean angle calculation, **500 kbps TWAI CAN bus capture**, and a companion **Flutter mobile app** with **Android Auto** and **Apple CarPlay** dashboard projection. 100% offline and serverless.
 
+> **Project Documentation & AI Agent Context:**
+> - In-depth technical specifications, hardware schematics, and protocol details: [`PROJECT.md`](./PROJECT.md)
+> - AI pair-programming rules, code standards, and Antigravity guidelines: [`AGENTS.md`](./AGENTS.md)
+> - Antigravity workspace configuration: [`GEMINI.md`](./GEMINI.md)
+
+---
+
+## Key Features
+
+- **Vibration-Resistant IMU Fusion (100 Hz):** CEVA/Hillcrest BNO085 9-DoF coprocessor running the Game Rotation Vector (GRV) algorithm to deliver precise motorcycle lean angle and pitch, completely immune to high-frequency engine vibrations and alternator magnetic interference.
+- **Smart Fuel-Tank Calibration:** Intuitive side-stand calibration utilizing the flat fuel tank filler cap and phone accelerometer, coupled with a physical yellow builder's spirit level UI and line-art motorcycle animations.
+- **Permanent NVS Offset Storage:** Mounting tare offsets calibrated from the phone are stored in ESP32 flash memory (`Preferences`), ensuring zero calibration drift across power cycles.
+- **500 kbps Automotive TWAI CAN Bus:** Real-time capture of engine RPM, speed, throttle position, coolant temperature, and gear directly from the motorcycle ECU.
+- **Zero Parasitic Battery Drain (0 mA):** Hardware latch (`FORCE_ON`) automatically cuts all power 15 seconds after engine shutdown, completely protecting the motorcycle battery.
+- **Companion Flutter App (Apple HIG):** Clean Apple Cupertino design language, live dynamic lean arc gauge, 1.5G friction circle, offline SQLite session storage, and MoTeC i2 CSV / GPX export.
+- **Android Auto & CarPlay Projection:** Direct telemetry projection onto motorcycle TFT head units (Chigee AIO-5, Carpuride, Ottocast).
+
 ---
 
 ## System Architecture
@@ -42,7 +59,7 @@ An end-to-end, high-performance motorcycle telemetry and data acquisition system
    |       |  - Dynamic Lean Gauge (-60°..+60°) |    |  - Android Auto (Motorcycle TFT)   |        |
    |       |  - 1.5G G-G Friction Circle        |    |  - Apple CarPlay                   |        |
    |       |  - RPM Tachometer & Shift Light    |    |  - Large Gear & Lean Readout       |        |
-   |       |  - Gear Indicator (N, 1..6)        |    |  - Remote One-Touch Zero-Tare      |        |
+   |       |  - Smart Fuel-Tank Calibration UI  |    |  - Automatic Screen Lock on Ride   |        |
    |       +------------------------------------+    +------------------------------------+        |
    +-----------------------------------------------------------------------------------------------+
 ```
@@ -53,6 +70,11 @@ An end-to-end, high-performance motorcycle telemetry and data acquisition system
 
 ```
 MotoLogger/
+├── AGENTS.md                                # AI Agent rules, guidelines, and conventions
+├── GEMINI.md                                # Antigravity project configuration & rules
+├── PROJECT.md                               # Complete system architecture and technical specs
+├── README.md                                # Repository overview and quickstart
+│
 ├── hardware/                                # Complete PCB manufacturing & assembly files
 │   ├── gerbers/                             # Production Gerber ZIP archives (neutral silkscreen)
 │   │   ├── MotoLogger_Clean_Gerber.zip      # Main board gerbers
@@ -75,7 +97,8 @@ MotoLogger/
 └── app/                                     # Companion Mobile App (Flutter)
     ├── pubspec.yaml                         # Flutter dependencies
     ├── lib/                                 # Dart source code (UI, BLE, GPS, SQLite, Models)
-    └── android/                             # Android configuration + Android Auto Service
+    ├── android/                             # Android configuration + Android Auto Service
+    └── test/                                # Automated unit test suite
 ```
 
 ---
@@ -128,6 +151,9 @@ cd app
 
 # Fetch packages
 flutter pub get
+
+# Run unit tests
+flutter test
 
 # Run on connected phone or emulator
 flutter run
