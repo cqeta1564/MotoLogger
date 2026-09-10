@@ -14,6 +14,9 @@ class BleConstants {
   static const int cmdTareWithOffset = 0x02; // Set mounting roll offset in tenths of a degree (int16_t)
   static const int cmdSetCanSignal = 0x03; // Set CAN signal mapping (17 bytes: signal, ID, start, len, endian, mult, offset)
   static const int cmdSetCanProfileMode = 0x04; // 1 = Custom CAN profile active, 0 = Standard OBD
+  static const int cmdSyncCheck = 0x05; // Query ESP32 for un-synced offline session logs on SD card
+  static const int cmdSyncRequestFile = 0x06; // Request transfer of specific offline session
+  static const int cmdSyncAck = 0x07; // Acknowledge successful session sync
 
   // CAN Signal Indices matching ESP32 firmware CanSignalType enum
   static const int canSignalRpm = 0;

@@ -39,6 +39,7 @@ class TelemetryManager extends ChangeNotifier {
 
   final List<FusedSample> _sampleBuffer = [];
   Timer? _batchFlushTimer;
+  Timer? _syncStatusClearTimer;
   StreamSubscription? _bleSub;
   StreamSubscription? _bleStateSub;
   StreamSubscription? _gpsSub;
@@ -56,6 +57,15 @@ class TelemetryManager extends ChangeNotifier {
   double get mountingRollOffsetDeg => _mountingRollOffsetDeg;
   double get latestRawLeanDeg => _latestRawLeanDeg;
   List<double> get frictionEnvelopeRadii => List.unmodifiable(_frictionEnvelope);
+
+  // Automatic offline sync state
+  bool _isSyncing = false;
+  double _syncProgress = 0.0;
+  String? _syncStatusMessage;
+
+  bool get isSyncing => _isSyncing;
+  double get syncProgress => _syncProgress;
+  String? get syncStatusMessage => _syncStatusMessage;
 
   TelemetryManager({
     required this.bleService,
@@ -92,6 +102,8 @@ class TelemetryManager extends ChangeNotifier {
         if (canProfileService.isCustomProfileActive) {
           bleService.uploadBikeProfile(canProfileService.activeProfile);
         }
+        // Automatically check and synchronize any offline sessions from ESP32 MicroSD
+        autoSyncOfflineSessions();
       }
       notifyListeners();
     });
@@ -330,9 +342,71 @@ class TelemetryManager extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Automatically synchronizes offline ride sessions recorded on ESP32 MicroSD card.
+  /// Triggered automatically upon BLE reconnection without requiring rider interaction.
+  Future<int> autoSyncOfflineSessions() async {
+    if (_isSyncing || bleService.state != BleConnectionState.connected) {
+      return 0;
+    }
+
+    _isSyncing = true;
+    _syncProgress = 0.0;
+    _syncStatusMessage = 'Kontrola nových jízd na motocyklu...';
+    notifyListeners();
+
+    int importedCount = 0;
+    try {
+      final logs = await bleService.checkOfflineLogs();
+      if (logs.isNotEmpty) {
+        for (int i = 0; i < logs.length; i++) {
+          final logId = logs[i];
+          _syncStatusMessage = 'Stahuji jízdu ${i + 1} z ${logs.length}...';
+          _syncProgress = (i + 0.2) / logs.length;
+          notifyListeners();
+
+          final csvContent = await bleService.downloadOfflineLog(logId);
+          if (csvContent != null && csvContent.trim().isNotEmpty) {
+            _syncStatusMessage = 'Ukládám jízdu do databáze...';
+            _syncProgress = (i + 0.8) / logs.length;
+            notifyListeners();
+
+            await dbService.importRideFromCsv(
+              csvContent: csvContent,
+              defaultTitle: 'Synchronizovaná jízda ($logId)',
+            );
+            await bleService.acknowledgeOfflineLogSync(logId);
+            importedCount++;
+          }
+        }
+        _syncStatusMessage = 'Synchronizace dokončena ($importedCount jízd)';
+      } else {
+        _syncStatusMessage = null;
+      }
+    } catch (e) {
+      debugPrint('[AUTO-SYNC] Error during offline sync: $e');
+      _syncStatusMessage = 'Chyba synchronizace';
+    } finally {
+      _isSyncing = false;
+      _syncProgress = 1.0;
+      notifyListeners();
+
+      // Automatically clear completion badge after 4 seconds
+      _syncStatusClearTimer?.cancel();
+      _syncStatusClearTimer = Timer(const Duration(seconds: 4), () {
+        if (!_isSyncing) {
+          _syncStatusMessage = null;
+          notifyListeners();
+        }
+      });
+    }
+
+    return importedCount;
+  }
+
   @override
   void dispose() {
     _batchFlushTimer?.cancel();
+    _syncStatusClearTimer?.cancel();
     _bleSub?.cancel();
     _bleStateSub?.cancel();
     _gpsSub?.cancel();

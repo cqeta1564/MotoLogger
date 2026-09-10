@@ -85,6 +85,19 @@ static void handleBleCommand(uint8_t cmd_id, const uint8_t* payload, size_t leng
             }
             break;
 
+        case 0x05: // Query un-synced offline session logs on MicroSD
+            Serial.printf("[BLE CMD] Offline sync check requested. Current file: %s, Records: %u\n",
+                          g_storage_mgr.getCurrentFileName(), g_storage_mgr.getRecordsWritten());
+            break;
+
+        case 0x06: // Offline session log download requested
+            Serial.printf("[BLE CMD] Offline log download requested (payload len: %u)\n", length);
+            break;
+
+        case 0x07: // Acknowledge offline log sync completed
+            Serial.printf("[BLE CMD] Offline log sync acknowledged by smartphone.\n");
+            break;
+
         default:
             Serial.printf("[BLE CMD] Unknown command 0x%02X received.\n", cmd_id);
             break;

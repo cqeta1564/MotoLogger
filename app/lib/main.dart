@@ -55,7 +55,10 @@ class _MotoLoggerAppState extends State<MotoLoggerApp> {
         telemetryManager: widget.telemetryManager,
         onNavigateTab: (idx) => setState(() => _selectedTabIndex = idx),
       ),
-      HistoryScreen(dbService: widget.dbService),
+      HistoryScreen(
+        dbService: widget.dbService,
+        telemetryManager: widget.telemetryManager,
+      ),
       SettingsScreen(telemetryManager: widget.telemetryManager),
     ];
 

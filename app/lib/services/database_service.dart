@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
@@ -249,6 +250,234 @@ class DatabaseService {
         .replaceAll("'", '&apos;');
   }
 
+  /// Pure static parser for raw MicroSD log CSV or exported CSV.
+  /// Computes summary metrics, distance, and returns parsed session and sample list.
+  static ParsedRideData parseRideCsv({
+    required String csvContent,
+    String? defaultTitle,
+    DateTime? fileTimestamp,
+  }) {
+    final lines = csvContent.split('\n');
+    if (lines.isEmpty) {
+      throw const FormatException('Soubor CSV je prázdný.');
+    }
+
+    // 1. Locate header line
+    int headerIndex = -1;
+    List<String> columns = [];
+    for (int i = 0; i < lines.length; i++) {
+      final line = lines[i].trim();
+      if (line.isEmpty || line.startsWith('#')) continue;
+      columns = line.split(',').map((c) => c.trim().toLowerCase()).toList();
+      headerIndex = i;
+      break;
+    }
+
+    if (headerIndex == -1 || columns.isEmpty) {
+      throw const FormatException('V CSV souboru nebyla nalezena platná hlavička.');
+    }
+
+    // 2. Identify column indices dynamically
+    final colTimestamp = columns.indexOf('timestamp_ms');
+    final colRecordedAt = columns.indexOf('recorded_at');
+    final colLean = columns.indexOf('lean_angle_deg');
+    final colPitch = columns.indexOf('pitch_deg');
+    final colAccelX = columns.indexOf('accel_x_g');
+    final colAccelY = columns.indexOf('accel_y_g');
+    final colAccelZ = columns.indexOf('accel_z_g');
+    final colGyroX = columns.indexOf('gyro_x_dps');
+    final colGyroY = columns.indexOf('gyro_y_dps');
+    final colGyroZ = columns.indexOf('gyro_z_dps');
+    final colVbat = columns.contains('v_bat')
+        ? columns.indexOf('v_bat')
+        : columns.indexOf('battery_voltage');
+    final colRpm = columns.indexOf('engine_rpm');
+    final colSpeed = columns.indexOf('vehicle_speed_kmh');
+    final colThrottle = columns.indexOf('throttle_pos_pct');
+    final colCoolant = columns.indexOf('coolant_temp_c');
+    final colGear = columns.indexOf('gear');
+    final colLat = columns.indexOf('latitude');
+    final colLon = columns.indexOf('longitude');
+    final colAlt = columns.contains('altitude_m')
+        ? columns.indexOf('altitude_m')
+        : columns.indexOf('altitude');
+    final colGpsSpeed = columns.indexOf('gps_speed_kmh');
+    final colBearing = columns.contains('bearing_deg')
+        ? columns.indexOf('bearing_deg')
+        : columns.indexOf('bearing');
+
+    final parsedSamples = <FusedSample>[];
+    double maxLeft = 0.0;
+    double maxRight = 0.0;
+    double topSpeed = 0.0;
+    double maxG = 0.0;
+    double totalDistanceKm = 0.0;
+    int prevTimestampMs = 0;
+    double prevSpeedKmh = 0.0;
+
+    DateTime? firstRecordedAt;
+    int firstTimestampMs = 0;
+
+    for (int i = headerIndex + 1; i < lines.length; i++) {
+      final line = lines[i].trim();
+      if (line.isEmpty || line.startsWith('#')) continue;
+
+      final parts = line.split(',');
+      if (parts.length < 4) continue;
+
+      double parseD(int idx, [double def = 0.0]) {
+        if (idx < 0 || idx >= parts.length) return def;
+        return double.tryParse(parts[idx].trim()) ?? def;
+      }
+
+      int parseI(int idx, [int def = 0]) {
+        if (idx < 0 || idx >= parts.length) return def;
+        final d = double.tryParse(parts[idx].trim());
+        return d?.round() ?? def;
+      }
+
+      final tsMs = colTimestamp >= 0 ? parseI(colTimestamp) : (i * 10);
+      if (parsedSamples.isEmpty) {
+        firstTimestampMs = tsMs;
+      }
+
+      DateTime sampleTime;
+      if (colRecordedAt >= 0 && colRecordedAt < parts.length && parts[colRecordedAt].trim().isNotEmpty) {
+        sampleTime = DateTime.tryParse(parts[colRecordedAt].trim()) ?? DateTime.now();
+        firstRecordedAt ??= sampleTime;
+      } else {
+        final base = fileTimestamp ?? DateTime.now();
+        final offsetFromStart = tsMs - firstTimestampMs;
+        sampleTime = base.add(Duration(milliseconds: offsetFromStart));
+        firstRecordedAt ??= base;
+      }
+
+      final lean = parseD(colLean);
+      final pitch = parseD(colPitch);
+      final ax = parseD(colAccelX);
+      final ay = parseD(colAccelY);
+      final az = parseD(colAccelZ, 1.0);
+      final gx = parseD(colGyroX);
+      final gy = parseD(colGyroY);
+      final gz = parseD(colGyroZ);
+      final rpm = parseI(colRpm);
+      final speed = parseI(colSpeed);
+      final tps = parseI(colThrottle);
+      final temp = parseI(colCoolant);
+      final gear = parseI(colGear);
+      final vbat = parseD(colVbat, 12.0);
+      final lat = parseD(colLat, 0.0);
+      final lon = parseD(colLon, 0.0);
+      final alt = parseD(colAlt, 0.0);
+      final gpsSpeed = parseD(colGpsSpeed, 0.0);
+      final bearing = parseD(colBearing, 0.0);
+
+      // Track extreme metrics
+      if (lean < -maxLeft) maxLeft = -lean;
+      if (lean > maxRight) maxRight = lean;
+      if (speed > topSpeed) topSpeed = speed.toDouble();
+      if (gpsSpeed > topSpeed) topSpeed = gpsSpeed;
+
+      final currentG = sqrt(ax * ax + ay * ay);
+      if (currentG > maxG) maxG = currentG;
+
+      // Integrate distance over time
+      if (parsedSamples.isNotEmpty) {
+        final dtSec = (tsMs - prevTimestampMs) / 1000.0;
+        if (dtSec > 0 && dtSec < 5.0) {
+          final effectiveSpeed = speed > 0 ? speed.toDouble() : gpsSpeed;
+          final avgSpd = (effectiveSpeed + prevSpeedKmh) / 2.0;
+          totalDistanceKm += (avgSpd * dtSec) / 3600.0;
+        }
+      }
+      prevTimestampMs = tsMs;
+      prevSpeedKmh = speed > 0 ? speed.toDouble() : gpsSpeed;
+
+      parsedSamples.add(FusedSample(
+        sessionId: 0,
+        timestampMs: tsMs,
+        recordedAt: sampleTime,
+        leanAngleDeg: lean,
+        pitchDeg: pitch,
+        accelXG: ax,
+        accelYG: ay,
+        accelZG: az,
+        gyroXDps: gx,
+        gyroYDps: gy,
+        gyroZDps: gz,
+        engineRpm: rpm,
+        vehicleSpeedKmh: speed,
+        throttlePosPct: tps,
+        coolantTempC: temp,
+        gear: gear,
+        batteryVoltage: vbat,
+        latitude: lat,
+        longitude: lon,
+        altitude: alt,
+        gpsSpeedKmh: gpsSpeed,
+        bearing: bearing,
+        gpsAccuracyMeters: lat != 0.0 ? 5.0 : 0.0,
+      ));
+    }
+
+    if (parsedSamples.isEmpty) {
+      throw const FormatException('V CSV souboru nebyly nalezeny žádné telemetrické vzorky.');
+    }
+
+    final start = firstRecordedAt ?? DateTime.now();
+    final end = parsedSamples.last.recordedAt;
+    final finalTitle = defaultTitle ?? 'Importovaná jízda (${start.day}.${start.month}.${start.year} ${start.hour.toString().padLeft(2, '0')}:${start.minute.toString().padLeft(2, '0')})';
+
+    final session = RideSession(
+      title: finalTitle,
+      startTime: start,
+      endTime: end,
+      maxLeanLeftDeg: maxLeft,
+      maxLeanRightDeg: maxRight,
+      topSpeedKmh: topSpeed,
+      maxGForce: maxG,
+      totalDistanceKm: double.parse(totalDistanceKm.toStringAsFixed(2)),
+      sampleCount: parsedSamples.length,
+    );
+
+    return ParsedRideData(session: session, samples: parsedSamples);
+  }
+
+  /// Imports a ride session from raw MicroSD log CSV (LOG_XXXX.CSV) or exported CSV.
+  /// Parses all telemetry rows, computes peak statistics, and bulk-inserts all samples into SQLite.
+  Future<RideSession> importRideFromCsv({
+    required String csvContent,
+    String? defaultTitle,
+    DateTime? fileTimestamp,
+  }) async {
+    final parsed = parseRideCsv(
+      csvContent: csvContent,
+      defaultTitle: defaultTitle,
+      fileTimestamp: fileTimestamp,
+    );
+
+    final db = await database;
+    final sessionId = await db.insert('sessions', parsed.session.toMap());
+    final savedSession = parsed.session.copyWith(id: sessionId);
+
+    final batch = db.batch();
+    for (final sample in parsed.samples) {
+      batch.insert('samples', sample.copyWith(sessionId: sessionId).toMap());
+    }
+    await batch.commit(noResult: true);
+
+    return savedSession;
+  }
+
+  /// Calculates aggregated season statistics across all rides or for a given year.
+  Future<SeasonStats> getSeasonStats({int? year}) async {
+    final allSessions = await getAllSessions();
+    final filtered = year == null
+        ? allSessions
+        : allSessions.where((s) => s.startTime.year == year).toList();
+    return SeasonStats.fromSessions(filtered);
+  }
+
   Future<void> deleteSession(int id) async {
     final db = await database;
     await db.delete('samples', where: 'session_id = ?', whereArgs: [id]);
@@ -353,3 +582,15 @@ class DatabaseService {
     await db.delete('bike_profiles', where: 'id = ?', whereArgs: [id]);
   }
 }
+
+/// Parsed ride session data and samples extracted from a CSV file.
+class ParsedRideData {
+  final RideSession session;
+  final List<FusedSample> samples;
+
+  const ParsedRideData({
+    required this.session,
+    required this.samples,
+  });
+}
+

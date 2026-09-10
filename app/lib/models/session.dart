@@ -84,3 +84,50 @@ class RideSession {
     );
   }
 }
+
+/// Aggregated telemetry statistics across a riding season or all-time history.
+class SeasonStats {
+  final int totalRides;
+  final double totalDistanceKm;
+  final Duration totalDuration;
+  final double maxLeanLeftDeg;
+  final double maxLeanRightDeg;
+  final double topSpeedKmh;
+
+  const SeasonStats({
+    this.totalRides = 0,
+    this.totalDistanceKm = 0.0,
+    this.totalDuration = Duration.zero,
+    this.maxLeanLeftDeg = 0.0,
+    this.maxLeanRightDeg = 0.0,
+    this.topSpeedKmh = 0.0,
+  });
+
+  factory SeasonStats.fromSessions(List<RideSession> sessions) {
+    if (sessions.isEmpty) return const SeasonStats();
+
+    double totalDist = 0.0;
+    Duration totalTime = Duration.zero;
+    double maxLeft = 0.0;
+    double maxRight = 0.0;
+    double topSpeed = 0.0;
+
+    for (final s in sessions) {
+      totalDist += s.totalDistanceKm;
+      totalTime += s.duration;
+      if (s.maxLeanLeftDeg > maxLeft) maxLeft = s.maxLeanLeftDeg;
+      if (s.maxLeanRightDeg > maxRight) maxRight = s.maxLeanRightDeg;
+      if (s.topSpeedKmh > topSpeed) topSpeed = s.topSpeedKmh;
+    }
+
+    return SeasonStats(
+      totalRides: sessions.length,
+      totalDistanceKm: totalDist,
+      totalDuration: totalTime,
+      maxLeanLeftDeg: maxLeft,
+      maxLeanRightDeg: maxRight,
+      topSpeedKmh: topSpeed,
+    );
+  }
+}
+

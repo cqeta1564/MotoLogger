@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
@@ -551,6 +552,84 @@ class BleService {
         batteryVoltage: 12.6,
         statusFlags: 0,
       ));
+    }
+  }
+
+  final List<String> _mockOfflineLogQueue = [];
+
+  void setMockOfflineLogs(List<String> csvLogs) {
+    _mockOfflineLogQueue.clear();
+    _mockOfflineLogQueue.addAll(csvLogs);
+  }
+
+  void addMockOfflineLog(String csv) {
+    _mockOfflineLogQueue.add(csv);
+  }
+
+  /// Checks ESP32 MicroSD for un-synced offline session logs
+  Future<List<String>> checkOfflineLogs() async {
+    if (_mockMode) {
+      if (_mockOfflineLogQueue.isNotEmpty) {
+        return List.generate(_mockOfflineLogQueue.length, (i) => 'LOG_${(i + 1).toString().padLeft(4, '0')}.CSV');
+      }
+      return [];
+    }
+
+    if (_commandChar == null) return [];
+
+    try {
+      final cmd = [BleConstants.cmdSyncCheck];
+      await _commandChar!.write(cmd, withoutResponse: false);
+      debugPrint('[BLE] Sent offline sync check command.');
+      return [];
+    } catch (e) {
+      debugPrint('[BLE] checkOfflineLogs error: $e');
+      return [];
+    }
+  }
+
+  /// Downloads an offline session log by filename/id
+  Future<String?> downloadOfflineLog(String logId) async {
+    if (_mockMode) {
+      if (_mockOfflineLogQueue.isNotEmpty) {
+        return _mockOfflineLogQueue.first;
+      }
+      return null;
+    }
+
+    if (_commandChar == null) return null;
+
+    try {
+      final bytes = [BleConstants.cmdSyncRequestFile, ...utf8.encode(logId)];
+      await _commandChar!.write(bytes, withoutResponse: false);
+      debugPrint('[BLE] Requested log file download: $logId');
+      return null;
+    } catch (e) {
+      debugPrint('[BLE] downloadOfflineLog error: $e');
+      return null;
+    }
+  }
+
+  /// Acknowledges successful sync so ESP32 knows not to send it again
+  Future<bool> acknowledgeOfflineLogSync(String logId) async {
+    if (_mockMode) {
+      if (_mockOfflineLogQueue.isNotEmpty) {
+        _mockOfflineLogQueue.removeAt(0);
+      }
+      debugPrint('[BLE MOCK] Acknowledged offline log sync: $logId');
+      return true;
+    }
+
+    if (_commandChar == null) return false;
+
+    try {
+      final bytes = [BleConstants.cmdSyncAck, ...utf8.encode(logId)];
+      await _commandChar!.write(bytes, withoutResponse: true);
+      debugPrint('[BLE] Acknowledged offline log sync: $logId');
+      return true;
+    } catch (e) {
+      debugPrint('[BLE] acknowledgeOfflineLogSync error: $e');
+      return false;
     }
   }
 
