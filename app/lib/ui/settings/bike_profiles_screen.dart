@@ -3,16 +3,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../core/theme/app_theme.dart';
 import '../../services/can_profile_service.dart';
+import '../../services/telemetry_manager.dart';
 import 'import_bike_profile_screen.dart';
 
 /// Screen listing all saved motorcycle CAN mapping profiles with options to switch,
 /// add new ones, or delete.
 class BikeProfilesScreen extends StatelessWidget {
   final CanProfileService canProfileService;
+  final TelemetryManager? telemetryManager;
 
   const BikeProfilesScreen({
     super.key,
     required this.canProfileService,
+    this.telemetryManager,
   });
 
   @override
@@ -52,6 +55,7 @@ class BikeProfilesScreen extends StatelessWidget {
                     CupertinoPageRoute(
                       builder: (ctx) => ImportBikeProfileScreen(
                         canProfileService: canProfileService,
+                        telemetryManager: telemetryManager,
                       ),
                     ),
                   );
@@ -95,6 +99,9 @@ class BikeProfilesScreen extends StatelessWidget {
                 onTap: () async {
                   HapticFeedback.selectionClick();
                   await canProfileService.setStandardObdActive();
+                  if (telemetryManager != null) {
+                    await telemetryManager!.syncActiveProfileToEsp();
+                  }
                 },
               ),
 
@@ -161,6 +168,9 @@ class BikeProfilesScreen extends StatelessWidget {
                       onTap: () async {
                         HapticFeedback.selectionClick();
                         await canProfileService.setActiveProfile(profile);
+                        if (telemetryManager != null) {
+                          await telemetryManager!.syncActiveProfileToEsp();
+                        }
                       },
                       onDelete: () async {
                         HapticFeedback.mediumImpact();

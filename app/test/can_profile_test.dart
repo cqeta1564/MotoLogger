@@ -204,4 +204,42 @@ timestamp_ms,lean_angle_deg,pitch_deg,accel_x_g,accel_y_g,accel_z_g,gyro_x_dps,g
       expect(dataset['unique_can_ids_detected'], equals(2));
     });
   });
+
+  group('BleService CAN Profile Upload Tests', () {
+    test('Uploads bike profile via mock BleService', () async {
+      final ble = BleService();
+      ble.enableMockMode(true);
+
+      final profile = BikeProfile.standardObd();
+      final success = await ble.uploadBikeProfile(profile);
+
+      expect(success, isTrue);
+    });
+
+    test('Uploads custom bike profile signals via mock BleService', () async {
+      final ble = BleService();
+      ble.enableMockMode(true);
+
+      const jsonStr = '''
+      {
+        "bike_name": "Ducati Monster",
+        "signals": {
+          "engine_rpm": {
+            "can_id": "0x1F0",
+            "start_byte": 0,
+            "length_bytes": 2,
+            "endianness": "big",
+            "multiplier": 1.0,
+            "offset": 0.0,
+            "unit": "RPM"
+          }
+        }
+      }
+      ''';
+      final profile = BikeProfile.fromAiJson(jsonStr);
+      final success = await ble.uploadBikeProfile(profile);
+
+      expect(success, isTrue);
+    });
+  });
 }

@@ -30,6 +30,38 @@ struct CanFrame {
 };
 
 // ==============================================================================
+// Motorcycle CAN Signal & Profile Configuration (Stored in NVS Preferences)
+// ==============================================================================
+enum class CanSignalType : uint8_t {
+    RPM      = 0,
+    SPEED    = 1,
+    THROTTLE = 2,
+    GEAR     = 3,
+    COOLANT  = 4
+};
+
+struct __attribute__((packed)) CanSignalConfig {
+    uint32_t can_id;        // CAN arbitration ID (e.g. 0x1F0)
+    uint8_t  start_byte;    // Start byte in payload (0..7)
+    uint8_t  length_bytes;  // Length in bytes (1 or 2)
+    uint8_t  is_big_endian; // 1 = Big Endian, 0 = Little Endian
+    uint8_t  is_active;     // 1 = Active, 0 = Disabled
+    float    multiplier;    // Scale factor (e.g. 0.05f)
+    float    offset;        // Additive offset (e.g. -40.0f)
+};
+
+struct __attribute__((packed)) EspBikeCanProfile {
+    uint32_t magic;          // 0x4D4F544F ('MOTO')
+    uint8_t  profile_active; // 1 = Custom mapping active, 0 = Standard OBD
+    uint8_t  reserved[3];
+    CanSignalConfig rpm;
+    CanSignalConfig speed;
+    CanSignalConfig throttle;
+    CanSignalConfig gear;
+    CanSignalConfig coolant;
+};
+
+// ==============================================================================
 // IMU 9-DoF Telemetry Sample (BNO085)
 // ==============================================================================
 struct ImuSample {

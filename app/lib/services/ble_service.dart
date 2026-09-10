@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import '../core/constants/ble_constants.dart';
 import '../models/telemetry_packet.dart';
+import '../models/can_profile.dart';
 
 enum BleConnectionState {
   disconnected,
@@ -179,6 +180,96 @@ class BleService {
       debugPrint('[BLE] Failed to send Tare Offset command: $e');
       return false;
     }
+  }
+
+  Future<bool> sendCanSignalConfig({
+    required int signalIndex,
+    required CanSignalMapping mapping,
+  }) async {
+    if (_mockMode) {
+      debugPrint('[BLE MOCK] Sent CAN signal config for index $signalIndex (ID: ${mapping.canId})');
+      return true;
+    }
+    if (_commandChar == null) return false;
+
+    try {
+      // 17 bytes: cmd (1B), signal (1B), canId (4B), startByte (1B), len (1B), endian (1B), mult (4B), offset (4B)
+      final byteData = ByteData(17);
+      byteData.setUint8(0, BleConstants.cmdSetCanSignal);
+      byteData.setUint8(1, signalIndex);
+      byteData.setUint32(2, mapping.numericCanId, Endian.little);
+      byteData.setUint8(6, mapping.startByte);
+      byteData.setUint8(7, mapping.lengthBytes);
+      byteData.setUint8(8, mapping.isBigEndian ? 1 : 0);
+      byteData.setFloat32(9, mapping.multiplier, Endian.little);
+      byteData.setFloat32(13, mapping.offset, Endian.little);
+
+      await _commandChar!.write(byteData.buffer.asUint8List(), withoutResponse: true);
+      debugPrint('[BLE] Sent CAN signal config for index $signalIndex (ID: ${mapping.canId})');
+      return true;
+    } catch (e) {
+      debugPrint('[BLE] Failed to send CAN signal config: $e');
+      return false;
+    }
+  }
+
+  Future<bool> sendCanProfileMode({required bool isCustomActive}) async {
+    if (_mockMode) {
+      debugPrint('[BLE MOCK] Set CAN profile mode to: $isCustomActive');
+      return true;
+    }
+    if (_commandChar == null) return false;
+
+    try {
+      final bytes = [BleConstants.cmdSetCanProfileMode, isCustomActive ? 1 : 0];
+      await _commandChar!.write(bytes, withoutResponse: true);
+      debugPrint('[BLE] Sent CAN profile mode command: $isCustomActive');
+      return true;
+    } catch (e) {
+      debugPrint('[BLE] Failed to send CAN profile mode command: $e');
+      return false;
+    }
+  }
+
+  Future<bool> uploadBikeProfile(BikeProfile profile) async {
+    if (profile.id == 'standard_obd2') {
+      return await sendCanProfileMode(isCustomActive: false);
+    }
+
+    bool success = true;
+    if (profile.rpmSignal != null) {
+      success &= await sendCanSignalConfig(
+        signalIndex: BleConstants.canSignalRpm,
+        mapping: profile.rpmSignal!,
+      );
+    }
+    if (profile.speedSignal != null) {
+      success &= await sendCanSignalConfig(
+        signalIndex: BleConstants.canSignalSpeed,
+        mapping: profile.speedSignal!,
+      );
+    }
+    if (profile.throttleSignal != null) {
+      success &= await sendCanSignalConfig(
+        signalIndex: BleConstants.canSignalThrottle,
+        mapping: profile.throttleSignal!,
+      );
+    }
+    if (profile.gearSignal != null) {
+      success &= await sendCanSignalConfig(
+        signalIndex: BleConstants.canSignalGear,
+        mapping: profile.gearSignal!,
+      );
+    }
+    if (profile.coolantSignal != null) {
+      success &= await sendCanSignalConfig(
+        signalIndex: BleConstants.canSignalCoolant,
+        mapping: profile.coolantSignal!,
+      );
+    }
+
+    success &= await sendCanProfileMode(isCustomActive: true);
+    return success;
   }
 
   // Built-in Demo / Simulation generator for UI testing without real bike

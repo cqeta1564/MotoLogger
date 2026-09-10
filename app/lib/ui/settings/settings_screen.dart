@@ -423,6 +423,7 @@ class SettingsScreen extends StatelessWidget {
                       CupertinoPageRoute(
                         builder: (context) => BikeProfilesScreen(
                           canProfileService: telemetryManager.canProfileService,
+                          telemetryManager: telemetryManager,
                         ),
                       ),
                     );

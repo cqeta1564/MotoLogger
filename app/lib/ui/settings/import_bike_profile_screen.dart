@@ -4,14 +4,17 @@ import 'package:flutter/services.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/can_profile.dart';
 import '../../services/can_profile_service.dart';
+import '../../services/telemetry_manager.dart';
 
 /// Screen for pasting, validating, and activating an AI-generated CAN mapping profile.
 class ImportBikeProfileScreen extends StatefulWidget {
   final CanProfileService canProfileService;
+  final TelemetryManager? telemetryManager;
 
   const ImportBikeProfileScreen({
     super.key,
     required this.canProfileService,
+    this.telemetryManager,
   });
 
   @override
@@ -86,6 +89,9 @@ class _ImportBikeProfileScreenState extends State<ImportBikeProfileScreen> {
     );
 
     await widget.canProfileService.saveAndActivateProfile(updatedProfile);
+    if (widget.telemetryManager != null) {
+      await widget.telemetryManager!.syncActiveProfileToEsp();
+    }
 
     if (!mounted) return;
 

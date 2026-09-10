@@ -119,6 +119,7 @@ class _BikeLearningScreenState extends State<BikeLearningScreen> {
       CupertinoPageRoute(
         builder: (context) => ImportBikeProfileScreen(
           canProfileService: widget.telemetryManager.canProfileService,
+          telemetryManager: widget.telemetryManager,
         ),
       ),
     );

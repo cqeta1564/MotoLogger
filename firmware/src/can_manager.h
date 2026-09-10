@@ -28,6 +28,14 @@ public:
     void updateObdQueries();
     ObdTelemetry getTelemetry();
 
+    // Motorcycle Custom CAN Profile (NVS Persistence & Real-Time TWAI decoding)
+    void setSignalConfig(uint8_t signal_id, const CanSignalConfig& cfg);
+    void setProfileActive(bool active);
+    void saveProfileToNvs();
+    void loadProfileFromNvs();
+    bool isCustomProfileActive() const { return custom_profile_.profile_active != 0; }
+    const EspBikeCanProfile& getProfile() const { return custom_profile_; }
+
     // Diagnostics & Statistics
     uint32_t getRxCount() const { return rx_count_; }
     uint32_t getTxCount() const { return tx_count_; }
@@ -44,10 +52,15 @@ private:
     ObdTelemetry obd_data_;
     portMUX_TYPE obd_mux_;
 
+    // Custom Motorcycle CAN Mapping Profile
+    EspBikeCanProfile custom_profile_;
+
     // OBD Request State Machine
     uint8_t current_pid_index_;
     uint32_t last_query_time_ms_;
 
+    void decodeCustomFrame(const twai_message_t& msg);
+    float decodeSignalValue(const CanSignalConfig& cfg, const uint8_t* payload, uint8_t dlc);
     void parseObdResponse(const twai_message_t& msg);
     void sendObdRequest(uint8_t pid);
     void calculateGear();

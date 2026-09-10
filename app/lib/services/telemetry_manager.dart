@@ -79,8 +79,13 @@ class TelemetryManager extends ChangeNotifier {
 
   void _initListeners() {
     _bleStateSub = bleService.stateStream.listen((state) {
-      if (state == BleConnectionState.connected && _mountingRollOffsetDeg != 0.0) {
-        bleService.sendTareOffset(_mountingRollOffsetDeg);
+      if (state == BleConnectionState.connected) {
+        if (_mountingRollOffsetDeg != 0.0) {
+          bleService.sendTareOffset(_mountingRollOffsetDeg);
+        }
+        if (canProfileService.isCustomProfileActive) {
+          bleService.uploadBikeProfile(canProfileService.activeProfile);
+        }
       }
       notifyListeners();
     });
@@ -294,6 +299,13 @@ class TelemetryManager extends ChangeNotifier {
   void resetFrictionEnvelope() {
     _frictionEnvelope.fillRange(0, 36, 0.15);
     notifyListeners();
+  }
+
+  /// Sync active motorcycle CAN profile to ESP32 unit over BLE
+  Future<bool> syncActiveProfileToEsp() async {
+    final success = await bleService.uploadBikeProfile(canProfileService.activeProfile);
+    notifyListeners();
+    return success;
   }
 
   @override

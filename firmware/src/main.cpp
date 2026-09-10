@@ -56,6 +56,35 @@ static void handleBleCommand(uint8_t cmd_id, const uint8_t* payload, size_t leng
             }
             break;
 
+        case 0x03: // Configure CAN signal mapping (saved to NVS)
+            if (payload && length >= 16) {
+                uint8_t signal_id = payload[0];
+                CanSignalConfig cfg;
+                memcpy(&cfg.can_id, &payload[1], 4);
+                cfg.start_byte = payload[5];
+                cfg.length_bytes = payload[6];
+                cfg.is_big_endian = payload[7];
+                cfg.is_active = 1;
+                memcpy(&cfg.multiplier, &payload[8], 4);
+                memcpy(&cfg.offset, &payload[12], 4);
+
+                g_can_mgr.setSignalConfig(signal_id, cfg);
+                Serial.printf("[BLE CMD] CAN signal %u configured and saved to NVS.\n", signal_id);
+            } else {
+                Serial.printf("[BLE CMD] Invalid payload length for CAN Signal Config: %u\n", length);
+            }
+            break;
+
+        case 0x04: // Set CAN profile active mode (1 = Custom profile, 0 = Standard OBD)
+            if (payload && length >= 1) {
+                bool active = (payload[0] != 0);
+                g_can_mgr.setProfileActive(active);
+                Serial.printf("[BLE CMD] CAN profile active mode: %s (saved to NVS)\n", active ? "CUSTOM" : "OBD");
+            } else {
+                Serial.printf("[BLE CMD] Invalid payload length for CAN Profile Mode: %u\n", length);
+            }
+            break;
+
         default:
             Serial.printf("[BLE CMD] Unknown command 0x%02X received.\n", cmd_id);
             break;
