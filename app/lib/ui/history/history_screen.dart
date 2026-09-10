@@ -40,6 +40,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
   HistorySortOption _sortOption = HistorySortOption.newest;
   String _searchQuery = '';
   bool _isImporting = false;
+  bool _isSelectionMode = false;
+  final Set<int> _selectedSessionIds = {};
+  bool _isExportingBulk = false;
+  List<RideSession> _cachedSessions = [];
 
   @override
   void initState() {
@@ -62,7 +66,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   void _refresh() {
     setState(() {
-      _sessionsFuture = widget.dbService.getAllSessions();
+      _sessionsFuture = widget.dbService.getAllSessions().then((sessions) {
+        if (mounted) {
+          setState(() {
+            _cachedSessions = sessions;
+          });
+        }
+        return sessions;
+      });
     });
   }
 
@@ -153,6 +164,122 @@ class _HistoryScreenState extends State<HistoryScreen> {
     }
   }
 
+  void _enterSelectionMode() {
+    setState(() {
+      _isSelectionMode = true;
+      _selectedSessionIds.clear();
+    });
+  }
+
+  void _exitSelectionMode() {
+    setState(() {
+      _isSelectionMode = false;
+      _selectedSessionIds.clear();
+    });
+  }
+
+  void _toggleSessionSelection(int id) {
+    setState(() {
+      if (_selectedSessionIds.contains(id)) {
+        _selectedSessionIds.remove(id);
+      } else {
+        _selectedSessionIds.add(id);
+      }
+    });
+  }
+
+  void _toggleSelectAll(List<RideSession> visibleSessions) {
+    setState(() {
+      if (_selectedSessionIds.length == visibleSessions.length) {
+        _selectedSessionIds.clear();
+      } else {
+        _selectedSessionIds.clear();
+        for (final s in visibleSessions) {
+          if (s.id != null) _selectedSessionIds.add(s.id!);
+        }
+      }
+    });
+  }
+
+  Future<void> _exportSelectedSessionsAsZip() async {
+    if (_selectedSessionIds.isEmpty || _isExportingBulk) return;
+    setState(() => _isExportingBulk = true);
+    try {
+      final path = await widget.dbService.exportMultipleSessionsPackageToZip(
+        sessionIds: _selectedSessionIds.toList(),
+      );
+      await Share.shareXFiles(
+        [XFile(path)],
+        text: 'MotoLogger Export ${_selectedSessionIds.length} jízd (.zip)',
+      );
+      _exitSelectionMode();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(backgroundColor: AppTheme.appleRed, content: Text('Chyba při hromadném exportu: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isExportingBulk = false);
+      }
+    }
+  }
+
+  Future<void> _exportAllSessionsAsZip(List<RideSession> sessions) async {
+    final validIds = sessions.map((s) => s.id).whereType<int>().toList();
+    if (validIds.isEmpty) return;
+
+    setState(() => _isExportingBulk = true);
+    try {
+      final path = await widget.dbService.exportMultipleSessionsPackageToZip(
+        sessionIds: validIds,
+        customTitle: 'MotoLogger_All_Sessions',
+      );
+      await Share.shareXFiles(
+        [XFile(path)],
+        text: 'MotoLogger Export všech jízd (${validIds.length})',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(backgroundColor: AppTheme.appleRed, content: Text('Chyba při exportu všech jízd: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isExportingBulk = false);
+      }
+    }
+  }
+
+  List<RideSession> _filterAndSortSessions(List<RideSession> sessions) {
+    var filtered = sessions.where((s) {
+      if (_searchQuery.trim().isEmpty) return true;
+      final q = _searchQuery.toLowerCase();
+      final titleMatch = s.title.toLowerCase().contains(q);
+      final dateMatch = _formatDateTime(s.startTime).toLowerCase().contains(q);
+      return titleMatch || dateMatch;
+    }).toList();
+
+    switch (_sortOption) {
+      case HistorySortOption.newest:
+        filtered.sort((a, b) => b.startTime.compareTo(a.startTime));
+        break;
+      case HistorySortOption.fastest:
+        filtered.sort((a, b) => b.topSpeedKmh.compareTo(a.topSpeedKmh));
+        break;
+      case HistorySortOption.maxLean:
+        filtered.sort((a, b) {
+          final maxA = max(a.maxLeanLeftDeg.abs(), a.maxLeanRightDeg.abs());
+          final maxB = max(b.maxLeanLeftDeg.abs(), b.maxLeanRightDeg.abs());
+          return maxB.compareTo(maxA);
+        });
+        break;
+    }
+    return filtered;
+  }
+
   Future<void> _showExportSheet(RideSession s) async {
     showCupertinoModalPopup<void>(
       context: context,
@@ -203,6 +330,29 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 Icon(Icons.table_chart_outlined, color: AppTheme.appleGreen, size: 20),
                 SizedBox(width: 8),
                 Text('Exportovat CSV (MoTeC i2, RaceRender)'),
+              ],
+            ),
+          ),
+          CupertinoActionSheetAction(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              try {
+                final path = await widget.dbService.exportSessionPackageToZip(s.id!);
+                await Share.shareXFiles([XFile(path)], text: 'MotoLogger Analytický balíček: ${s.title}');
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(backgroundColor: AppTheme.appleRed, content: Text('Chyba při exportu balíčku: $e')),
+                  );
+                }
+              }
+            },
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.folder_zip_outlined, color: AppTheme.applePurple, size: 20),
+                SizedBox(width: 8),
+                Text('Balíček pro MoTeC i2 a RaceRender (.zip)'),
               ],
             ),
           ),
@@ -273,25 +423,123 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final cachedFiltered = _filterAndSortSessions(_cachedSessions);
+
     return Scaffold(
       backgroundColor: const Color(0xFFF2F2F7),
       appBar: AppBar(
-        title: const Text('Historie jízd'),
-        actions: [
-          IconButton(
-            icon: _isImporting
-                ? const CupertinoActivityIndicator(radius: 10)
-                : const Icon(Icons.sd_card_outlined, size: 22),
-            tooltip: 'Importovat z MicroSD',
-            onPressed: _isImporting ? null : _importFromMicroSd,
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded, size: 22),
-            tooltip: 'Obnovit',
-            onPressed: _refresh,
-          ),
-        ],
+        leading: _isSelectionMode
+            ? CupertinoButton(
+                padding: EdgeInsets.zero,
+                onPressed: _exitSelectionMode,
+                child: const Text(
+                  'Hotovo',
+                  style: TextStyle(
+                    color: AppTheme.appleBlue,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 16,
+                  ),
+                ),
+              )
+            : null,
+        title: Text(_isSelectionMode ? 'Vybráno: ${_selectedSessionIds.length}' : 'Historie jízd'),
+        actions: _isSelectionMode
+            ? [
+                CupertinoButton(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  onPressed: () => _toggleSelectAll(cachedFiltered),
+                  child: Text(
+                    _selectedSessionIds.length == cachedFiltered.length && cachedFiltered.isNotEmpty
+                        ? 'Odznačit'
+                        : 'Vybrat vše',
+                    style: const TextStyle(
+                      color: AppTheme.appleBlue,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 15,
+                    ),
+                  ),
+                ),
+              ]
+            : [
+                IconButton(
+                  icon: _isImporting
+                      ? const CupertinoActivityIndicator(radius: 10)
+                      : const Icon(Icons.sd_card_outlined, size: 22),
+                  tooltip: 'Importovat z MicroSD',
+                  onPressed: _isImporting ? null : _importFromMicroSd,
+                ),
+                if (_cachedSessions.isNotEmpty) ...[
+                  IconButton(
+                    icon: _isExportingBulk
+                        ? const CupertinoActivityIndicator(radius: 10)
+                        : const Icon(Icons.archive_outlined, size: 22),
+                    tooltip: 'Exportovat vše do ZIP',
+                    onPressed: _isExportingBulk ? null : () => _exportAllSessionsAsZip(cachedFiltered),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.checklist_rounded, size: 22),
+                    tooltip: 'Vybrat jízdy',
+                    onPressed: _enterSelectionMode,
+                  ),
+                ],
+                IconButton(
+                  icon: const Icon(Icons.refresh_rounded, size: 22),
+                  tooltip: 'Obnovit',
+                  onPressed: _refresh,
+                ),
+              ],
       ),
+      bottomNavigationBar: _isSelectionMode
+          ? Container(
+              padding: EdgeInsets.only(
+                left: 16,
+                right: 16,
+                top: 12,
+                bottom: 12 + MediaQuery.of(context).padding.bottom,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: const Border(top: BorderSide(color: Color(0xFFE5E5EA), width: 1)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 8,
+                    offset: const Offset(0, -2),
+                  ),
+                ],
+              ),
+              child: SizedBox(
+                height: 54,
+                child: CupertinoButton(
+                  color: AppTheme.appleBlue,
+                  disabledColor: AppTheme.appleBlue.withValues(alpha: 0.35),
+                  borderRadius: BorderRadius.circular(14),
+                  padding: EdgeInsets.zero,
+                  onPressed: (_selectedSessionIds.isEmpty || _isExportingBulk)
+                      ? null
+                      : _exportSelectedSessionsAsZip,
+                  child: _isExportingBulk
+                      ? const CupertinoActivityIndicator(color: Colors.white)
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.folder_zip_outlined, color: Colors.white, size: 20),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Exportovat balíček (${_selectedSessionIds.length})',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                                fontFamily: '-apple-system',
+                              ),
+                            ),
+                          ],
+                        ),
+                ),
+              ),
+            )
+          : null,
       body: FutureBuilder<List<RideSession>>(
         future: _sessionsFuture,
         builder: (context, snapshot) {
@@ -337,6 +585,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
           }
 
           final sessions = snapshot.data ?? [];
+          _cachedSessions = sessions;
           final seasonStats = SeasonStats.fromSessions(sessions);
 
           if (sessions.isEmpty) {
@@ -416,31 +665,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
             );
           }
 
-          // Filter by search query
-          var filteredSessions = sessions.where((s) {
-            if (_searchQuery.trim().isEmpty) return true;
-            final q = _searchQuery.toLowerCase();
-            final titleMatch = s.title.toLowerCase().contains(q);
-            final dateMatch = _formatDateTime(s.startTime).toLowerCase().contains(q);
-            return titleMatch || dateMatch;
-          }).toList();
-
-          // Apply selected sorting
-          switch (_sortOption) {
-            case HistorySortOption.newest:
-              filteredSessions.sort((a, b) => b.startTime.compareTo(a.startTime));
-              break;
-            case HistorySortOption.fastest:
-              filteredSessions.sort((a, b) => b.topSpeedKmh.compareTo(a.topSpeedKmh));
-              break;
-            case HistorySortOption.maxLean:
-              filteredSessions.sort((a, b) {
-                final maxA = max(a.maxLeanLeftDeg.abs(), a.maxLeanRightDeg.abs());
-                final maxB = max(b.maxLeanLeftDeg.abs(), b.maxLeanRightDeg.abs());
-                return maxB.compareTo(maxA);
-              });
-              break;
-          }
+          final filteredSessions = _filterAndSortSessions(sessions);
 
           return ListView(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
@@ -526,15 +751,22 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Widget _buildSessionCard(RideSession s) {
+    final isSelected = s.id != null && _selectedSessionIds.contains(s.id);
+
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE5E5EA), width: 1),
+        border: Border.all(
+          color: isSelected ? AppTheme.appleBlue : const Color(0xFFE5E5EA),
+          width: isSelected ? 1.8 : 1,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
+            color: isSelected
+                ? AppTheme.appleBlue.withValues(alpha: 0.08)
+                : Colors.black.withValues(alpha: 0.03),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -546,6 +778,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
           onTap: () async {
+            if (_isSelectionMode) {
+              if (s.id != null) _toggleSessionSelection(s.id!);
+              return;
+            }
             await Navigator.push(
               context,
               CupertinoPageRoute(
@@ -557,15 +793,40 @@ class _HistoryScreenState extends State<HistoryScreen> {
             );
             _refresh();
           },
+          onLongPress: () {
+            if (!_isSelectionMode && s.id != null) {
+              _enterSelectionMode();
+              _toggleSessionSelection(s.id!);
+            }
+          },
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Header: Title + Duration pill + Chevron
+                // Header: (Selection indicator) + Title + Duration pill + Chevron/Checkmark
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
+                    if (_isSelectionMode) ...[
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 180),
+                        width: 24,
+                        height: 24,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: isSelected ? AppTheme.appleBlue : Colors.white,
+                          border: Border.all(
+                            color: isSelected ? AppTheme.appleBlue : const Color(0xFFC7C7CC),
+                            width: 2,
+                          ),
+                        ),
+                        child: isSelected
+                            ? const Icon(Icons.check_rounded, size: 16, color: Colors.white)
+                            : null,
+                      ),
+                      const SizedBox(width: 12),
+                    ],
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -617,10 +878,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    const Icon(
-                      Icons.chevron_right_rounded,
+                    Icon(
+                      _isSelectionMode
+                          ? (isSelected ? Icons.check_circle_rounded : Icons.radio_button_unchecked)
+                          : Icons.chevron_right_rounded,
                       size: 20,
-                      color: Color(0xFFC7C7CC),
+                      color: _isSelectionMode
+                          ? (isSelected ? AppTheme.appleBlue : const Color(0xFFC7C7CC))
+                          : const Color(0xFFC7C7CC),
                     ),
                   ],
                 ),
@@ -660,12 +925,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       ),
                     ),
                     // Quick share button
-                    IconButton(
-                      visualDensity: VisualDensity.compact,
-                      icon: const Icon(Icons.share_outlined, size: 18, color: AppTheme.appleMutedGray),
-                      tooltip: 'Exportovat data',
-                      onPressed: () => _showExportSheet(s),
-                    ),
+                    if (!_isSelectionMode)
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        icon: const Icon(Icons.share_outlined, size: 18, color: AppTheme.appleMutedGray),
+                        tooltip: 'Exportovat data',
+                        onPressed: () => _showExportSheet(s),
+                      ),
                   ],
                 ),
               ],

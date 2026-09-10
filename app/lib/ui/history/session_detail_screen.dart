@@ -544,6 +544,20 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
               ],
             ),
           ),
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _exportZipPackage();
+            },
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.folder_zip_outlined, color: AppTheme.applePurple, size: 20),
+                SizedBox(width: 8),
+                Text('Balíček pro MoTeC i2 a RaceRender (.zip)'),
+              ],
+            ),
+          ),
         ],
         cancelButton: CupertinoActionSheetAction(
           isDefaultAction: true,
@@ -552,6 +566,22 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _exportZipPackage() async {
+    try {
+      final path = await widget.dbService.exportSessionPackageToZip(widget.session.id!);
+      await Share.shareXFiles([XFile(path)], text: 'MotoLogger Analytický balíček: ${widget.session.title}');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: AppTheme.appleRed,
+            content: Text('Chyba při exportu balíčku: $e'),
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _exportGpx() async {
