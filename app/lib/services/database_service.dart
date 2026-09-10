@@ -4,6 +4,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 import '../models/session.dart';
 import '../models/fused_sample.dart';
+import '../models/can_profile.dart';
 
 class DatabaseService {
   static final DatabaseService instance = DatabaseService._internal();
@@ -209,5 +210,52 @@ class DatabaseService {
       return maps.first['value'] as String?;
     }
     return null;
+  }
+
+  // Bike CAN Mapping Profiles Storage
+  Future<void> _ensureBikeProfilesTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS bike_profiles (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        can_baudrate INTEGER NOT NULL,
+        signals_json TEXT NOT NULL,
+        raw_ai_json TEXT
+      )
+    ''');
+  }
+
+  Future<void> saveBikeProfile(BikeProfile profile) async {
+    final db = await database;
+    await _ensureBikeProfilesTable(db);
+    await db.insert(
+      'bike_profiles',
+      profile.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<List<BikeProfile>> getAllBikeProfiles() async {
+    final db = await database;
+    await _ensureBikeProfilesTable(db);
+    final List<Map<String, dynamic>> maps = await db.query('bike_profiles', orderBy: 'created_at DESC');
+    return maps.map((m) => BikeProfile.fromMap(m)).toList();
+  }
+
+  Future<BikeProfile?> getBikeProfileById(String id) async {
+    final db = await database;
+    await _ensureBikeProfilesTable(db);
+    final maps = await db.query('bike_profiles', where: 'id = ?', whereArgs: [id], limit: 1);
+    if (maps.isNotEmpty) {
+      return BikeProfile.fromMap(maps.first);
+    }
+    return null;
+  }
+
+  Future<void> deleteBikeProfile(String id) async {
+    final db = await database;
+    await _ensureBikeProfilesTable(db);
+    await db.delete('bike_profiles', where: 'id = ?', whereArgs: [id]);
   }
 }

@@ -8,11 +8,13 @@ import '../models/session.dart';
 import 'ble_service.dart';
 import 'gps_service.dart';
 import 'database_service.dart';
+import 'can_profile_service.dart';
 
 class TelemetryManager extends ChangeNotifier {
   final BleService bleService;
   final GpsService gpsService;
   final DatabaseService dbService;
+  final CanProfileService canProfileService;
 
   TelemetryPacket _latestPacket = TelemetryPacket.initial();
   Position? _latestPosition;
@@ -59,7 +61,8 @@ class TelemetryManager extends ChangeNotifier {
     required this.bleService,
     required this.gpsService,
     required this.dbService,
-  }) {
+    CanProfileService? canProfileService,
+  }) : canProfileService = canProfileService ?? CanProfileService(dbService: dbService) {
     _initListeners();
     _loadSavedMountingOffset();
   }

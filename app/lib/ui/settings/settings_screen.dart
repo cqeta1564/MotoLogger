@@ -6,6 +6,8 @@ import '../../core/constants/ble_constants.dart';
 import '../../services/telemetry_manager.dart';
 import '../../services/ble_service.dart';
 import 'tank_calibration_screen.dart';
+import 'bike_learning_screen.dart';
+import 'bike_profiles_screen.dart';
 
 /// Settings, BLE device connection, and sensor calibration screen.
 /// Follows authentic Apple iOS Inset Grouped Settings guidelines.
@@ -345,7 +347,149 @@ class SettingsScreen extends StatelessWidget {
 
               const SizedBox(height: 24),
 
-              // SECTION 3: Device Status
+              // SECTION 3: CAN Bus & Bike Profile
+              _buildSectionHeader('CAN SBĚRNICE & PROFIL MOTORKY'),
+              _buildInsetGroup([
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    Navigator.of(context).push(
+                      CupertinoPageRoute(
+                        fullscreenDialog: true,
+                        builder: (context) => BikeLearningScreen(
+                          telemetryManager: telemetryManager,
+                        ),
+                      ),
+                    );
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: AppTheme.appleBlue.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(
+                            Icons.auto_awesome,
+                            color: AppTheme.appleBlue,
+                            size: 24,
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Naučit se motorku (AI Asistent)',
+                                style: TextStyle(
+                                  color: AppTheme.appleBlack,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: -0.3,
+                                  fontFamily: '-apple-system',
+                                ),
+                              ),
+                              SizedBox(height: 2),
+                              Text(
+                                'Záznam jízdy, export pro AI a konfigurace',
+                                style: TextStyle(
+                                  color: AppTheme.appleMutedGray,
+                                  fontSize: 12.5,
+                                  fontFamily: '-apple-system',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(
+                          CupertinoIcons.chevron_right,
+                          color: Color(0xFFC7C7CC),
+                          size: 18,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const Divider(color: Color(0xFFE5E5EA), height: 1, indent: 16, endIndent: 16),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    Navigator.of(context).push(
+                      CupertinoPageRoute(
+                        builder: (context) => BikeProfilesScreen(
+                          canProfileService: telemetryManager.canProfileService,
+                        ),
+                      ),
+                    );
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: AppTheme.applePurple.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(
+                            Icons.tune_rounded,
+                            color: AppTheme.applePurple,
+                            size: 22,
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Profily motocyklů & CAN',
+                                style: TextStyle(
+                                  color: AppTheme.appleBlack,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: -0.3,
+                                  fontFamily: '-apple-system',
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Aktivní: ${telemetryManager.canProfileService.activeProfile.name}',
+                                style: TextStyle(
+                                  color: telemetryManager.canProfileService.isCustomProfileActive
+                                      ? AppTheme.appleGreen
+                                      : AppTheme.appleMutedGray,
+                                  fontSize: 12.5,
+                                  fontWeight: telemetryManager.canProfileService.isCustomProfileActive
+                                      ? FontWeight.w600
+                                      : FontWeight.w400,
+                                  fontFamily: '-apple-system',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(
+                          CupertinoIcons.chevron_right,
+                          color: Color(0xFFC7C7CC),
+                          size: 18,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ]),
+
+              const SizedBox(height: 24),
+
+              // SECTION 4: Device Status
               _buildSectionHeader('STAV ZAŘÍZENÍ'),
               _buildInsetGroup([
                 _buildSpecTile('Stav telemetrie', isConnected ? 'Aktivní přenos' : 'Čeká na připojení'),
