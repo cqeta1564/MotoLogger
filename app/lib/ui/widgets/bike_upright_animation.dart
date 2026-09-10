@@ -278,22 +278,6 @@ class _BikeUprightPainter extends CustomPainter {
       )..layout();
       badgePainter.paint(canvas, Offset(cx - badgePainter.width / 2, groundY - 128));
     }
-
-    // 6. Subtle uppercase instruction caption at bottom (matching PhonePlacementAnimation)
-    final labelPainter = TextPainter(
-      text: const TextSpan(
-        text: 'POSTAVTE MOTOCYKL PŘESNĚ SVISLE (0°)',
-        style: TextStyle(
-          fontFamily: '.SF Pro Text',
-          fontSize: 10,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.8,
-          color: Color(0xFF8E8E93),
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    labelPainter.paint(canvas, Offset(cx - labelPainter.width / 2, size.height - 18));
   }
 
   @override
