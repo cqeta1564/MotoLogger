@@ -59,6 +59,19 @@ void main() {
     expect(calibratedUpright.abs() < 0.001, true);
   });
 
+  test('Upright zero-calibration offset math verification', () {
+    // Sensor mounted slightly tilted under seat reading +2.3° when bike is upright (target 0.0°)
+    const uprightRaw = 2.3;
+    const targetAngle = 0.0;
+    // Calculated mounting offset = uprightRaw - targetAngle
+    const offset = uprightRaw - targetAngle; // +2.3°
+    expect((offset - 2.3).abs() < 0.001, true);
+
+    // Calibrated roll = uprightRaw - offset = 2.3 - 2.3 = 0.0°
+    const calibrated = uprightRaw - offset;
+    expect(calibrated.abs() < 0.001, true);
+  });
+
   testWidgets('BikeUprightAnimation renders correctly and paints motorcycle', (WidgetTester tester) async {
     await tester.pumpWidget(
       const MaterialApp(

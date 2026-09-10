@@ -25,9 +25,9 @@ class TankCalibrationScreen extends StatefulWidget {
 
 class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
   int _selectedModeIndex = 0; // 0: Na bočním stojánku, 1: Svisle na stojanu
-  double _phoneRollDeg = -12.4;
+  double _phoneRollDeg = 0.0;
   bool _isStandStable = false;
-  bool _isUprightStable = true;
+  bool _isUprightStable = false;
   bool _isCalibrating = false;
   bool _showSuccessBanner = false;
 
@@ -60,7 +60,7 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
     setState(() => _isCalibrating = true);
     HapticFeedback.mediumImpact();
 
-    await widget.telemetryManager.tareZero();
+    await widget.telemetryManager.calibrateUpright();
 
     if (!mounted) return;
 

@@ -75,7 +75,10 @@ class TelemetryManager extends ChangeNotifier {
   }
 
   void _initListeners() {
-    _bleStateSub = bleService.stateStream.listen((_) {
+    _bleStateSub = bleService.stateStream.listen((state) {
+      if (state == BleConnectionState.connected && _mountingRollOffsetDeg != 0.0) {
+        bleService.sendTareOffset(_mountingRollOffsetDeg);
+      }
       notifyListeners();
     });
 
@@ -235,17 +238,10 @@ class TelemetryManager extends ChangeNotifier {
     await dbService.insertSampleBatch(toWrite);
   }
 
-  Future<void> tareZero() async {
-    await bleService.sendTareZero();
-  }
+  Future<void> _applyMountingOffset(double offsetDeg) async {
+    _mountingRollOffsetDeg = offsetDeg;
 
-  /// Calibrate mounting zero offset using the smartphone placed flat on fuel tank cap
-  /// [phoneRollDeg] is the real motorcycle tilt angle on the side stand measured by the phone.
-  Future<void> calibrateFromTank({required double phoneRollDeg}) async {
-    // Mounting offset is difference between sensor raw reading and true motorcycle tilt:
-    _mountingRollOffsetDeg = _latestRawLeanDeg - phoneRollDeg;
-
-    // Persist to local database
+    // Persist to local SQLite database
     await dbService.saveSetting('mounting_roll_offset', _mountingRollOffsetDeg.toStringAsFixed(2));
 
     // Send offset to ESP unit via BLE
@@ -259,17 +255,37 @@ class TelemetryManager extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Unified calibration method:
+  /// Sets mounting offset such that: (calibratedRoll == targetAngleDeg)
+  /// [targetAngleDeg] is the real motorcycle lean angle:
+  /// - For side-stand calibration: angle measured by smartphone on tank cap.
+  /// - For upright calibration: 0.0° (vertical).
+  Future<void> calibrateMountingOffset({required double targetAngleDeg}) async {
+    final offset = _latestRawLeanDeg - targetAngleDeg;
+    await _applyMountingOffset(offset);
+  }
+
+  /// Calibrate mounting zero offset using the smartphone placed flat on fuel tank cap
+  /// [phoneRollDeg] is the real motorcycle tilt angle on the side stand measured by the phone.
+  Future<void> calibrateFromTank({required double phoneRollDeg}) async {
+    await calibrateMountingOffset(targetAngleDeg: phoneRollDeg);
+  }
+
+  /// Calibrate mounting zero offset with motorcycle held upright (0.0°)
+  Future<void> calibrateUpright() async {
+    await calibrateMountingOffset(targetAngleDeg: 0.0);
+    await bleService.sendTareZero();
+  }
+
+  /// Backward compatible alias for upright tare
+  Future<void> tareZero() async {
+    await calibrateUpright();
+  }
+
   /// Reset mounting offset back to factory default 0.0°
   Future<void> resetMountingOffset() async {
-    _mountingRollOffsetDeg = 0.0;
-    await dbService.saveSetting('mounting_roll_offset', '0.0');
-    await bleService.sendTareOffset(0.0);
-
-    final calibratedRoll = _latestRawLeanDeg;
-    _latestPacket = _latestPacket.copyWith(leanAngleDeg: calibratedRoll);
-
-    resetPeaks();
-    notifyListeners();
+    await _applyMountingOffset(0.0);
+    await bleService.sendTareZero();
   }
 
   void resetFrictionEnvelope() {
