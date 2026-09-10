@@ -17,8 +17,10 @@ public:
     bool begin();
     bool update(ImuSample& sample);
     void tareZero();
-    void setMountingOffsetDeg(float offset_deg);
-    float getMountingOffsetDeg() const { return roll_offset_deg_; }
+    void setRollOffset(float offset_deg);
+    float getRollOffset() const { return roll_offset_deg_; }
+    void saveCalibrationToNvs();
+    void loadCalibrationFromNvs();
     ImuSample getLatestSample();
 
     bool isReady() const { return is_initialized_; }

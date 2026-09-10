@@ -45,12 +45,14 @@ static void handleBleCommand(uint8_t cmd_id, const uint8_t* payload, size_t leng
             Serial.println("[BLE CMD] IMU Zero-Tare calibrated from mobile app!");
             break;
 
-        case 0x02: // Tare with mounting offset (int16_t tenths of degree)
+        case 0x02: // Tare with mounting roll offset in tenths of a degree (int16_t, little-endian)
             if (payload && length >= 2) {
                 int16_t offset_x10 = static_cast<int16_t>(payload[0] | (payload[1] << 8));
-                float offset_deg = offset_x10 / 10.0f;
-                g_imu_mgr.setMountingOffsetDeg(offset_deg);
-                Serial.printf("[BLE CMD] IMU mounting offset set to: %.2f deg\n", offset_deg);
+                float offset_deg = static_cast<float>(offset_x10) / 10.0f;
+                g_imu_mgr.setRollOffset(offset_deg);
+                Serial.printf("[BLE CMD] Tare mounting offset calibrated: %.2f deg (saved to NVS)\n", offset_deg);
+            } else {
+                Serial.printf("[BLE CMD] Invalid payload length for Tare Offset: %u\n", length);
             }
             break;
 
@@ -77,7 +79,7 @@ void setup() {
     delay(500);
     Serial.println("\n==============================================");
     Serial.println("  MotoLogger ESP32-S3 Telemetry Starting...   ");
-    Serial.println("  MotoLogger + BNO085 + BLE Android/CarPlay");
+    Serial.println("  MotoLogger v3.4 + BNO085 + BLE Android/CarPlay");
     Serial.println("==============================================\n");
 
     // 4. Initialize CAN / TWAI Subsystem (500 kbps, Listen-Only default)

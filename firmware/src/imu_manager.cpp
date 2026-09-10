@@ -1,5 +1,6 @@
 #include "imu_manager.h"
 #include <math.h>
+#include <Preferences.h>
 
 static constexpr float RAD_TO_DEG_CONST = 57.29577951308232f;
 static constexpr float GRAVITY_CONST    = 9.80665f;
@@ -39,6 +40,9 @@ bool ImuManager::begin() {
         return false;
     }
 
+    // 6. Load saved calibration offsets from NVS
+    loadCalibrationFromNvs();
+
     is_initialized_ = true;
     return true;
 }
@@ -67,12 +71,40 @@ void ImuManager::tareZero() {
     roll_offset_deg_ = current_sample_.roll_deg + roll_offset_deg_;
     pitch_offset_deg_ = current_sample_.pitch_deg + pitch_offset_deg_;
     portEXIT_CRITICAL(&imu_mux_);
+    saveCalibrationToNvs();
 }
 
-void ImuManager::setMountingOffsetDeg(float offset_deg) {
+void ImuManager::setRollOffset(float offset_deg) {
     portENTER_CRITICAL(&imu_mux_);
     roll_offset_deg_ = offset_deg;
     portEXIT_CRITICAL(&imu_mux_);
+    saveCalibrationToNvs();
+}
+
+void ImuManager::saveCalibrationToNvs() {
+    Preferences prefs;
+    if (prefs.begin("motologger", false)) {
+        prefs.putFloat("roll_offset", roll_offset_deg_);
+        prefs.putFloat("pitch_offset", pitch_offset_deg_);
+        prefs.end();
+        Serial.printf("[IMU] Calibration saved to NVS: roll=%.2f deg, pitch=%.2f deg\n", 
+                      roll_offset_deg_, pitch_offset_deg_);
+    } else {
+        Serial.println("[IMU] Failed to open NVS for writing calibration!");
+    }
+}
+
+void ImuManager::loadCalibrationFromNvs() {
+    Preferences prefs;
+    if (prefs.begin("motologger", true)) {
+        roll_offset_deg_ = prefs.getFloat("roll_offset", 0.0f);
+        pitch_offset_deg_ = prefs.getFloat("pitch_offset", 0.0f);
+        prefs.end();
+        Serial.printf("[IMU] Calibration loaded from NVS: roll=%.2f deg, pitch=%.2f deg\n", 
+                      roll_offset_deg_, pitch_offset_deg_);
+    } else {
+        Serial.println("[IMU] No previous calibration in NVS (using default 0.0 deg).");
+    }
 }
 
 ImuSample ImuManager::getLatestSample() {
