@@ -51,57 +51,52 @@ class _GpsTrackMapCardState extends State<GpsTrackMapCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header & Mode Toggle
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'TRASA JÍZDY (GPS)',
-                    style: TextStyle(
-                      color: AppTheme.appleBlack,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.5,
-                      fontFamily: '-apple-system',
-                    ),
-                  ),
-                  SizedBox(height: 2),
-                  Text(
-                    'Barevná telemetrie v zatáčkách',
-                    style: TextStyle(
-                      color: AppTheme.appleMutedGray,
-                      fontSize: 12,
-                      fontFamily: '-apple-system',
-                    ),
-                  ),
-                ],
-              ),
-              if (validSamples.length >= 2)
-                CupertinoSlidingSegmentedControl<GpsTrackColorMode>(
-                  groupValue: _mode,
-                  children: const {
-                    GpsTrackColorMode.lean: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      child: Text('Klopení', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                    ),
-                    GpsTrackColorMode.speed: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      child: Text('Rychlost', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                    ),
-                  },
-                  onValueChanged: (val) {
-                    if (val != null) {
-                      setState(() {
-                        _mode = val;
-                      });
-                    }
-                  },
-                ),
-            ],
+          // Header & Subtitle
+          const Text(
+            'TRASA JÍZDY (GPS)',
+            style: TextStyle(
+              color: AppTheme.appleBlack,
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.5,
+              fontFamily: '-apple-system',
+            ),
           ),
+          const SizedBox(height: 2),
+          const Text(
+            'Barevná telemetrie v zatáčkách',
+            style: TextStyle(
+              color: AppTheme.appleMutedGray,
+              fontSize: 12,
+              fontFamily: '-apple-system',
+            ),
+          ),
+          if (validSamples.length >= 2) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: CupertinoSlidingSegmentedControl<GpsTrackColorMode>(
+                groupValue: _mode,
+                children: const {
+                  GpsTrackColorMode.lean: Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: Text('Klopení', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                  ),
+                  GpsTrackColorMode.speed: Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: Text('Rychlost', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                  ),
+                },
+                onValueChanged: (val) {
+                  if (val != null) {
+                    setState(() {
+                      _mode = val;
+                    });
+                  }
+                },
+              ),
+            ),
+          ],
 
           const SizedBox(height: 16),
 
@@ -238,8 +233,10 @@ class _GpsTrackMapCardState extends State<GpsTrackMapCard> {
   }
 
   Widget _buildLeanLegend() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Wrap(
+      alignment: WrapAlignment.spaceBetween,
+      spacing: 8,
+      runSpacing: 4,
       children: [
         _buildLegendItem(const Color(0xFF8E8E93), 'Přímá (<15°)'),
         _buildLegendItem(AppTheme.appleBlue, 'Mírná (15–35°)'),
