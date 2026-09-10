@@ -65,6 +65,12 @@ class TelemetryManager extends ChangeNotifier {
   }) : canProfileService = canProfileService ?? CanProfileService(dbService: dbService) {
     _initListeners();
     _loadSavedMountingOffset();
+    _initPairedDevice();
+  }
+
+  Future<void> _initPairedDevice() async {
+    await bleService.initPairedDevice(dbService: dbService);
+    notifyListeners();
   }
 
   Future<void> _loadSavedMountingOffset() async {
@@ -306,6 +312,22 @@ class TelemetryManager extends ChangeNotifier {
     final success = await bleService.uploadBikeProfile(canProfileService.activeProfile);
     notifyListeners();
     return success;
+  }
+
+  // Paired ESP hardware management
+  String? get pairedDeviceId => bleService.pairedDeviceId;
+  String? get pairedDeviceName => bleService.pairedDeviceName;
+  bool get isPaired => bleService.isPaired;
+
+  Future<bool> pairDevice(DiscoveredBleDevice device) async {
+    final success = await bleService.pairDevice(device, dbService: dbService);
+    notifyListeners();
+    return success;
+  }
+
+  Future<void> unpairDevice() async {
+    await bleService.unpairDevice(dbService: dbService);
+    notifyListeners();
   }
 
   @override

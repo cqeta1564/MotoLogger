@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/constants/ble_constants.dart';
 import '../../services/telemetry_manager.dart';
 import '../../services/ble_service.dart';
 import 'tank_calibration_screen.dart';
 import 'bike_learning_screen.dart';
 import 'bike_profiles_screen.dart';
+import 'esp_pairing_screen.dart';
 
 /// Settings, BLE device connection, and sensor calibration screen.
 /// Follows authentic Apple iOS Inset Grouped Settings guidelines.
@@ -36,6 +36,7 @@ class SettingsScreen extends StatelessWidget {
               // SECTION 1: Hardware Connection
               _buildSectionHeader('PŘIPOJENÍ HARDWARE'),
               _buildInsetGroup([
+                // Current device connection tile
                 Padding(
                   padding: const EdgeInsets.all(16),
                   child: Row(
@@ -66,9 +67,10 @@ class SettingsScreen extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
-                              BleConstants.deviceName,
-                              style: TextStyle(
+                            Text(
+                              telemetryManager.pairedDeviceName ??
+                                  (telemetryManager.isPaired ? 'MotoLogger' : 'Nespárováno'),
+                              style: const TextStyle(
                                 color: AppTheme.appleBlack,
                                 fontSize: 16,
                                 fontWeight: FontWeight.w700,
@@ -92,21 +94,28 @@ class SettingsScreen extends StatelessWidget {
                                   ),
                                 ),
                                 const SizedBox(width: 6),
-                                Text(
-                                  isConnected
-                                      ? 'Připojeno'
-                                      : isScanning
-                                          ? 'Vyhledávání...'
-                                          : 'Odpojeno',
-                                  style: TextStyle(
-                                    color: isConnected
-                                        ? AppTheme.appleGreen
+                                Expanded(
+                                  child: Text(
+                                    isConnected
+                                        ? (telemetryManager.pairedDeviceId != null
+                                            ? 'Připojeno (${telemetryManager.pairedDeviceId})'
+                                            : 'Připojeno')
                                         : isScanning
-                                            ? AppTheme.appleOrange
-                                            : AppTheme.appleMutedGray,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    fontFamily: '-apple-system',
+                                            ? 'Vyhledávání...'
+                                            : (telemetryManager.isPaired
+                                                ? 'Odpojeno'
+                                                : 'Žádná spárovaná jednotka'),
+                                    style: TextStyle(
+                                      color: isConnected
+                                          ? AppTheme.appleGreen
+                                          : isScanning
+                                              ? AppTheme.appleOrange
+                                              : AppTheme.appleMutedGray,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      fontFamily: '-apple-system',
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
                               ],
@@ -114,30 +123,195 @@ class SettingsScreen extends StatelessWidget {
                           ],
                         ),
                       ),
-                      CupertinoButton(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                        color: isConnected ? const Color(0xFFF2F2F7) : AppTheme.appleBlue,
-                        borderRadius: BorderRadius.circular(20),
-                        onPressed: () {
-                          if (isConnected) {
-                            ble.disconnect();
-                          } else {
-                            ble.startScanAndAutoConnect();
-                          }
-                        },
-                        child: Text(
-                          isConnected ? 'Odpojit' : 'Připojit',
-                          style: TextStyle(
-                            color: isConnected ? AppTheme.appleRed : Colors.white,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            fontFamily: '-apple-system',
+                      if (telemetryManager.isPaired || isConnected)
+                        CupertinoButton(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                          color: isConnected ? const Color(0xFFF2F2F7) : AppTheme.appleBlue,
+                          borderRadius: BorderRadius.circular(20),
+                          onPressed: () {
+                            if (isConnected) {
+                              ble.disconnect();
+                            } else {
+                              ble.startScanAndAutoConnect();
+                            }
+                          },
+                          child: Text(
+                            isConnected ? 'Odpojit' : 'Připojit',
+                            style: TextStyle(
+                              color: isConnected ? AppTheme.appleRed : Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              fontFamily: '-apple-system',
+                            ),
+                          ),
+                        )
+                      else
+                        CupertinoButton(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                          color: AppTheme.appleBlue,
+                          borderRadius: BorderRadius.circular(20),
+                          onPressed: () {
+                            Navigator.of(context).push(
+                              CupertinoPageRoute(
+                                fullscreenDialog: true,
+                                builder: (context) => EspPairingScreen(
+                                  telemetryManager: telemetryManager,
+                                ),
+                              ),
+                            );
+                          },
+                          child: const Text(
+                            'Spárovat',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              fontFamily: '-apple-system',
+                            ),
                           ),
                         ),
-                      ),
                     ],
                   ),
                 ),
+
+                // Pair new unit tile
+                const Divider(color: Color(0xFFE5E5EA), height: 1, indent: 16, endIndent: 16),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    Navigator.of(context).push(
+                      CupertinoPageRoute(
+                        fullscreenDialog: true,
+                        builder: (context) => EspPairingScreen(
+                          telemetryManager: telemetryManager,
+                        ),
+                      ),
+                    );
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: AppTheme.appleBlue.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(
+                            Icons.phonelink_ring_rounded,
+                            color: AppTheme.appleBlue,
+                            size: 18,
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Text(
+                            telemetryManager.isPaired
+                                ? 'Spárovat jinou jednotku'
+                                : 'Vyhledat a spárovat jednotku ESP',
+                            style: const TextStyle(
+                              color: AppTheme.appleBlack,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w500,
+                              letterSpacing: -0.2,
+                              fontFamily: '-apple-system',
+                            ),
+                          ),
+                        ),
+                        const Icon(
+                          CupertinoIcons.chevron_right,
+                          color: Color(0xFFC7C7CC),
+                          size: 16,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // Unpair device tile (if currently paired)
+                if (telemetryManager.isPaired) ...[
+                  const Divider(color: Color(0xFFE5E5EA), height: 1, indent: 16, endIndent: 16),
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () async {
+                      HapticFeedback.lightImpact();
+                      final confirmed = await showCupertinoDialog<bool>(
+                        context: context,
+                        builder: (ctx) => CupertinoAlertDialog(
+                          title: const Text('Zrušit spárování jednotky?'),
+                          content: Text(
+                            'Jednotka ${telemetryManager.pairedDeviceName ?? "MotoLogger"} bude zapomenuta. Aplikace se k ní již nebude automaticky připojovat.',
+                          ),
+                          actions: [
+                            CupertinoDialogAction(
+                              isDefaultAction: true,
+                              onPressed: () => Navigator.of(ctx).pop(false),
+                              child: const Text('Ponechat'),
+                            ),
+                            CupertinoDialogAction(
+                              isDestructiveAction: true,
+                              onPressed: () => Navigator.of(ctx).pop(true),
+                              child: const Text('Zrušit spárování'),
+                            ),
+                          ],
+                        ),
+                      );
+
+                      if (confirmed != true) return;
+
+                      HapticFeedback.mediumImpact();
+                      await telemetryManager.unpairDevice();
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          behavior: SnackBarBehavior.floating,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          backgroundColor: const Color(0xFF1C1C1E),
+                          content: const Text(
+                            'Spárování jednotky bylo zrušeno.',
+                            style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+                          ),
+                        ),
+                      );
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: AppTheme.appleRed.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(
+                              Icons.link_off_rounded,
+                              color: AppTheme.appleRed,
+                              size: 18,
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          const Expanded(
+                            child: Text(
+                              'Zrušit spárování jednotky',
+                              style: TextStyle(
+                                color: AppTheme.appleRed,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                                letterSpacing: -0.2,
+                                fontFamily: '-apple-system',
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+
                 const Divider(color: Color(0xFFE5E5EA), height: 1, indent: 16, endIndent: 16),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),

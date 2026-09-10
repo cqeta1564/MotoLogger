@@ -11,6 +11,7 @@ class DatabaseService {
   static Database? _database;
 
   DatabaseService._internal();
+  DatabaseService.forTesting();
 
   Future<Database> get database async {
     if (_database != null) return _database!;
@@ -210,6 +211,21 @@ class DatabaseService {
       return maps.first['value'] as String?;
     }
     return null;
+  }
+
+  Future<void> removeSetting(String key) async {
+    final db = await database;
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )
+    ''');
+    await db.delete(
+      'settings',
+      where: 'key = ?',
+      whereArgs: [key],
+    );
   }
 
   // Bike CAN Mapping Profiles Storage

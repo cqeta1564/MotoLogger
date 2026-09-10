@@ -6,12 +6,44 @@ import '../core/constants/ble_constants.dart';
 import '../models/telemetry_packet.dart';
 import '../models/can_profile.dart';
 
+import 'database_service.dart';
+
 enum BleConnectionState {
   disconnected,
   scanning,
   connecting,
   connected,
   error
+}
+
+/// Discovered BLE device representation for pairing and UI display.
+class DiscoveredBleDevice {
+  final String id;
+  final String name;
+  final int rssi;
+  final BluetoothDevice? device;
+  final bool isMotoLogger;
+
+  const DiscoveredBleDevice({
+    required this.id,
+    required this.name,
+    required this.rssi,
+    this.device,
+    this.isMotoLogger = false,
+  });
+
+  /// Approximate signal strength percentage (0 - 100%)
+  int get signalStrengthPercent {
+    return ((rssi + 100) * (100 / 60)).round().clamp(0, 100);
+  }
+
+  /// Signal bars from 1 to 4 based on RSSI dBm
+  int get signalBars {
+    if (rssi >= -60) return 4;
+    if (rssi >= -75) return 3;
+    if (rssi >= -85) return 2;
+    return 1;
+  }
 }
 
 class BleService {
@@ -27,16 +59,50 @@ class BleService {
   Stream<TelemetryPacket> get telemetryStream => _telemetryController.stream;
   BleConnectionState get state => _state;
 
+  // Paired device persistence
+  String? _pairedDeviceId;
+  String? _pairedDeviceName;
+  String? get pairedDeviceId => _pairedDeviceId;
+  String? get pairedDeviceName => _pairedDeviceName;
+  bool get isPaired => _pairedDeviceId != null && _pairedDeviceId!.isNotEmpty;
+
+  // Device discovery scanning
+  bool _isDiscovering = false;
+  bool get isDiscovering => _isDiscovering;
+  final List<DiscoveredBleDevice> _discoveredDevices = [];
+  final _discoveredDevicesController = StreamController<List<DiscoveredBleDevice>>.broadcast();
+  Stream<List<DiscoveredBleDevice>> get discoveredDevicesStream => _discoveredDevicesController.stream;
+  List<DiscoveredBleDevice> get discoveredDevices => List.unmodifiable(_discoveredDevices);
+
   StreamSubscription? _scanSubscription;
+  StreamSubscription? _discoveryScanSubscription;
   StreamSubscription? _notifySubscription;
   StreamSubscription? _connectionSubscription;
   Timer? _mockTimer;
   bool _mockMode = false;
   bool get isMockMode => _mockMode;
 
+  final List<Timer> _mockScanTimers = [];
+
   void _setState(BleConnectionState newState) {
     _state = newState;
     _stateController.add(_state);
+  }
+
+  /// Initialize paired device identity from local database
+  Future<void> initPairedDevice({required DatabaseService dbService}) async {
+    try {
+      final savedId = await dbService.getSetting('paired_device_id');
+      final savedName = await dbService.getSetting('paired_device_name');
+      if (savedId != null && savedId.isNotEmpty) {
+        _pairedDeviceId = savedId;
+        _pairedDeviceName = savedName;
+        debugPrint('[BLE] Loaded paired device: $_pairedDeviceName ($_pairedDeviceId)');
+      }
+      _stateController.add(_state);
+    } catch (e) {
+      debugPrint('[BLE] Error loading paired device: $e');
+    }
   }
 
   Future<void> startScanAndAutoConnect() async {
@@ -61,8 +127,13 @@ class BleService {
 
       _scanSubscription = FlutterBluePlus.scanResults.listen((results) async {
         for (ScanResult r in results) {
-          if (r.device.platformName == BleConstants.deviceName ||
-              r.advertisementData.serviceUuids.contains(Guid(BleConstants.serviceUuid))) {
+          final deviceId = r.device.remoteId.str.toLowerCase();
+          final isTargetDevice = (_pairedDeviceId != null && _pairedDeviceId!.isNotEmpty)
+              ? (deviceId == _pairedDeviceId!.toLowerCase())
+              : (r.device.platformName == BleConstants.deviceName ||
+                  r.advertisementData.serviceUuids.contains(Guid(BleConstants.serviceUuid)));
+
+          if (isTargetDevice) {
             debugPrint('[BLE] Found MotoLogger device: ${r.device.remoteId}');
             await FlutterBluePlus.stopScan();
             await connect(r.device);
@@ -74,6 +145,154 @@ class BleService {
       debugPrint('[BLE] Scan error: $e');
       _setState(BleConnectionState.error);
     }
+  }
+
+  /// Start searching for all nearby BLE devices for pairing
+  Future<void> startDiscoveryScan() async {
+    if (_isDiscovering) return;
+    _isDiscovering = true;
+    _discoveredDevices.clear();
+    _discoveredDevicesController.add(List.unmodifiable(_discoveredDevices));
+
+    for (final t in _mockScanTimers) {
+      t.cancel();
+    }
+    _mockScanTimers.clear();
+
+    if (_mockMode) {
+      // In mock mode, simulate realistic MotoLogger and peripheral BLE discovery
+      _mockScanTimers.add(Timer(const Duration(milliseconds: 300), () {
+        if (!_isDiscovering) return;
+        _discoveredDevices.add(const DiscoveredBleDevice(
+          id: 'C4:DE:E2:81:4A:12',
+          name: 'MotoLogger-ESP32 (Vpředu)',
+          rssi: -54,
+          isMotoLogger: true,
+        ));
+        _discoveredDevicesController.add(List.unmodifiable(_discoveredDevices));
+      }));
+
+      _mockScanTimers.add(Timer(const Duration(milliseconds: 700), () {
+        if (!_isDiscovering) return;
+        _discoveredDevices.add(const DiscoveredBleDevice(
+          id: 'E8:9F:6D:32:B1:09',
+          name: 'MotoLogger-ESP32 #2',
+          rssi: -76,
+          isMotoLogger: true,
+        ));
+        _discoveredDevicesController.add(List.unmodifiable(_discoveredDevices));
+      }));
+
+      _mockScanTimers.add(Timer(const Duration(milliseconds: 1100), () {
+        if (!_isDiscovering) return;
+        _discoveredDevices.add(const DiscoveredBleDevice(
+          id: 'F0:17:88:AC:20:94',
+          name: 'OBDII-CAN-Link',
+          rssi: -84,
+          isMotoLogger: false,
+        ));
+        _discoveredDevicesController.add(List.unmodifiable(_discoveredDevices));
+      }));
+      return;
+    }
+
+    try {
+      if (await FlutterBluePlus.isSupported == false) {
+        debugPrint('[BLE] Bluetooth not supported on this device.');
+        _isDiscovering = false;
+        return;
+      }
+
+      await FlutterBluePlus.startScan(timeout: const Duration(seconds: 12));
+
+      _discoveryScanSubscription?.cancel();
+      _discoveryScanSubscription = FlutterBluePlus.scanResults.listen((results) {
+        for (ScanResult r in results) {
+          final id = r.device.remoteId.str;
+          final name = r.device.platformName.isNotEmpty
+              ? r.device.platformName
+              : (r.advertisementData.advName.isNotEmpty ? r.advertisementData.advName : 'BLE Zařízení');
+          final isMoto = name == BleConstants.deviceName ||
+              name.contains('MotoLogger') ||
+              name.contains('ESP32') ||
+              r.advertisementData.serviceUuids.contains(Guid(BleConstants.serviceUuid));
+
+          final existingIndex = _discoveredDevices.indexWhere((d) => d.id == id);
+          final discovered = DiscoveredBleDevice(
+            id: id,
+            name: name,
+            rssi: r.rssi,
+            device: r.device,
+            isMotoLogger: isMoto,
+          );
+
+          if (existingIndex >= 0) {
+            _discoveredDevices[existingIndex] = discovered;
+          } else {
+            _discoveredDevices.add(discovered);
+          }
+        }
+
+        // Sort MotoLogger units first, then highest RSSI
+        _discoveredDevices.sort((a, b) {
+          if (a.isMotoLogger && !b.isMotoLogger) return -1;
+          if (!a.isMotoLogger && b.isMotoLogger) return 1;
+          return b.rssi.compareTo(a.rssi);
+        });
+
+        _discoveredDevicesController.add(List.unmodifiable(_discoveredDevices));
+      });
+    } catch (e) {
+      debugPrint('[BLE] Discovery scan error: $e');
+      _isDiscovering = false;
+    }
+  }
+
+  /// Stop discovery scan
+  Future<void> stopDiscoveryScan() async {
+    _isDiscovering = false;
+    for (final t in _mockScanTimers) {
+      t.cancel();
+    }
+    _mockScanTimers.clear();
+    _discoveryScanSubscription?.cancel();
+    _discoveryScanSubscription = null;
+    if (!_mockMode) {
+      try {
+        await FlutterBluePlus.stopScan();
+      } catch (_) {}
+    }
+  }
+
+  /// Pair a specific discovered device and save to SQLite
+  Future<bool> pairDevice(DiscoveredBleDevice discovered, {required DatabaseService dbService}) async {
+    _pairedDeviceId = discovered.id;
+    _pairedDeviceName = discovered.name;
+    await dbService.saveSetting('paired_device_id', discovered.id);
+    await dbService.saveSetting('paired_device_name', discovered.name);
+    debugPrint('[BLE] Paired with device: ${discovered.name} (${discovered.id})');
+
+    if (_mockMode) {
+      _setState(BleConnectionState.connected);
+      return true;
+    }
+
+    if (discovered.device != null) {
+      await connect(discovered.device!);
+      return true;
+    }
+    return true;
+  }
+
+  /// Unpair and forget the active ESP device
+  Future<void> unpairDevice({required DatabaseService dbService}) async {
+    disconnect();
+    _pairedDeviceId = null;
+    _pairedDeviceName = null;
+    await dbService.removeSetting('paired_device_id');
+    await dbService.removeSetting('paired_device_name');
+    debugPrint('[BLE] Device forgotten and unpaired.');
+    _setState(BleConnectionState.disconnected);
   }
 
   Future<void> connect(BluetoothDevice device) async {
@@ -337,7 +556,12 @@ class BleService {
 
   void disconnect() {
     _mockTimer?.cancel();
+    for (final t in _mockScanTimers) {
+      t.cancel();
+    }
+    _mockScanTimers.clear();
     _scanSubscription?.cancel();
+    _discoveryScanSubscription?.cancel();
     _notifySubscription?.cancel();
     _connectionSubscription?.cancel();
     _device?.disconnect();
@@ -348,5 +572,6 @@ class BleService {
     disconnect();
     _stateController.close();
     _telemetryController.close();
+    _discoveredDevicesController.close();
   }
 }
