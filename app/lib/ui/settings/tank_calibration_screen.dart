@@ -3,13 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../core/theme/app_theme.dart';
 import '../../services/telemetry_manager.dart';
+import '../widgets/bike_upright_animation.dart';
 import '../widgets/construction_spirit_level.dart';
 import '../widgets/phone_placement_animation.dart';
 
 /// Clean, unified Apple HIG calibration experience for riders.
 /// Offers both:
 /// 1. Smart side-stand calibration with phone placement animation and classic yellow builder's level.
-/// 2. Fast upright calibration for riders holding the bike vertical or on a paddock stand.
+/// 2. Fast upright calibration with bike balance animation and classic yellow builder's level.
 class TankCalibrationScreen extends StatefulWidget {
   final TelemetryManager telemetryManager;
 
@@ -25,7 +26,8 @@ class TankCalibrationScreen extends StatefulWidget {
 class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
   int _selectedModeIndex = 0; // 0: Na bočním stojánku, 1: Svisle na stojanu
   double _phoneRollDeg = -12.4;
-  bool _isStable = false;
+  bool _isStandStable = false;
+  bool _isUprightStable = true;
   bool _isCalibrating = false;
   bool _showSuccessBanner = false;
 
@@ -125,7 +127,7 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
 
                             const SizedBox(height: 20),
 
-                            // Mode-specific content
+                            // Mode-specific content (perfectly symmetric structure)
                             if (_selectedModeIndex == 0)
                               _buildStandModeContent()
                             else
@@ -226,79 +228,41 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // Outline Animation of placing phone on fuel tank cap
-        PhonePlacementAnimation(isPlaced: _isStable),
+        PhonePlacementAnimation(isPlaced: _isStandStable),
 
         const SizedBox(height: 20),
 
         // Humorous builder's yellow spirit level
         ConstructionSpiritLevelWidget(
+          key: const ValueKey('stand_spirit_level'),
           onAngleChanged: (angle) => setState(() => _phoneRollDeg = angle),
-          onStabilityChanged: (stable) => setState(() => _isStable = stable),
+          onStabilityChanged: (stable) => setState(() => _isStandStable = stable),
         ),
       ],
     );
   }
 
   Widget _buildUprightModeContent() {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.black.withValues(alpha: 0.06)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Container(
-            width: 72,
-            height: 72,
-            decoration: BoxDecoration(
-              color: const Color(0xFFE5E5EA),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.balance_rounded,
-              size: 38,
-              color: Color(0xFF1C1C1E),
-            ),
-          ),
-          const SizedBox(height: 18),
-          const Text(
-            'Svislé srovnání',
-            style: TextStyle(
-              fontFamily: '.SF Pro Display',
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: Colors.black,
-              letterSpacing: -0.3,
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Podržte motocykl přesně svisle nebo jej postavte na rovný paddock stojan. Poté potvrďte tlačítkem.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontFamily: '.SF Pro Text',
-              fontSize: 13.5,
-              color: Colors.black54,
-              height: 1.4,
-            ),
-          ),
-        ],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Outline Animation of motorcycle tilting to vertical 0°
+        BikeUprightAnimation(isUpright: _isUprightStable),
+
+        const SizedBox(height: 20),
+
+        // Humorous builder's yellow spirit level
+        ConstructionSpiritLevelWidget(
+          key: const ValueKey('upright_spirit_level'),
+          onStabilityChanged: (stable) => setState(() => _isUprightStable = stable),
+        ),
+      ],
     );
   }
 
   Widget _buildActionButton() {
     final isStandMode = _selectedModeIndex == 0;
-    final isReady = isStandMode ? _isStable : true;
+    final isReady = isStandMode ? _isStandStable : _isUprightStable;
     final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
     final buttonHeight = isLandscape
         ? AppTheme.primaryButtonHeightLandscape
@@ -338,7 +302,7 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
                   Text(
                     isStandMode
                         ? (isReady ? 'SROVNAT NULOVÝ BOD' : 'ČEKÁM NA USTÁLENÍ...')
-                        : 'SROVNAT VE SVISLÉ POLOZE',
+                        : (isReady ? 'SROVNAT VE SVISLÉ POLOZE' : 'ČEKÁM NA USTÁLENÍ...'),
                     style: const TextStyle(
                       fontFamily: '.SF Pro Text',
                       fontSize: 15,

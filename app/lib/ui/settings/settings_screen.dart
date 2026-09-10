@@ -246,6 +246,32 @@ class SettingsScreen extends StatelessWidget {
                   behavior: HitTestBehavior.opaque,
                   onTap: () async {
                     HapticFeedback.lightImpact();
+
+                    final confirmed = await showCupertinoDialog<bool>(
+                      context: context,
+                      builder: (ctx) => CupertinoAlertDialog(
+                        title: const Text('Obnovit výchozí nulování?'),
+                        content: const Text(
+                          'Korekce montážního úhlu bude nastavena zpět na výchozí hodnotu (0.0°).',
+                        ),
+                        actions: [
+                          CupertinoDialogAction(
+                            isDefaultAction: true,
+                            onPressed: () => Navigator.of(ctx).pop(false),
+                            child: const Text('Zrušit'),
+                          ),
+                          CupertinoDialogAction(
+                            isDestructiveAction: true,
+                            onPressed: () => Navigator.of(ctx).pop(true),
+                            child: const Text('Obnovit'),
+                          ),
+                        ],
+                      ),
+                    );
+
+                    if (confirmed != true) return;
+
+                    HapticFeedback.mediumImpact();
                     await telemetryManager.resetMountingOffset();
                     if (!context.mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(

@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:motologger/ui/widgets/motorcycle_tank_illustration.dart';
 import 'package:motologger/ui/widgets/apple_spirit_level.dart';
 import 'package:motologger/ui/widgets/phone_placement_animation.dart';
+import 'package:motologger/ui/widgets/bike_upright_animation.dart';
 import 'package:motologger/ui/widgets/construction_spirit_level.dart';
 
 void main() {
@@ -103,5 +104,19 @@ void main() {
     const uprightRaw = 2.3;
     const calibratedUpright = uprightRaw - offset;
     expect(calibratedUpright.abs() < 0.001, true);
+  });
+
+  testWidgets('BikeUprightAnimation renders correctly and paints motorcycle', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: BikeUprightAnimation(isUpright: true),
+        ),
+      ),
+    );
+
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.byType(BikeUprightAnimation), findsOneWidget);
   });
 }
