@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:motologger/models/fused_sample.dart';
 import 'package:motologger/models/session.dart';
 import 'package:motologger/services/ble_service.dart';
 import 'package:motologger/services/database_service.dart';
@@ -37,6 +38,29 @@ class FakeDatabaseService extends DatabaseService {
     _sessions.insert(0, saved);
     return saved;
   }
+
+  @override
+  Future<int> startSession(String title) async {
+    final id = _sessions.length + 1;
+    final session = RideSession(
+      id: id,
+      title: title,
+      startTime: DateTime.now(),
+    );
+    _sessions.insert(0, session);
+    return id;
+  }
+
+  @override
+  Future<void> updateSession(RideSession session) async {
+    final idx = _sessions.indexWhere((s) => s.id == session.id);
+    if (idx != -1) {
+      _sessions[idx] = session;
+    }
+  }
+
+  @override
+  Future<void> insertSampleBatch(List<FusedSample> samples) async {}
 
   @override
   Future<void> saveSetting(String key, String value) async {
@@ -300,6 +324,68 @@ timestamp_ms,recorded_at,latitude,longitude,altitude_m,gps_speed_kmh,bearing_deg
 
       expect(find.text('Brno Circuit Fast'), findsOneWidget);
       expect(find.text('Sunday Alpine Pass'), findsNothing);
+    });
+
+    testWidgets('HistoryScreen does not flicker or enter waiting state when telemetry updates arrive during recording', (tester) async {
+      final testSessions = [
+        RideSession(
+          id: 1,
+          title: 'Existing Ride',
+          startTime: DateTime.utc(2026, 7, 10, 10, 0),
+          totalDistanceKm: 15.0,
+          topSpeedKmh: 120.0,
+          maxLeanLeftDeg: 40.0,
+          maxLeanRightDeg: 42.0,
+          sampleCount: 500,
+        ),
+      ];
+
+      final fakeDb = FakeDatabaseService(initialSessions: testSessions);
+      final ble = BleService();
+      final gps = GpsService();
+      ble.enableMockMode(true);
+
+      final telemetryMgr = TelemetryManager(
+        bleService: ble,
+        gpsService: gps,
+        dbService: fakeDb,
+      );
+
+      // Start recording
+      await telemetryMgr.startRecording('Active Recording Ride');
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: HistoryScreen(
+            dbService: fakeDb,
+            telemetryManager: telemetryMgr,
+          ),
+        ),
+      );
+
+      // Initial pump to load Future and render sessions
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(find.text('Existing Ride'), findsOneWidget);
+      expect(find.byType(CupertinoActivityIndicator), findsNothing);
+
+      // Simulate rapid telemetry packet arrivals (e.g. 10 rapid packets during recording)
+      for (int i = 0; i < 10; i++) {
+        telemetryMgr.notifyListeners();
+        await tester.pump(const Duration(milliseconds: 40));
+
+        // Must still show the session and NOT flicker to CupertinoActivityIndicator
+        expect(find.text('Existing Ride'), findsOneWidget);
+        expect(find.byType(CupertinoActivityIndicator), findsNothing);
+      }
+
+      // Unmount cleanly
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+
+      telemetryMgr.dispose();
+      ble.dispose();
     });
   });
 }

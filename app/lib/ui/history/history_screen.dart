@@ -45,9 +45,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
   bool _isExportingBulk = false;
   List<RideSession> _cachedSessions = [];
 
+  bool _wasSyncing = false;
+  bool _wasRecording = false;
+
   @override
   void initState() {
     super.initState();
+    _wasSyncing = widget.telemetryManager?.isSyncing ?? false;
+    _wasRecording = widget.telemetryManager?.isRecording ?? false;
     _refresh();
     widget.telemetryManager?.addListener(_onTelemetryManagerUpdated);
   }
@@ -59,9 +64,22 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   void _onTelemetryManagerUpdated() {
-    if (mounted) {
+    final tm = widget.telemetryManager;
+    if (tm == null || !mounted) return;
+
+    final isSyncing = tm.isSyncing;
+    final isRecording = tm.isRecording;
+
+    // Only refresh the database sessions when sync finishes or when a ride recording finishes
+    final syncFinished = _wasSyncing && !isSyncing;
+    final recordingStopped = _wasRecording && !isRecording;
+
+    if (syncFinished || recordingStopped) {
       _refresh();
     }
+
+    _wasSyncing = isSyncing;
+    _wasRecording = isRecording;
   }
 
   void _refresh() {
@@ -370,54 +388,59 @@ class _HistoryScreenState extends State<HistoryScreen> {
     final tm = widget.telemetryManager;
     if (tm == null) return const SizedBox.shrink();
 
-    final isSyncing = tm.isSyncing;
-    final msg = tm.syncStatusMessage;
-    if (!isSyncing && msg == null) return const SizedBox.shrink();
+    return ListenableBuilder(
+      listenable: tm,
+      builder: (context, _) {
+        final isSyncing = tm.isSyncing;
+        final msg = tm.syncStatusMessage;
+        if (!isSyncing && msg == null) return const SizedBox.shrink();
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 14),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: isSyncing
-            ? AppTheme.appleBlue.withValues(alpha: 0.08)
-            : AppTheme.appleGreen.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isSyncing
-              ? AppTheme.appleBlue.withValues(alpha: 0.25)
-              : AppTheme.appleGreen.withValues(alpha: 0.3),
-        ),
-      ),
-      child: Row(
-        children: [
-          if (isSyncing)
-            const CupertinoActivityIndicator(radius: 8)
-          else
-            const Icon(Icons.check_circle_rounded, size: 18, color: AppTheme.appleGreen),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              msg ?? 'Synchronizace s motocyklem...',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: isSyncing ? AppTheme.appleBlue : AppTheme.appleGreen,
-                fontFamily: '-apple-system',
-              ),
+        return Container(
+          margin: const EdgeInsets.only(bottom: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: isSyncing
+                ? AppTheme.appleBlue.withValues(alpha: 0.08)
+                : AppTheme.appleGreen.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isSyncing
+                  ? AppTheme.appleBlue.withValues(alpha: 0.25)
+                  : AppTheme.appleGreen.withValues(alpha: 0.3),
             ),
           ),
-          if (isSyncing)
-            Text(
-              '${(tm.syncProgress * 100).toInt()}%',
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: AppTheme.appleBlue,
-                fontFamily: '-apple-system',
+          child: Row(
+            children: [
+              if (isSyncing)
+                const CupertinoActivityIndicator(radius: 8)
+              else
+                const Icon(Icons.check_circle_rounded, size: 18, color: AppTheme.appleGreen),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  msg ?? 'Synchronizace s motocyklem...',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: isSyncing ? AppTheme.appleBlue : AppTheme.appleGreen,
+                    fontFamily: '-apple-system',
+                  ),
+                ),
               ),
-            ),
-        ],
-      ),
+              if (isSyncing)
+                Text(
+                  '${(tm.syncProgress * 100).toInt()}%',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.appleBlue,
+                    fontFamily: '-apple-system',
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -543,12 +566,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
       body: FutureBuilder<List<RideSession>>(
         future: _sessionsFuture,
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+          if (snapshot.connectionState == ConnectionState.waiting && _cachedSessions.isEmpty) {
             return const Center(
               child: CupertinoActivityIndicator(radius: 14),
             );
           }
-          if (snapshot.hasError) {
+          if (snapshot.hasError && _cachedSessions.isEmpty) {
             return Center(
               child: Padding(
                 padding: const EdgeInsets.all(24),
@@ -584,7 +607,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
             );
           }
 
-          final sessions = snapshot.data ?? [];
+          final sessions = snapshot.data ?? _cachedSessions;
           _cachedSessions = sessions;
           final seasonStats = SeasonStats.fromSessions(sessions);
 
