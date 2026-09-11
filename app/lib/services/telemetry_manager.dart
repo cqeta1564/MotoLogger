@@ -67,6 +67,17 @@ class TelemetryManager extends ChangeNotifier {
   double get syncProgress => _syncProgress;
   String? get syncStatusMessage => _syncStatusMessage;
 
+  bool get isSimulationMode => bleService.isMockMode || gpsService.isMockMode;
+
+  void setSimulationMode(bool enable) {
+    bleService.enableMockMode(enable);
+    gpsService.enableMockMode(enable);
+    if (!enable) {
+      resetPeaks();
+    }
+    notifyListeners();
+  }
+
   TelemetryManager({
     required this.bleService,
     required this.gpsService,
@@ -405,6 +416,9 @@ class TelemetryManager extends ChangeNotifier {
 
   @override
   void dispose() {
+    if (gpsService.isMockMode) {
+      gpsService.enableMockMode(false);
+    }
     _batchFlushTimer?.cancel();
     _syncStatusClearTimer?.cancel();
     _bleSub?.cancel();

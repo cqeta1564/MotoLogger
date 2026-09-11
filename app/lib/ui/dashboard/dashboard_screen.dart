@@ -153,15 +153,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _toggleDemoSimulation() {
     HapticFeedback.selectionClick();
-    final isMocking = widget.telemetryManager.bleService.isMockMode;
-    widget.telemetryManager.bleService.enableMockMode(!isMocking);
-    if (isMocking) {
-      widget.telemetryManager.resetPeaks();
-    }
+    final isMocking = widget.telemetryManager.isSimulationMode;
+    widget.telemetryManager.setSimulationMode(!isMocking);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(!isMocking ? 'Demo simulace aktivována' : 'Demo simulace vypnuta'),
-        duration: const Duration(milliseconds: 1200),
+        content: Text(!isMocking ? 'Demo simulace aktivována (ESP32 + GPS okruh Brno)' : 'Demo simulace vypnuta'),
+        duration: const Duration(milliseconds: 1500),
         backgroundColor: Colors.black87,
       ),
     );

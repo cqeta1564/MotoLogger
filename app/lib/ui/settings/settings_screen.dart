@@ -330,9 +330,9 @@ class SettingsScreen extends StatelessWidget {
                       ),
                       CupertinoSwitch(
                         activeTrackColor: AppTheme.appleGreen,
-                        value: ble.isMockMode,
+                        value: telemetryManager.isSimulationMode,
                         onChanged: (val) {
-                          ble.enableMockMode(val);
+                          telemetryManager.setSimulationMode(val);
                         },
                       ),
                     ],
