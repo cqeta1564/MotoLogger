@@ -1,13 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// Authentic Apple iOS "Slide to Unlock" slider.
-///
-/// Features:
-/// 1. Classic animated shimmering light passing across the text.
-/// 2. Sleek tactile knob with Apple multi-layer drop shadows and iOS chevron.
-/// 3. Frosted pill track in Apple System Grouped style (#F2F2F7).
-/// 4. Smooth spring-back physics and heavy impact haptic feedback on unlock.
+/// Drag control with an accessible action and no decorative looping motion.
 class SlideToUnlock extends StatefulWidget {
   final VoidCallback onUnlocked;
   final String label;
@@ -30,10 +24,10 @@ class _SlideToUnlockState extends State<SlideToUnlock>
     with TickerProviderStateMixin {
   double _dragPosition = 0.0;
   AnimationController? _resetController;
-  AnimationController? _shimmerController;
   Animation<double>? _resetAnimation;
 
-  AnimationController get resetController => _resetController ??= AnimationController(
+  AnimationController get resetController =>
+      _resetController ??= AnimationController(
         vsync: this,
         duration: const Duration(milliseconds: 280),
       )..addListener(() {
@@ -44,29 +38,23 @@ class _SlideToUnlockState extends State<SlideToUnlock>
           }
         });
 
-  AnimationController get shimmerController => _shimmerController ??= AnimationController(
-        vsync: this,
-        duration: const Duration(milliseconds: 2400),
-      )..repeat();
-
   @override
   void initState() {
     super.initState();
     resetController;
-    shimmerController;
   }
 
   @override
   void dispose() {
     _resetController?.dispose();
-    _shimmerController?.dispose();
     super.dispose();
   }
 
   void _onHorizontalDragUpdate(DragUpdateDetails details, double maxDrag) {
     if (resetController.isAnimating) return;
     setState(() {
-      _dragPosition = (_dragPosition + details.primaryDelta!).clamp(0.0, maxDrag);
+      _dragPosition =
+          (_dragPosition + details.primaryDelta!).clamp(0.0, maxDrag);
     });
   }
 
@@ -82,11 +70,16 @@ class _SlideToUnlockState extends State<SlideToUnlock>
         }
       });
     } else {
-      // Spring back to start
+      if (MediaQuery.disableAnimationsOf(context)) {
+        setState(() => _dragPosition = 0);
+        return;
+      }
+      // Return the thumb after an incomplete gesture.
       _resetAnimation = Tween<double>(
         begin: _dragPosition,
         end: 0.0,
-      ).animate(CurvedAnimation(parent: resetController, curve: Curves.easeOutCubic));
+      ).animate(
+          CurvedAnimation(parent: resetController, curve: Curves.easeOutCubic));
       resetController.forward(from: 0.0);
     }
   }
@@ -98,10 +91,13 @@ class _SlideToUnlockState extends State<SlideToUnlock>
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final totalWidth = widget.width.isFinite ? widget.width : constraints.maxWidth;
-        final maxDrag = (totalWidth - thumbSize - (thumbPadding * 2)).clamp(0.0, double.infinity);
+        final totalWidth =
+            widget.width.isFinite ? widget.width : constraints.maxWidth;
+        final maxDrag = (totalWidth - thumbSize - (thumbPadding * 2))
+            .clamp(0.0, double.infinity);
 
-        final progress = maxDrag > 0 ? (_dragPosition / maxDrag).clamp(0.0, 1.0) : 0.0;
+        final progress =
+            maxDrag > 0 ? (_dragPosition / maxDrag).clamp(0.0, 1.0) : 0.0;
 
         return SizedBox(
           width: totalWidth,
@@ -130,40 +126,14 @@ class _SlideToUnlockState extends State<SlideToUnlock>
                   Center(
                     child: Opacity(
                       opacity: (1.0 - progress * 1.3).clamp(0.0, 1.0),
-                      child: AnimatedBuilder(
-                        animation: shimmerController,
-                        builder: (context, child) {
-                          final val = shimmerController.value;
-                          return ShaderMask(
-                            shaderCallback: (bounds) {
-                              return LinearGradient(
-                                begin: Alignment.centerLeft,
-                                end: Alignment.centerRight,
-                                colors: const [
-                                  Color(0xFF8E8E93),
-                                  Color(0xFF1C1C1E),
-                                  Color(0xFF8E8E93),
-                                ],
-                                stops: [
-                                  (val - 0.25).clamp(0.0, 1.0),
-                                  val.clamp(0.0, 1.0),
-                                  (val + 0.25).clamp(0.0, 1.0),
-                                ],
-                              ).createShader(bounds);
-                            },
-                            blendMode: BlendMode.srcIn,
-                            child: child,
-                          );
-                        },
-                        child: Text(
-                          widget.label,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 2.2,
-                            fontFamily: '-apple-system',
-                          ),
-                        ),
+                      child: Padding(
+                        padding: EdgeInsets.only(left: thumbSize),
+                        child: Text(widget.label,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF63636B))),
                       ),
                     ),
                   ),

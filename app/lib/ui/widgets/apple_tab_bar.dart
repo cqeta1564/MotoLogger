@@ -1,95 +1,79 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter/cupertino.dart';
+import '../../core/theme/app_theme.dart';
+import '../../core/motion/app_motion.dart';
+import 'glass_surface.dart';
 
-/// Authentic Apple iOS Tab Bar.
-///
-/// Features:
-/// - Frosted / System Grouped Gray background (#F2F2F7)
-/// - Precision hairline top divider (#E5E5EA)
-/// - SF Pro typography with bold active state and muted inactive state
-/// - Built-in tactile haptic feedback on tab changes
+/// Shared floating navigation; the fill marks selection inside one material.
 class AppleTabBar extends StatelessWidget {
+  const AppleTabBar(
+      {super.key,
+      required this.currentIndex,
+      required this.onTabSelected,
+      this.isLandscape = false});
   final int currentIndex;
   final ValueChanged<int> onTabSelected;
   final bool isLandscape;
 
-  const AppleTabBar({
-    super.key,
-    required this.currentIndex,
-    required this.onTabSelected,
-    this.isLandscape = false,
-  });
-
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: isLandscape ? 56 : 70,
-      decoration: const BoxDecoration(
-        color: Color(0xFFF2F2F7),
-        border: Border(
-          top: BorderSide(color: Color(0xFFE5E5EA), width: 1.0),
-        ),
-      ),
-      child: SafeArea(
-        top: false,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _buildTabItem(
-              icon: Icons.two_wheeler_rounded,
-              label: 'Jízda',
-              index: 0,
-            ),
-            _buildTabItem(
-              icon: Icons.bar_chart_rounded,
-              label: 'Historie',
-              index: 1,
-            ),
-            _buildTabItem(
-              icon: Icons.settings_rounded,
-              label: 'Nastavení',
-              index: 2,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTabItem({
-    required IconData icon,
-    required String label,
-    required int index,
-  }) {
-    final isActive = currentIndex == index;
-    final color = isActive ? Colors.black : const Color(0xFF8E8E93);
-
-    return Expanded(
-      child: InkWell(
-        splashColor: Colors.transparent,
-        highlightColor: Colors.transparent,
-        onTap: () {
-          HapticFeedback.selectionClick();
-          onTabSelected(index);
-        },
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: color, size: 24),
-            const SizedBox(height: 3),
-            Text(
-              label,
-              style: TextStyle(
-                color: color,
-                fontSize: 11,
-                fontWeight: isActive ? FontWeight.w800 : FontWeight.w600,
-                letterSpacing: -0.2,
-                fontFamily: '-apple-system',
+  Widget build(BuildContext context) => GlassSurface(
+        radius: 36,
+        padding: const EdgeInsets.all(6),
+        child: Stack(children: [
+          Positioned.fill(
+            child: AnimatedAlign(
+              duration: AppMotion.duration(context),
+              curve: AppMotion.curve,
+              alignment: Alignment(currentIndex - 1.0, 0),
+              child: FractionallySizedBox(
+                widthFactor: 1 / 3,
+                heightFactor: 1,
+                child: DecoratedBox(
+                  key: const ValueKey('tab-selection'),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE3EDFB),
+                    borderRadius: BorderRadius.circular(30),
+                  ),
+                ),
               ),
             ),
-          ],
+          ),
+          Row(children: [
+            _tab(context, 0, CupertinoIcons.speedometer, 'Jízda'),
+            _tab(context, 1, CupertinoIcons.chart_bar_alt_fill, 'Historie'),
+            _tab(context, 2, CupertinoIcons.gear_alt, 'Nastavení'),
+          ]),
+        ]),
+      );
+
+  Widget _tab(BuildContext context, int index, IconData icon, String label) {
+    final selected = currentIndex == index;
+    final color = selected ? AppTheme.appleBlue : AppTheme.textMuted;
+    return Expanded(
+        child: Semantics(
+      selected: selected,
+      button: true,
+      label: label,
+      child: ExcludeSemantics(
+          child: CupertinoButton(
+        key: ValueKey('tab-$index'),
+        padding: EdgeInsets.zero,
+        onPressed: () => onTabSelected(index),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 62),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+          width: double.infinity,
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icon, color: color, size: 23),
+            const SizedBox(height: 4),
+            Text(label,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    color: color,
+                    fontSize: 12,
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.w500)),
+          ]),
         ),
-      ),
-    );
+      )),
+    ));
   }
 }

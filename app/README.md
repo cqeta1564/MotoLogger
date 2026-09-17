@@ -30,7 +30,7 @@ The official companion mobile application for the **MotoLogger (ESP32-S3)** tele
   - Automatic session logging with GPS coordinates, altitude, speeds, and lean angles.
   - Export sessions to **CSV** (for MoTeC i2, RaceRender, TrackAddict) or **GPX** (for Google Earth).
 - **Built-in Demo Simulation Mode:**
-  - Tap the bolt (`⚡`) icon in the top app bar to simulate live telemetry without needing the physical bike or ESP32 board.
+  - Choose **Vyzkoušet demo** on the ride screen (or **Demo jízda** in Settings) to simulate telemetry and a Brno circuit GPS track. Demo rides are labeled as demo when saved. Save an active ride before changing its data source.
 
 ---
 
@@ -52,13 +52,13 @@ The official companion mobile application for the **MotoLogger (ESP32-S3)** tele
 ## Getting Started
 
 ### Prerequisites
-1. [Flutter SDK](https://docs.flutter.dev/get-started/install) (version >= 3.2.0)
+1. [Flutter SDK](https://docs.flutter.dev/get-started/install) (tested with Flutter 3.44.0 / Dart 3.12.0; see pubspec.lock)
 2. Android Studio or VS Code with Flutter Extension
 
 ### Running the App
 ```bash
 # Clone or navigate to the repository
-cd MotoLogger-App
+cd MotoLogger/app
 
 # Fetch dependencies
 flutter pub get
@@ -67,7 +67,60 @@ flutter pub get
 flutter run
 ```
 
+The local `VibeOS_Phone` AVD must be running before selecting `emulator-5554`.
+On this machine, start it in a separate terminal and leave that terminal open:
+
+```bash
+$ANDROID_HOME/emulator/emulator -avd VibeOS_Phone -no-window -no-audio \
+  -no-boot-anim -no-snapshot -memory 2048 -cores 2 -skin 720x1280 \
+  -gpu swiftshader -feature -Vulkan
+```
+
+Once `flutter devices` lists `emulator-5554`, run
+`flutter run -d emulator-5554 --no-enable-impeller`. The renderer flag works
+around a graphics failure in this software emulator; it is not an app setting.
+The AVD command above runs without a desktop window. A visible emulator window
+requires a working X11/Qt display connection on the host. On this machine,
+the emulator's Qt window could not connect to the desktop, so its screen is
+mirrored with the verified upstream `scrcpy` v4.1 release instead:
+
+```bash
+SDL_VIDEODRIVER=wayland \
+  /home/bartaceq/.local/share/scrcpy-linux-x86_64-v4.1/scrcpy \
+  -s emulator-5554 --no-audio --window-title MotoLogger
+```
+
 ---
 
 ## License
 Open-source under MIT License.
+
+## Interface and verification
+
+The interface keeps the product's light-only appearance. Floating navigation and
+contextual controls use a bounded Flutter blur/tint approximation, **not native
+Apple Liquid Glass**. Content stays opaque. Settings → **Omezit průhlednost**
+persists an opaque fallback in SQLite. Android back and enlarged text are supported.
+
+The repository currently contains an Android host only. iOS/CarPlay claims above
+are product intentions, not a checked-in, buildable iOS target. No iOS simulator,
+Xcode build or physical motorcycle validation was performed on this Linux machine.
+
+See [design decisions](../docs/DESIGN.md) and the
+[verification record and screenshots](../docs/review/VERIFICATION.md).
+
+```bash
+flutter pub get
+flutter analyze
+flutter test
+flutter devices
+flutter run -d <device-id>
+```
+
+On an emulator or disposable test device, the integration test exercises the
+built-in demo with real SQLite storage. It creates a labeled demo ride and sets
+the opaque-material preference; it never contacts motorcycle hardware.
+
+```bash
+flutter test integration_test/ride_flow_test.dart -d <device-id> --no-uninstall
+```

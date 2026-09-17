@@ -11,26 +11,30 @@ class ConstructionSpiritLevelWidget extends StatefulWidget {
   final ValueChanged<double>? onAngleChanged;
   final ValueChanged<bool>? onStabilityChanged;
   final double? simulatedRollDeg;
+  final VoidCallback? onSensorError;
 
   const ConstructionSpiritLevelWidget({
     super.key,
     this.onAngleChanged,
     this.onStabilityChanged,
     this.simulatedRollDeg,
+    this.onSensorError,
   });
 
   @override
-  State<ConstructionSpiritLevelWidget> createState() => _ConstructionSpiritLevelWidgetState();
+  State<ConstructionSpiritLevelWidget> createState() =>
+      _ConstructionSpiritLevelWidgetState();
 }
 
-class _ConstructionSpiritLevelWidgetState extends State<ConstructionSpiritLevelWidget> {
+class _ConstructionSpiritLevelWidgetState
+    extends State<ConstructionSpiritLevelWidget> {
   StreamSubscription<AccelerometerEvent>? _accelSub;
 
   double _currentRollDeg = 0.0;
   double _filteredRollDeg = 0.0;
   bool _isStable = false;
   final List<double> _recentRolls = [];
-  Timer? _simTimer;
+  bool _sensorFailed = false;
 
   static const double _filterK = 0.22;
 
@@ -58,22 +62,21 @@ class _ConstructionSpiritLevelWidgetState extends State<ConstructionSpiritLevelW
         samplingPeriod: const Duration(milliseconds: 20),
       ).listen(
         _onAccelerometerEvent,
-        onError: (_) => _fallbackSimulation(),
+        onError: (_) => _sensorUnavailable(),
       );
     } catch (_) {
-      _fallbackSimulation();
+      _sensorUnavailable();
     }
   }
 
-  void _fallbackSimulation() {
-    _simTimer?.cancel();
-    double baseAngle = -12.4;
-    int tick = 0;
-    _simTimer = Timer.periodic(const Duration(milliseconds: 50), (timer) {
-      tick++;
-      final noise = tick > 25 ? 0.0 : sin(tick * 0.4) * 0.25;
-      _updateAngle(baseAngle + noise);
+  void _sensorUnavailable() {
+    if (!mounted) return;
+    setState(() {
+      _sensorFailed = true;
+      _isStable = false;
     });
+    widget.onStabilityChanged?.call(false);
+    widget.onSensorError?.call();
   }
 
   void _onAccelerometerEvent(AccelerometerEvent event) {
@@ -91,7 +94,8 @@ class _ConstructionSpiritLevelWidgetState extends State<ConstructionSpiritLevelW
 
     setState(() {
       _currentRollDeg = roll;
-      _filteredRollDeg = _filteredRollDeg * (1.0 - _filterK) + _currentRollDeg * _filterK;
+      _filteredRollDeg =
+          _filteredRollDeg * (1.0 - _filterK) + _currentRollDeg * _filterK;
       _evaluateStability(_filteredRollDeg);
     });
 
@@ -123,12 +127,19 @@ class _ConstructionSpiritLevelWidgetState extends State<ConstructionSpiritLevelW
   @override
   void dispose() {
     _accelSub?.cancel();
-    _simTimer?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_sensorFailed) {
+      return const Padding(
+          padding: EdgeInsets.all(20),
+          child: Text(
+              'Snímač polohy telefonu není dostupný. Kalibraci nelze provést.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 17)));
+    }
     return Container(
       width: double.infinity,
       height: 86,
@@ -271,7 +282,6 @@ class _ConstructionLevelPainter extends CustomPainter {
       text: const TextSpan(
         text: 'PRO-LEVEL 400',
         style: TextStyle(
-          fontFamily: '.SF Pro Text',
           fontSize: 9,
           fontWeight: FontWeight.w800,
           color: Color(0xFF222222),
@@ -286,13 +296,16 @@ class _ConstructionLevelPainter extends CustomPainter {
     final vialW = 140.0;
     final vialH = 34.0;
     final vialCenter = Offset(w / 2, h / 2 + 6);
-    final vialRect = Rect.fromCenter(center: vialCenter, width: vialW, height: vialH);
-    final vialRRect = RRect.fromRectAndRadius(vialRect, const Radius.circular(17));
+    final vialRect =
+        Rect.fromCenter(center: vialCenter, width: vialW, height: vialH);
+    final vialRRect =
+        RRect.fromRectAndRadius(vialRect, const Radius.circular(17));
 
     // Dark recessed cutout in the metal
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromCenter(center: vialCenter, width: vialW + 8, height: vialH + 8),
+        Rect.fromCenter(
+            center: vialCenter, width: vialW + 8, height: vialH + 8),
         const Radius.circular(21),
       ),
       Paint()..color = const Color(0xFF18181A),
@@ -321,7 +334,8 @@ class _ConstructionLevelPainter extends CustomPainter {
 
     final bubbleW = 28.0;
     final bubbleH = 22.0;
-    final bubbleRect = Rect.fromCenter(center: bubbleCenter, width: bubbleW, height: bubbleH);
+    final bubbleRect =
+        Rect.fromCenter(center: bubbleCenter, width: bubbleW, height: bubbleH);
 
     // Bubble shadow and lighter core
     canvas.drawOval(
@@ -329,7 +343,10 @@ class _ConstructionLevelPainter extends CustomPainter {
       Paint()..color = const Color(0xFFD6FF7A).withValues(alpha: 0.95),
     );
     canvas.drawOval(
-      Rect.fromCenter(center: bubbleCenter.translate(0, -2), width: bubbleW - 8, height: bubbleH - 8),
+      Rect.fromCenter(
+          center: bubbleCenter.translate(0, -2),
+          width: bubbleW - 8,
+          height: bubbleH - 8),
       Paint()..color = Colors.white.withValues(alpha: 0.85),
     );
     // Bubble dark meniscus ring
@@ -367,11 +384,13 @@ class _ConstructionLevelPainter extends CustomPainter {
           Colors.white.withValues(alpha: 0.7),
           Colors.white.withValues(alpha: 0.0),
         ],
-      ).createShader(Rect.fromLTWH(vialRect.left, vialRect.top, vialW, vialH / 2));
+      ).createShader(
+          Rect.fromLTWH(vialRect.left, vialRect.top, vialW, vialH / 2));
 
     canvas.drawRRect(
       RRect.fromRectAndCorners(
-        Rect.fromLTWH(vialRect.left + 2, vialRect.top + 2, vialW - 4, vialH / 2 - 2),
+        Rect.fromLTWH(
+            vialRect.left + 2, vialRect.top + 2, vialW - 4, vialH / 2 - 2),
         topLeft: const Radius.circular(15),
         topRight: const Radius.circular(15),
       ),

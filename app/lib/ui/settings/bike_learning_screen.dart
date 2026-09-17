@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../core/theme/app_theme.dart';
+import '../widgets/glass_surface.dart';
 import '../../services/can_learning_service.dart';
 import '../../services/telemetry_manager.dart';
 import 'import_bike_profile_screen.dart';
@@ -89,7 +90,6 @@ class _BikeLearningScreenState extends State<BikeLearningScreen> {
                   color: Colors.white,
                   fontSize: 13.5,
                   fontWeight: FontWeight.w600,
-                  fontFamily: '-apple-system',
                 ),
               ),
             ),
@@ -132,15 +132,10 @@ class _BikeLearningScreenState extends State<BikeLearningScreen> {
       appBar: AppBar(
         backgroundColor: const Color(0xFFF2F2F7),
         elevation: 0,
-        leading: CupertinoButton(
-          padding: EdgeInsets.zero,
-          child: const Icon(CupertinoIcons.xmark_circle_fill, color: Color(0xFF8E8E93), size: 28),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
+        leading: const GlassBackButton(),
         title: const Text(
           'Naučit se motorku',
           style: TextStyle(
-            fontFamily: '.SF Pro Display',
             fontSize: 17,
             fontWeight: FontWeight.w600,
             color: Colors.black,
@@ -155,7 +150,8 @@ class _BikeLearningScreenState extends State<BikeLearningScreen> {
             Expanded(
               child: SingleChildScrollView(
                 physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 child: _buildStepContent(),
               ),
             ),
@@ -209,7 +205,8 @@ class _BikeLearningScreenState extends State<BikeLearningScreen> {
                       color: AppTheme.appleBlue.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Icon(Icons.auto_awesome, color: AppTheme.appleBlue, size: 24),
+                    child: const Icon(Icons.auto_awesome,
+                        color: AppTheme.appleBlue, size: 24),
                   ),
                   const SizedBox(width: 14),
                   const Expanded(
@@ -223,7 +220,6 @@ class _BikeLearningScreenState extends State<BikeLearningScreen> {
                             fontSize: 16.5,
                             fontWeight: FontWeight.w700,
                             letterSpacing: -0.3,
-                            fontFamily: '-apple-system',
                           ),
                         ),
                         SizedBox(height: 2),
@@ -232,7 +228,6 @@ class _BikeLearningScreenState extends State<BikeLearningScreen> {
                           style: TextStyle(
                             color: AppTheme.appleMutedGray,
                             fontSize: 12.5,
-                            fontFamily: '-apple-system',
                           ),
                         ),
                       ],
@@ -248,7 +243,6 @@ class _BikeLearningScreenState extends State<BikeLearningScreen> {
                   fontSize: 14,
                   height: 1.45,
                   letterSpacing: -0.2,
-                  fontFamily: '-apple-system',
                 ),
               ),
             ],
@@ -267,7 +261,6 @@ class _BikeLearningScreenState extends State<BikeLearningScreen> {
               fontSize: 11,
               fontWeight: FontWeight.w600,
               letterSpacing: 0.6,
-              fontFamily: '-apple-system',
             ),
           ),
         ),
@@ -275,21 +268,24 @@ class _BikeLearningScreenState extends State<BikeLearningScreen> {
         _buildInstructionCard(
           stepNumber: '1',
           title: 'Volnoběh (~10 sekund)',
-          subtitle: 'Nastartujte a nechte motor běžet na neutrálu bez přidávání plynu.',
+          subtitle:
+              'Nastartujte a nechte motor běžet na neutrálu bez přidávání plynu.',
           icon: Icons.timer_outlined,
         ),
         const SizedBox(height: 10),
         _buildInstructionCard(
           stepNumber: '2',
           title: 'Túrování na místě (~10 sekund)',
-          subtitle: 'Na neutrálu 2–3x krátce přidejte plyn. AI tak bezpečně pozná otáčky i při nulové rychlosti.',
+          subtitle:
+              'Na neutrálu 2–3x krátce přidejte plyn. AI tak bezpečně pozná otáčky i při nulové rychlosti.',
           icon: Icons.speed_rounded,
         ),
         const SizedBox(height: 10),
         _buildInstructionCard(
           stepNumber: '3',
           title: 'Krátká jízda s řazením (~30 sekund)',
-          subtitle: 'Rozjeďte se, zařaďte 1., 2. a 3. stupeň, chvíli jeďte plynule a poté bezpečně zastavte.',
+          subtitle:
+              'Rozjeďte se, zařaďte 1., 2. a 3. stupeň, chvíli jeďte plynule a poté bezpečně zastavte.',
           icon: Icons.two_wheeler_rounded,
         ),
 
@@ -328,7 +324,6 @@ class _BikeLearningScreenState extends State<BikeLearningScreen> {
                 color: Colors.white,
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
-                fontFamily: '-apple-system',
               ),
             ),
           ),
@@ -344,7 +339,6 @@ class _BikeLearningScreenState extends State<BikeLearningScreen> {
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
                     letterSpacing: -0.2,
-                    fontFamily: '-apple-system',
                   ),
                 ),
                 const SizedBox(height: 3),
@@ -354,7 +348,6 @@ class _BikeLearningScreenState extends State<BikeLearningScreen> {
                     color: AppTheme.appleMutedGray,
                     fontSize: 13,
                     height: 1.35,
-                    fontFamily: '-apple-system',
                   ),
                 ),
               ],
@@ -366,8 +359,10 @@ class _BikeLearningScreenState extends State<BikeLearningScreen> {
   }
 
   Widget _buildRecordingView() {
-    final minutes = (_learningService.elapsedSeconds ~/ 60).toString().padLeft(2, '0');
-    final seconds = (_learningService.elapsedSeconds % 60).toString().padLeft(2, '0');
+    final minutes =
+        (_learningService.elapsedSeconds ~/ 60).toString().padLeft(2, '0');
+    final seconds =
+        (_learningService.elapsedSeconds % 60).toString().padLeft(2, '0');
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -394,7 +389,6 @@ class _BikeLearningScreenState extends State<BikeLearningScreen> {
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
                 letterSpacing: 0.8,
-                fontFamily: '-apple-system',
               ),
             ),
           ],
@@ -410,7 +404,6 @@ class _BikeLearningScreenState extends State<BikeLearningScreen> {
             fontSize: 64,
             fontWeight: FontWeight.w200,
             letterSpacing: -1.5,
-            fontFamily: '-apple-system',
             fontFeatures: [FontFeature.tabularFigures()],
           ),
         ),
@@ -466,14 +459,14 @@ class _BikeLearningScreenState extends State<BikeLearningScreen> {
             color: AppTheme.appleMutedGray,
             fontSize: 13,
             height: 1.4,
-            fontFamily: '-apple-system',
           ),
         ),
       ],
     );
   }
 
-  Widget _buildLiveMetricRow(String label, String value, IconData icon, Color iconColor) {
+  Widget _buildLiveMetricRow(
+      String label, String value, IconData icon, Color iconColor) {
     return Row(
       children: [
         Container(
@@ -493,7 +486,6 @@ class _BikeLearningScreenState extends State<BikeLearningScreen> {
               color: AppTheme.appleBlack,
               fontSize: 14.5,
               fontWeight: FontWeight.w500,
-              fontFamily: '-apple-system',
             ),
           ),
         ),
@@ -503,7 +495,6 @@ class _BikeLearningScreenState extends State<BikeLearningScreen> {
             color: AppTheme.appleBlack,
             fontSize: 15,
             fontWeight: FontWeight.w700,
-            fontFamily: '-apple-system',
             fontFeatures: [FontFeature.tabularFigures()],
           ),
         ),
@@ -542,7 +533,8 @@ class _BikeLearningScreenState extends State<BikeLearningScreen> {
                       color: AppTheme.appleGreen.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Icon(Icons.check_circle_rounded, color: AppTheme.appleGreen, size: 26),
+                    child: const Icon(Icons.check_circle_rounded,
+                        color: AppTheme.appleGreen, size: 26),
                   ),
                   const SizedBox(width: 14),
                   const Expanded(
@@ -556,7 +548,6 @@ class _BikeLearningScreenState extends State<BikeLearningScreen> {
                             fontSize: 16.5,
                             fontWeight: FontWeight.w700,
                             letterSpacing: -0.3,
-                            fontFamily: '-apple-system',
                           ),
                         ),
                         SizedBox(height: 2),
@@ -565,7 +556,6 @@ class _BikeLearningScreenState extends State<BikeLearningScreen> {
                           style: TextStyle(
                             color: AppTheme.appleMutedGray,
                             fontSize: 12.5,
-                            fontFamily: '-apple-system',
                           ),
                         ),
                       ],
@@ -577,9 +567,12 @@ class _BikeLearningScreenState extends State<BikeLearningScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  _buildSummaryPill('Čas záznamu', '${_learningService.elapsedSeconds} s'),
-                  _buildSummaryPill('Zpráv CAN', '${_learningService.capturedFrameCount}'),
-                  _buildSummaryPill('Unikátních ID', '${_learningService.uniqueCanIdCount}'),
+                  _buildSummaryPill(
+                      'Čas záznamu', '${_learningService.elapsedSeconds} s'),
+                  _buildSummaryPill(
+                      'Zpráv CAN', '${_learningService.capturedFrameCount}'),
+                  _buildSummaryPill(
+                      'Unikátních ID', '${_learningService.uniqueCanIdCount}'),
                 ],
               ),
             ],
@@ -608,7 +601,8 @@ class _BikeLearningScreenState extends State<BikeLearningScreen> {
                       color: AppTheme.appleBlue.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(Icons.copy_rounded, color: AppTheme.appleBlue, size: 18),
+                    child: const Icon(Icons.copy_rounded,
+                        color: AppTheme.appleBlue, size: 18),
                   ),
                   const SizedBox(width: 12),
                   const Expanded(
@@ -621,7 +615,6 @@ class _BikeLearningScreenState extends State<BikeLearningScreen> {
                             color: AppTheme.appleBlack,
                             fontSize: 14.5,
                             fontWeight: FontWeight.w600,
-                            fontFamily: '-apple-system',
                           ),
                         ),
                         Text(
@@ -629,7 +622,6 @@ class _BikeLearningScreenState extends State<BikeLearningScreen> {
                           style: TextStyle(
                             color: AppTheme.appleMutedGray,
                             fontSize: 12,
-                            fontFamily: '-apple-system',
                           ),
                         ),
                       ],
@@ -642,25 +634,30 @@ class _BikeLearningScreenState extends State<BikeLearningScreen> {
                 height: 48,
                 child: CupertinoButton(
                   padding: EdgeInsets.zero,
-                  color: _promptCopied ? AppTheme.appleGreen : const Color(0xFF1C1C1E),
+                  color: _promptCopied
+                      ? AppTheme.appleGreen
+                      : const Color(0xFF1C1C1E),
                   borderRadius: BorderRadius.circular(12),
                   onPressed: _copyPrompt,
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(
-                        _promptCopied ? Icons.check_rounded : Icons.copy_rounded,
+                        _promptCopied
+                            ? Icons.check_rounded
+                            : Icons.copy_rounded,
                         color: Colors.white,
                         size: 18,
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        _promptCopied ? 'PROMPT ZKOPÍROVÁN' : 'KOPÍROVAT PROMPT DO SCHRÁNKY',
+                        _promptCopied
+                            ? 'PROMPT ZKOPÍROVÁN'
+                            : 'KOPÍROVAT PROMPT DO SCHRÁNKY',
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 13.5,
                           fontWeight: FontWeight.w700,
-                          fontFamily: '-apple-system',
                           letterSpacing: 0.2,
                         ),
                       ),
@@ -694,7 +691,8 @@ class _BikeLearningScreenState extends State<BikeLearningScreen> {
                       color: AppTheme.appleOrange.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(Icons.share_rounded, color: AppTheme.appleOrange, size: 18),
+                    child: const Icon(Icons.share_rounded,
+                        color: AppTheme.appleOrange, size: 18),
                   ),
                   const SizedBox(width: 12),
                   const Expanded(
@@ -707,7 +705,6 @@ class _BikeLearningScreenState extends State<BikeLearningScreen> {
                             color: AppTheme.appleBlack,
                             fontSize: 14.5,
                             fontWeight: FontWeight.w600,
-                            fontFamily: '-apple-system',
                           ),
                         ),
                         Text(
@@ -715,7 +712,6 @@ class _BikeLearningScreenState extends State<BikeLearningScreen> {
                           style: TextStyle(
                             color: AppTheme.appleMutedGray,
                             fontSize: 12,
-                            fontFamily: '-apple-system',
                           ),
                         ),
                       ],
@@ -734,7 +730,8 @@ class _BikeLearningScreenState extends State<BikeLearningScreen> {
                   child: const Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.ios_share_rounded, color: AppTheme.appleBlack, size: 18),
+                      Icon(Icons.ios_share_rounded,
+                          color: AppTheme.appleBlack, size: 18),
                       SizedBox(width: 8),
                       Text(
                         'SDÍLET SOUBOR S DATY PRO AI',
@@ -742,7 +739,6 @@ class _BikeLearningScreenState extends State<BikeLearningScreen> {
                           color: AppTheme.appleBlack,
                           fontSize: 13.5,
                           fontWeight: FontWeight.w700,
-                          fontFamily: '-apple-system',
                           letterSpacing: 0.2,
                         ),
                       ),
@@ -768,7 +764,6 @@ class _BikeLearningScreenState extends State<BikeLearningScreen> {
             color: AppTheme.appleBlack,
             fontSize: 18,
             fontWeight: FontWeight.w700,
-            fontFamily: '-apple-system',
             fontFeatures: [FontFeature.tabularFigures()],
           ),
         ),
@@ -778,7 +773,6 @@ class _BikeLearningScreenState extends State<BikeLearningScreen> {
           style: const TextStyle(
             color: AppTheme.appleMutedGray,
             fontSize: 12,
-            fontFamily: '-apple-system',
           ),
         ),
       ],
@@ -786,7 +780,8 @@ class _BikeLearningScreenState extends State<BikeLearningScreen> {
   }
 
   Widget _buildBottomActionBar() {
-    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
+    final isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
     final buttonHeight = isLandscape
         ? AppTheme.primaryButtonHeightLandscape
         : AppTheme.primaryButtonHeight;
@@ -795,7 +790,8 @@ class _BikeLearningScreenState extends State<BikeLearningScreen> {
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
       decoration: BoxDecoration(
         color: const Color(0xFFF2F2F7),
-        border: Border(top: BorderSide(color: Colors.black.withValues(alpha: 0.05))),
+        border: Border(
+            top: BorderSide(color: Colors.black.withValues(alpha: 0.05))),
       ),
       child: SizedBox(
         width: double.infinity,
@@ -820,7 +816,6 @@ class _BikeLearningScreenState extends State<BikeLearningScreen> {
             Text(
               'SPUSTIT ZÁZNAM JÍZDY',
               style: TextStyle(
-                fontFamily: '.SF Pro Text',
                 fontSize: 15,
                 fontWeight: FontWeight.w700,
                 color: Colors.white,
@@ -844,7 +839,6 @@ class _BikeLearningScreenState extends State<BikeLearningScreen> {
             Text(
               'DOKONČIT A VYGENEROVAT PRO AI',
               style: TextStyle(
-                fontFamily: '.SF Pro Text',
                 fontSize: 15,
                 fontWeight: FontWeight.w700,
                 color: Colors.white,
@@ -868,7 +862,6 @@ class _BikeLearningScreenState extends State<BikeLearningScreen> {
             Text(
               'VLOŽIT ODPOVĚĎ OD AI',
               style: TextStyle(
-                fontFamily: '.SF Pro Text',
                 fontSize: 15,
                 fontWeight: FontWeight.w700,
                 color: Colors.white,

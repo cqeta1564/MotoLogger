@@ -13,7 +13,8 @@ class PhonePlacementAnimation extends StatefulWidget {
   });
 
   @override
-  State<PhonePlacementAnimation> createState() => _PhonePlacementAnimationState();
+  State<PhonePlacementAnimation> createState() =>
+      _PhonePlacementAnimationState();
 }
 
 class _PhonePlacementAnimationState extends State<PhonePlacementAnimation>
@@ -26,7 +27,18 @@ class _PhonePlacementAnimationState extends State<PhonePlacementAnimation>
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2600),
-    )..repeat();
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _controller.stop();
+      _controller.value = 1;
+    } else if (!_controller.isCompleted && !_controller.isAnimating) {
+      _controller.forward();
+    }
   }
 
   @override
@@ -91,9 +103,11 @@ class _PhonePlacementPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round;
 
     // 1. Ground Reference Line (Horizontální rovina)
-    canvas.drawLine(Offset(cx - 96, groundY), Offset(cx + 96, groundY), subtlePaint);
+    canvas.drawLine(
+        Offset(cx - 96, groundY), Offset(cx + 96, groundY), subtlePaint);
     for (double x = cx - 80; x <= cx + 80; x += 16) {
-      canvas.drawLine(Offset(x, groundY), Offset(x - 4, groundY + 5), subtlePaint);
+      canvas.drawLine(
+          Offset(x, groundY), Offset(x - 4, groundY + 5), subtlePaint);
     }
 
     // 2. Chassis & Steering Axis references
@@ -130,7 +144,8 @@ class _PhonePlacementPainter extends CustomPainter {
     // Seat junction
     tankPath.lineTo(cx + 76, groundY - 24);
     // Bottom contour line returning forward to the steering head
-    tankPath.quadraticBezierTo(cx + 10, groundY - 20, steeringBottom.dx + 4, steeringBottom.dy - 6);
+    tankPath.quadraticBezierTo(
+        cx + 10, groundY - 20, steeringBottom.dx + 4, steeringBottom.dy - 6);
     tankPath.close();
 
     // Fill tank with white to mask background lines
@@ -217,20 +232,24 @@ class _PhonePlacementPainter extends CustomPainter {
         ..strokeCap = StrokeCap.round;
 
       // Left and right flush contact ticks
-      canvas.drawLine(Offset(cx - 36, deckY - 1), Offset(cx - 32, deckY - 1), tickPaint);
-      canvas.drawLine(Offset(cx + 32, deckY - 1), Offset(cx + 36, deckY - 1), tickPaint);
+      canvas.drawLine(
+          Offset(cx - 36, deckY - 1), Offset(cx - 32, deckY - 1), tickPaint);
+      canvas.drawLine(
+          Offset(cx + 32, deckY - 1), Offset(cx + 36, deckY - 1), tickPaint);
     }
 
     // 6. Smartphone Outline (Phone resting flat on the tank cap)
     final phoneWidth = 58.0;
     final phoneHeight = 11.5;
     final phoneRect = RRect.fromRectAndRadius(
-      Rect.fromCenter(center: Offset(cx, phoneY), width: phoneWidth, height: phoneHeight),
+      Rect.fromCenter(
+          center: Offset(cx, phoneY), width: phoneWidth, height: phoneHeight),
       const Radius.circular(3.0),
     );
 
     // Phone fill and body stroke
-    canvas.drawRRect(phoneRect, Paint()..color = Colors.white.withValues(alpha: phoneAlpha));
+    canvas.drawRRect(
+        phoneRect, Paint()..color = Colors.white.withValues(alpha: phoneAlpha));
     canvas.drawRRect(
       phoneRect,
       Paint()
@@ -243,12 +262,16 @@ class _PhonePlacementPainter extends CustomPainter {
 
     // Screen glass line
     final screenRect = RRect.fromRectAndRadius(
-      Rect.fromCenter(center: Offset(cx, phoneY), width: phoneWidth - 8, height: phoneHeight - 5),
+      Rect.fromCenter(
+          center: Offset(cx, phoneY),
+          width: phoneWidth - 8,
+          height: phoneHeight - 5),
       const Radius.circular(1.8),
     );
     canvas.drawRRect(
       screenRect,
-      Paint()..color = const Color(0xFFE5E5EA).withValues(alpha: 0.85 * phoneAlpha),
+      Paint()
+        ..color = const Color(0xFFE5E5EA).withValues(alpha: 0.85 * phoneAlpha),
     );
 
     // Camera notch on the left

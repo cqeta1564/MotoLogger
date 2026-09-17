@@ -1,8 +1,9 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../../core/theme/app_theme.dart';
+import '../widgets/glass_surface.dart';
 import '../../services/telemetry_manager.dart';
+import '../../services/ble_service.dart';
 import '../widgets/bike_upright_animation.dart';
 import '../widgets/construction_spirit_level.dart';
 import '../widgets/phone_placement_animation.dart';
@@ -31,50 +32,33 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
   bool _isCalibrating = false;
   bool _showSuccessBanner = false;
 
-  Future<void> _handleCalibrateStand() async {
+  Future<void> _calibrate() async {
     if (_isCalibrating) return;
-
+    final manager = widget.telemetryManager;
+    if (!manager.isSimulationMode &&
+        manager.bleService.state != BleConnectionState.connected) {
+      return;
+    }
     setState(() => _isCalibrating = true);
-    HapticFeedback.mediumImpact();
-
-    await widget.telemetryManager.calibrateFromTank(phoneRollDeg: _phoneRollDeg);
-
-    if (!mounted) return;
-
-    setState(() {
-      _isCalibrating = false;
-      _showSuccessBanner = true;
-    });
-    HapticFeedback.heavyImpact();
-
-    Future.delayed(const Duration(milliseconds: 2600), () {
-      if (mounted) {
-        setState(() => _showSuccessBanner = false);
+    try {
+      // A demo calibration never changes the real motorcycle's persisted offset.
+      if (!manager.isSimulationMode) {
+        if (_selectedModeIndex == 0) {
+          await manager.calibrateFromTank(phoneRollDeg: _phoneRollDeg);
+        } else {
+          await manager.calibrateUpright();
+        }
       }
-    });
-  }
-
-  Future<void> _handleCalibrateUpright() async {
-    if (_isCalibrating) return;
-
-    setState(() => _isCalibrating = true);
-    HapticFeedback.mediumImpact();
-
-    await widget.telemetryManager.calibrateUpright();
-
-    if (!mounted) return;
-
-    setState(() {
-      _isCalibrating = false;
-      _showSuccessBanner = true;
-    });
-    HapticFeedback.heavyImpact();
-
-    Future.delayed(const Duration(milliseconds: 2600), () {
+      if (mounted) setState(() => _showSuccessBanner = true);
+    } catch (_) {
       if (mounted) {
-        setState(() => _showSuccessBanner = false);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text(
+                'Kalibraci se nepodařilo odeslat. Zkontrolujte připojení a zkuste to znovu.')));
       }
-    });
+    } finally {
+      if (mounted) setState(() => _isCalibrating = false);
+    }
   }
 
   @override
@@ -87,15 +71,10 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
           appBar: AppBar(
             backgroundColor: const Color(0xFFF2F2F7),
             elevation: 0,
-            leading: CupertinoButton(
-              padding: EdgeInsets.zero,
-              child: const Icon(CupertinoIcons.xmark_circle_fill, color: Color(0xFF8E8E93), size: 28),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
+            leading: const GlassBackButton(),
             title: const Text(
               'Srovnání náklonu',
               style: TextStyle(
-                fontFamily: '.SF Pro Display',
                 fontSize: 17,
                 fontWeight: FontWeight.w600,
                 color: Colors.black,
@@ -108,7 +87,7 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
             builder: (context, orientation) {
               final isLandscape = orientation == Orientation.landscape;
               // Aligns button bottom to exact physical pixel height of Dashboard action buttons
-              final bottomSpacing = isLandscape ? 64.0 : 102.0;
+              final bottomSpacing = 20.0 + MediaQuery.paddingOf(context).bottom;
 
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -118,7 +97,8 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
                       bottom: false,
                       child: SingleChildScrollView(
                         physics: const BouncingScrollPhysics(),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 8),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
@@ -161,67 +141,26 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
     );
   }
 
-  Widget _buildModeSelector() {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: const Color(0xFFE5E5EA),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      padding: const EdgeInsets.all(3),
-      child: CupertinoSlidingSegmentedControl<int>(
+  Widget _buildModeSelector() => CupertinoSlidingSegmentedControl<int>(
         groupValue: _selectedModeIndex,
-        backgroundColor: Colors.transparent,
-        thumbColor: Colors.white,
-        children: {
+        children: const {
           0: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: const [
-                Icon(Icons.two_wheeler_rounded, size: 16, color: Colors.black87),
-                SizedBox(width: 6),
-                Text(
-                  'Na bočním stojánku',
-                  style: TextStyle(
-                    fontFamily: '.SF Pro Text',
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.black,
-                  ),
-                ),
-              ],
-            ),
-          ),
+              padding: EdgeInsets.all(12),
+              child: Text('Na stojánku', textAlign: TextAlign.center)),
           1: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: const [
-                Icon(Icons.straighten_rounded, size: 16, color: Colors.black87),
-                SizedBox(width: 6),
-                Text(
-                  'Rovně (svisle)',
-                  style: TextStyle(
-                    fontFamily: '.SF Pro Text',
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.black,
-                  ),
-                ),
-              ],
-            ),
-          ),
+              padding: EdgeInsets.all(12),
+              child: Text('Svisle', textAlign: TextAlign.center)),
         },
-        onValueChanged: (val) {
-          if (val != null) {
-            setState(() => _selectedModeIndex = val);
-            HapticFeedback.selectionClick();
+        onValueChanged: (value) {
+          if (_isCalibrating) return;
+          if (value != null) {
+            setState(() {
+              _selectedModeIndex = value;
+              _showSuccessBanner = false;
+            });
           }
         },
-      ),
-    );
-  }
+      );
 
   Widget _buildStandModeContent() {
     return Column(
@@ -236,7 +175,8 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
         ConstructionSpiritLevelWidget(
           key: const ValueKey('stand_spirit_level'),
           onAngleChanged: (angle) => setState(() => _phoneRollDeg = angle),
-          onStabilityChanged: (stable) => setState(() => _isStandStable = stable),
+          onStabilityChanged: (stable) =>
+              setState(() => _isStandStable = stable),
         ),
       ],
     );
@@ -254,112 +194,44 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
         // Humorous builder's yellow spirit level
         ConstructionSpiritLevelWidget(
           key: const ValueKey('upright_spirit_level'),
-          onStabilityChanged: (stable) => setState(() => _isUprightStable = stable),
+          onStabilityChanged: (stable) =>
+              setState(() => _isUprightStable = stable),
         ),
       ],
     );
   }
 
   Widget _buildActionButton() {
-    final isStandMode = _selectedModeIndex == 0;
-    final isReady = isStandMode ? _isStandStable : _isUprightStable;
-    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
-    final buttonHeight = isLandscape
-        ? AppTheme.primaryButtonHeightLandscape
-        : AppTheme.primaryButtonHeight;
-
-    return Container(
-      width: double.infinity,
-      height: buttonHeight,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(AppTheme.primaryButtonRadius),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isReady ? 0.12 : 0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: CupertinoButton(
-        padding: EdgeInsets.zero,
-        borderRadius: BorderRadius.circular(AppTheme.primaryButtonRadius),
-        color: isReady ? const Color(0xFF1C1C1E) : const Color(0xFFAEAEC2),
-        onPressed: _isCalibrating
-            ? null
-            : (isStandMode ? _handleCalibrateStand : _handleCalibrateUpright),
-        child: _isCalibrating
-            ? const CupertinoActivityIndicator(color: Colors.white)
-            : Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    isReady ? Icons.check_rounded : Icons.tune_rounded,
-                    color: Colors.white,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 10),
-                  Text(
-                    isStandMode
-                        ? (isReady ? 'SROVNAT NULOVÝ BOD' : 'ČEKÁM NA USTÁLENÍ...')
-                        : (isReady ? 'SROVNAT VE SVISLÉ POLOZE' : 'ČEKÁM NA USTÁLENÍ...'),
-                    style: const TextStyle(
-                      fontFamily: '.SF Pro Text',
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                      letterSpacing: 0.3,
-                    ),
-                  ),
-                ],
-              ),
-      ),
+    final manager = widget.telemetryManager;
+    final available = manager.isSimulationMode ||
+        manager.bleService.state == BleConnectionState.connected;
+    final stable = _selectedModeIndex == 0 ? _isStandStable : _isUprightStable;
+    return PrimaryAction(
+      label: !available
+          ? 'Připojte jednotku'
+          : !stable
+              ? 'Čekám na ustálení…'
+              : manager.isSimulationMode
+                  ? 'Vyzkoušet kalibraci'
+                  : 'Srovnat náklon',
+      icon: CupertinoIcons.checkmark,
+      busy: _isCalibrating,
+      onPressed: available && stable ? _calibrate : null,
     );
   }
 
-  Widget _buildSuccessBanner() {
-    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
-    final bannerHeight = isLandscape
-        ? AppTheme.primaryButtonHeightLandscape
-        : AppTheme.primaryButtonHeight;
-
-    return Container(
-      width: double.infinity,
-      height: bannerHeight,
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(AppTheme.primaryButtonRadius),
-        border: Border.all(
-          color: const Color(0xFF1C1C1E),
-          width: 1.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: const [
-          Icon(Icons.check_circle_rounded, color: Color(0xFF1C1C1E), size: 24),
-          SizedBox(width: 12),
+  Widget _buildSuccessBanner() => ContentGroup(
+        padding: const EdgeInsets.all(16),
+        child: Row(children: [
+          const Icon(CupertinoIcons.checkmark_circle,
+              color: AppTheme.appleGreen),
+          const SizedBox(width: 12),
           Expanded(
-            child: Text(
-              'Srovnáno. Jednotka je připravená.',
-              style: TextStyle(
-                fontFamily: '.SF Pro Text',
-                fontSize: 14.5,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF1C1C1E),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+              child: Text(
+                  widget.telemetryManager.isSimulationMode
+                      ? 'Demo kalibrace dokončena. Nastavení motorky se nezměnilo.'
+                      : 'Kalibrace odeslána do jednotky.',
+                  style: const TextStyle(fontSize: 17))),
+        ]),
+      );
 }

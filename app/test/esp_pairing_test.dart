@@ -219,7 +219,7 @@ void main() {
 
       // Check header and titles
       expect(find.text('Párování jednotky'), findsOneWidget);
-      expect(find.text('Hledám jednotky v dosahu'), findsOneWidget);
+      expect(find.text('Jednotky v dosahu'), findsOneWidget);
       expect(find.text('Znovu vyhledat'), findsOneWidget);
 
       // Advance mock timer to allow mock BLE discovery to emit

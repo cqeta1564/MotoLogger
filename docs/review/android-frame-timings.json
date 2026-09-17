@@ -1,0 +1,26 @@
+{
+  "method": "SchedulerBinding FrameTiming; debug build, Android emulator, Skia",
+  "frames": 9,
+  "build_us": [
+    72684,
+    60198,
+    62614,
+    61101,
+    59820,
+    60211,
+    71515,
+    73872,
+    53805
+  ],
+  "raster_us": [
+    28727,
+    34336,
+    118538,
+    24546,
+    31521,
+    58155,
+    47291,
+    28274,
+    33445
+  ]
+}

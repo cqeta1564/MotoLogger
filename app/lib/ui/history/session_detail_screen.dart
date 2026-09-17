@@ -8,6 +8,7 @@ import '../../models/fused_sample.dart';
 import '../../services/database_service.dart';
 import '../widgets/gps_track_map_card.dart';
 import '../widgets/gg_friction_card.dart';
+import '../widgets/glass_surface.dart';
 
 /// Detailed breakdown and telemetry inspection screen for a ride session.
 /// Formatted according to Apple Fitness & Health aesthetic.
@@ -39,7 +40,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF2F2F7),
       appBar: AppBar(
-        title: Text(widget.session.title),
+        leading: const GlassBackButton(),
+        title: Text(widget.session.title,
+            maxLines: 1, overflow: TextOverflow.ellipsis),
         actions: [
           IconButton(
             icon: const Icon(Icons.share_outlined, size: 22),
@@ -47,7 +50,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
             onPressed: _showExportSheet,
           ),
           IconButton(
-            icon: const Icon(Icons.delete_outline_rounded, color: AppTheme.appleRed, size: 22),
+            icon: const Icon(Icons.delete_outline_rounded,
+                color: AppTheme.appleRed, size: 22),
             tooltip: 'Smazat jízdu',
             onPressed: _confirmDelete,
           ),
@@ -58,6 +62,25 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CupertinoActivityIndicator(radius: 14));
+          }
+          if (snapshot.hasError) {
+            return Center(
+                child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text('Data jízdy se nepodařilo načíst.',
+                            textAlign: TextAlign.center),
+                        const SizedBox(height: 16),
+                        PrimaryAction(
+                            label: 'Zkusit znovu',
+                            onPressed: () => setState(() {
+                                  _samplesFuture = widget.dbService
+                                      .getSamplesForSession(widget.session.id!);
+                                })),
+                      ],
+                    )));
           }
           final samples = snapshot.data ?? [];
 
@@ -105,7 +128,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
     final s = widget.session;
     final double avgSpeedKmh;
     if (samples.isNotEmpty) {
-      final totalSpeed = samples.map((e) => e.vehicleSpeedKmh).reduce((a, b) => a + b);
+      final totalSpeed =
+          samples.map((e) => e.vehicleSpeedKmh).reduce((a, b) => a + b);
       avgSpeedKmh = totalSpeed / samples.length;
     } else if (s.duration.inSeconds > 5) {
       avgSpeedKmh = s.totalDistanceKm / (s.duration.inSeconds / 3600.0);
@@ -113,152 +137,40 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
       avgSpeedKmh = 0.0;
     }
 
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE5E5EA), width: 1),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
+    final metrics = [
+      ('Náklon vlevo', '${s.maxLeanLeftDeg.abs().toStringAsFixed(1)}°'),
+      ('Náklon vpravo', '${s.maxLeanRightDeg.abs().toStringAsFixed(1)}°'),
+      ('Max. rychlost', '${s.topSpeedKmh.round()} km/h'),
+      ('Max. přetížení', '${s.maxGForce.toStringAsFixed(2)} G'),
+      (
+        'Doba jízdy',
+        '${s.duration.inMinutes} min ${s.duration.inSeconds % 60} s'
       ),
-      padding: const EdgeInsets.all(18),
-      child: Column(
-        children: [
-          // Row 1: Key Primary Metrics
-          Row(
-            children: [
-              Expanded(
-                child: _buildMetricTile(
-                  label: 'ŠPIČKA VLEVO',
-                  value: '${s.maxLeanLeftDeg.abs().toStringAsFixed(1)}°',
-                  color: AppTheme.appleGreen,
-                ),
-              ),
-              Expanded(
-                child: _buildMetricTile(
-                  label: 'ŠPIČKA VPRAVO',
-                  value: '${s.maxLeanRightDeg.abs().toStringAsFixed(1)}°',
-                  color: AppTheme.appleOrange,
-                ),
-              ),
-              Expanded(
-                child: _buildMetricTile(
-                  label: 'MAX RYCHLOST',
-                  value: '${s.topSpeedKmh.toStringAsFixed(0)} km/h',
-                  color: AppTheme.appleBlack,
-                ),
-              ),
-              Expanded(
-                child: _buildMetricTile(
-                  label: 'MAXIMÁLNÍ G',
-                  value: '${s.maxGForce.toStringAsFixed(2)} G',
-                  color: AppTheme.appleRed,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          const Divider(color: Color(0xFFE5E5EA), height: 1),
-          const SizedBox(height: 14),
-
-          // Row 2: Secondary Ride Stats
-          Row(
-            children: [
-              Expanded(
-                child: _buildSecondaryTile(
-                  label: 'DOBA JÍZDY',
-                  value: '${s.duration.inMinutes} min ${s.duration.inSeconds % 60} s',
-                ),
-              ),
-              Expanded(
-                child: _buildSecondaryTile(
-                  label: 'PRŮMĚRNÁ RYCHLOST',
-                  value: '${avgSpeedKmh.round()} km/h',
-                ),
-              ),
-              Expanded(
-                child: _buildSecondaryTile(
-                  label: 'VZDÁLENOST',
-                  value: '${s.totalDistanceKm.toStringAsFixed(2)} km',
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMetricTile({
-    required String label,
-    required String value,
-    required Color color,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            color: AppTheme.appleMutedGray,
-            fontSize: 9.5,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.2,
-            fontFamily: '-apple-system',
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: TextStyle(
-            color: color,
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            letterSpacing: -0.4,
-            fontFamily: '-apple-system',
-            fontFeatures: const [FontFeature.tabularFigures()],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSecondaryTile({
-    required String label,
-    required String value,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            color: AppTheme.appleMutedGray,
-            fontSize: 9,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.2,
-            fontFamily: '-apple-system',
-          ),
-        ),
-        const SizedBox(height: 3),
-        Text(
-          value,
-          style: const TextStyle(
-            color: AppTheme.appleBlack,
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            letterSpacing: -0.2,
-            fontFamily: '-apple-system',
-            fontFeatures: [FontFeature.tabularFigures()],
-          ),
-        ),
-      ],
-    );
+      ('Průměrná rychlost', '${avgSpeedKmh.round()} km/h'),
+      ('Vzdálenost', '${s.totalDistanceKm.toStringAsFixed(2)} km'),
+    ];
+    return ContentGroup(
+        padding: const EdgeInsets.all(20),
+        child: LayoutBuilder(builder: (context, constraints) {
+          final columns =
+              MediaQuery.textScalerOf(context).scale(17) > 24 ? 1 : 2;
+          return Wrap(spacing: 16, runSpacing: 24, children: [
+            for (final metric in metrics)
+              SizedBox(
+                  width: (constraints.maxWidth - (columns - 1) * 16) / columns,
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(metric.$1,
+                            style: const TextStyle(
+                                fontSize: 13, color: AppTheme.textMuted)),
+                        const SizedBox(height: 6),
+                        Text(metric.$2,
+                            style: const TextStyle(
+                                fontSize: 24, fontWeight: FontWeight.w600)),
+                      ])),
+          ]);
+        }));
   }
 
   Widget _buildChartCard({
@@ -290,7 +202,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
               fontSize: 13,
               fontWeight: FontWeight.w700,
               letterSpacing: -0.2,
-              fontFamily: '-apple-system',
             ),
           ),
           const SizedBox(height: 2),
@@ -300,7 +211,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
               color: AppTheme.appleMutedGray,
               fontSize: 11,
               letterSpacing: -0.1,
-              fontFamily: '-apple-system',
             ),
           ),
           const SizedBox(height: 18),
@@ -332,7 +242,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
           enabled: true,
           touchTooltipData: LineTouchTooltipData(
             tooltipRoundedRadius: 8,
-            tooltipPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            tooltipPadding:
+                const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             getTooltipItems: (touchedSpots) {
               return touchedSpots.map((spot) {
                 final angle = spot.y;
@@ -347,7 +258,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
                     color: Colors.white,
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    fontFamily: '-apple-system',
                   ),
                 );
               }).toList();
@@ -369,9 +279,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
         ),
         titlesData: FlTitlesData(
           show: true,
-          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          bottomTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles:
+              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles:
+              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          bottomTitles:
+              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
@@ -393,7 +306,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
                     color: AppTheme.appleMutedGray,
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
-                    fontFamily: '-apple-system',
                   ),
                 );
               },
@@ -442,7 +354,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
           enabled: true,
           touchTooltipData: LineTouchTooltipData(
             tooltipRoundedRadius: 8,
-            tooltipPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            tooltipPadding:
+                const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             getTooltipItems: (touchedSpots) {
               return touchedSpots.map((spot) {
                 return LineTooltipItem(
@@ -451,7 +364,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
                     color: Colors.white,
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    fontFamily: '-apple-system',
                   ),
                 );
               }).toList();
@@ -469,9 +381,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
         ),
         titlesData: FlTitlesData(
           show: true,
-          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          bottomTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles:
+              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles:
+              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          bottomTitles:
+              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
@@ -483,7 +398,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
                   style: const TextStyle(
                     color: AppTheme.appleMutedGray,
                     fontSize: 10,
-                    fontFamily: '-apple-system',
                   ),
                 );
               },
@@ -514,7 +428,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
       context: context,
       builder: (ctx) => CupertinoActionSheet(
         title: const Text('Exportovat telemetrická data'),
-        message: const Text('Vyberte požadovaný formát pro analýzu nebo zobrazení v mapách'),
+        message: const Text(
+            'Vyberte požadovaný formát pro analýzu nebo zobrazení v mapách'),
         actions: [
           CupertinoActionSheetAction(
             onPressed: () {
@@ -538,7 +453,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
             child: const Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.table_chart_outlined, color: AppTheme.appleGreen, size: 20),
+                Icon(Icons.table_chart_outlined,
+                    color: AppTheme.appleGreen, size: 20),
                 SizedBox(width: 8),
                 Text('Exportovat CSV (MoTeC i2, RaceRender)'),
               ],
@@ -552,7 +468,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
             child: const Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.folder_zip_outlined, color: AppTheme.applePurple, size: 20),
+                Icon(Icons.folder_zip_outlined,
+                    color: AppTheme.applePurple, size: 20),
                 SizedBox(width: 8),
                 Text('Balíček pro MoTeC i2 a RaceRender (.zip)'),
               ],
@@ -570,8 +487,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
 
   Future<void> _exportZipPackage() async {
     try {
-      final path = await widget.dbService.exportSessionPackageToZip(widget.session.id!);
-      await Share.shareXFiles([XFile(path)], text: 'MotoLogger Analytický balíček: ${widget.session.title}');
+      final path =
+          await widget.dbService.exportSessionPackageToZip(widget.session.id!);
+      await Share.shareXFiles([XFile(path)],
+          text: 'MotoLogger Analytický balíček: ${widget.session.title}');
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -586,8 +505,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
 
   Future<void> _exportGpx() async {
     try {
-      final path = await widget.dbService.exportSessionToGpx(widget.session.id!);
-      await Share.shareXFiles([XFile(path)], text: 'MotoLogger Jízda GPX: ${widget.session.title}');
+      final path =
+          await widget.dbService.exportSessionToGpx(widget.session.id!);
+      await Share.shareXFiles([XFile(path)],
+          text: 'MotoLogger Jízda GPX: ${widget.session.title}');
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -602,8 +523,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
 
   Future<void> _exportCsv() async {
     try {
-      final path = await widget.dbService.exportSessionToCsv(widget.session.id!);
-      await Share.shareXFiles([XFile(path)], text: 'MotoLogger Jízda CSV: ${widget.session.title}');
+      final path =
+          await widget.dbService.exportSessionToCsv(widget.session.id!);
+      await Share.shareXFiles([XFile(path)],
+          text: 'MotoLogger Jízda CSV: ${widget.session.title}');
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -623,7 +546,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
         title: const Text('Smazat jízdu?'),
         content: const Padding(
           padding: EdgeInsets.only(top: 6),
-          child: Text('Opravdu si přejete smazat tento záznam jízdy? Tuto akci nelze vzít zpět.'),
+          child: Text(
+              'Opravdu si přejete smazat tento záznam jízdy? Tuto akci nelze vzít zpět.'),
         ),
         actions: [
           CupertinoDialogAction(

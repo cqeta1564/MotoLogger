@@ -59,7 +59,6 @@ class _GpsTrackMapCardState extends State<GpsTrackMapCard> {
               fontSize: 14,
               fontWeight: FontWeight.w700,
               letterSpacing: 0.5,
-              fontFamily: '-apple-system',
             ),
           ),
           const SizedBox(height: 2),
@@ -68,7 +67,6 @@ class _GpsTrackMapCardState extends State<GpsTrackMapCard> {
             style: TextStyle(
               color: AppTheme.appleMutedGray,
               fontSize: 12,
-              fontFamily: '-apple-system',
             ),
           ),
           if (validSamples.length >= 2) ...[
@@ -119,7 +117,6 @@ class _GpsTrackMapCardState extends State<GpsTrackMapCard> {
                       color: AppTheme.appleBlack,
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      fontFamily: '-apple-system',
                     ),
                   ),
                   SizedBox(height: 4),
@@ -128,7 +125,6 @@ class _GpsTrackMapCardState extends State<GpsTrackMapCard> {
                     style: TextStyle(
                       color: AppTheme.appleMutedGray,
                       fontSize: 12,
-                      fontFamily: '-apple-system',
                     ),
                   ),
                 ],
@@ -195,7 +191,6 @@ class _GpsTrackMapCardState extends State<GpsTrackMapCard> {
                                       color: Colors.white,
                                       fontSize: 12,
                                       fontWeight: FontWeight.w600,
-                                      fontFamily: '-apple-system',
                                     ),
                                   ),
                                 ),
@@ -299,7 +294,6 @@ class _GpsTrackMapCardState extends State<GpsTrackMapCard> {
             color: AppTheme.appleMutedGray,
             fontSize: 11,
             fontWeight: FontWeight.w500,
-            fontFamily: '-apple-system',
           ),
         ),
       ],
@@ -508,7 +502,6 @@ class _GpsTrackPainter extends CustomPainter {
         color: Colors.white,
         fontSize: 10,
         fontWeight: FontWeight.w700,
-        fontFamily: '-apple-system',
       ),
     );
     final textPainter = TextPainter(

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import '../../core/theme/app_theme.dart';
+import '../widgets/glass_surface.dart';
 import '../../services/ble_service.dart';
 import '../../services/telemetry_manager.dart';
 
@@ -28,6 +29,7 @@ class _EspPairingScreenState extends State<EspPairingScreen>
   List<DiscoveredBleDevice> _devices = [];
   String? _pairingDeviceId;
   bool _isScanning = false;
+  bool _reduceMotion = false;
 
   late final AnimationController _pulseController;
   late final Animation<double> _pulseAnimation;
@@ -40,7 +42,7 @@ class _EspPairingScreenState extends State<EspPairingScreen>
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1800),
-    )..repeat();
+    );
 
     _pulseAnimation = CurvedAnimation(
       parent: _pulseController,
@@ -60,6 +62,22 @@ class _EspPairingScreenState extends State<EspPairingScreen>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _reduceMotion = MediaQuery.disableAnimationsOf(context);
+    _updateScanAnimation();
+  }
+
+  void _updateScanAnimation() {
+    if (_reduceMotion || !_isScanning) {
+      _pulseController.stop();
+      _pulseController.value = .5;
+    } else if (!_pulseController.isAnimating) {
+      _pulseController.repeat();
+    }
+  }
+
+  @override
   void dispose() {
     _scanSub?.cancel();
     _pulseController.dispose();
@@ -68,14 +86,17 @@ class _EspPairingScreenState extends State<EspPairingScreen>
   }
 
   Future<void> _startScan() async {
+    if (_isScanning) return;
     setState(() {
       _isScanning = true;
     });
+    _updateScanAnimation();
     await _ble.startDiscoveryScan();
     if (mounted) {
       setState(() {
         _isScanning = false;
       });
+      _updateScanAnimation();
     }
   }
 
@@ -98,11 +119,13 @@ class _EspPairingScreenState extends State<EspPairingScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           backgroundColor: const Color(0xFF1C1C1E),
           content: Row(
             children: [
-              const Icon(Icons.check_circle_rounded, color: AppTheme.appleGreen, size: 20),
+              const Icon(Icons.check_circle_rounded,
+                  color: AppTheme.appleGreen, size: 20),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -111,7 +134,6 @@ class _EspPairingScreenState extends State<EspPairingScreen>
                     color: Colors.white,
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    fontFamily: '-apple-system',
                   ),
                 ),
               ),
@@ -131,11 +153,13 @@ class _EspPairingScreenState extends State<EspPairingScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           backgroundColor: AppTheme.appleRed,
           content: const Text(
             'Párování se nezdařilo. Zkontrolujte, zda je jednotka zapnutá.',
-            style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+            style: TextStyle(
+                color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
           ),
         ),
       );
@@ -150,18 +174,24 @@ class _EspPairingScreenState extends State<EspPairingScreen>
       backgroundColor: const Color(0xFFF2F2F7),
       appBar: AppBar(
         title: const Text('Párování jednotky'),
-        leading: IconButton(
-          icon: const Icon(CupertinoIcons.clear),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
+        leading: const GlassBackButton(),
       ),
       body: SafeArea(
         child: Column(
           children: [
             Expanded(
               child: ListView(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
                 children: [
+                  if (widget.telemetryManager.isSimulationMode)
+                    const Padding(
+                        padding: EdgeInsets.only(bottom: 16),
+                        child: Text(
+                            'Demo · ukázkové jednotky. Nejde o skutečná zařízení.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                                fontSize: 15, color: AppTheme.textMuted))),
                   // Radar Scanning Animation & Header
                   Center(
                     child: SizedBox(
@@ -181,7 +211,8 @@ class _EspPairingScreenState extends State<EspPairingScreen>
                                   shape: BoxShape.circle,
                                   border: Border.all(
                                     color: AppTheme.appleBlue.withValues(
-                                      alpha: (1.0 - _pulseAnimation.value) * 0.4,
+                                      alpha:
+                                          (1.0 - _pulseAnimation.value) * 0.4,
                                     ),
                                     width: 2,
                                   ),
@@ -205,10 +236,13 @@ class _EspPairingScreenState extends State<EspPairingScreen>
                                 decoration: BoxDecoration(
                                   color: Colors.white,
                                   shape: BoxShape.circle,
-                                  border: Border.all(color: const Color(0xFFE5E5EA), width: 1.5),
+                                  border: Border.all(
+                                      color: const Color(0xFFE5E5EA),
+                                      width: 1.5),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.06),
+                                      color:
+                                          Colors.black.withValues(alpha: 0.06),
                                       blurRadius: 10,
                                       offset: const Offset(0, 4),
                                     ),
@@ -228,15 +262,16 @@ class _EspPairingScreenState extends State<EspPairingScreen>
                   ),
 
                   const SizedBox(height: 12),
-                  const Text(
-                    'Hledám jednotky v dosahu',
+                  Text(
+                    _isScanning
+                        ? 'Hledám jednotky v dosahu'
+                        : 'Jednotky v dosahu',
                     textAlign: TextAlign.center,
-                    style: TextStyle(
+                    style: const TextStyle(
                       color: AppTheme.appleBlack,
                       fontSize: 18,
                       fontWeight: FontWeight.w700,
                       letterSpacing: -0.4,
-                      fontFamily: '-apple-system',
                     ),
                   ),
                   const SizedBox(height: 6),
@@ -249,7 +284,6 @@ class _EspPairingScreenState extends State<EspPairingScreen>
                         color: AppTheme.appleMutedGray,
                         fontSize: 13,
                         height: 1.35,
-                        fontFamily: '-apple-system',
                       ),
                     ),
                   ),
@@ -266,7 +300,6 @@ class _EspPairingScreenState extends State<EspPairingScreen>
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
                         letterSpacing: 0.6,
-                        fontFamily: '-apple-system',
                       ),
                     ),
                   ),
@@ -274,16 +307,23 @@ class _EspPairingScreenState extends State<EspPairingScreen>
                   // Discovered Devices Inset Group
                   if (_devices.isEmpty)
                     Container(
-                      padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 20),
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 36, horizontal: 20),
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: const Color(0xFFE5E5EA), width: 1),
+                        border: Border.all(
+                            color: const Color(0xFFE5E5EA), width: 1),
                       ),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const CupertinoActivityIndicator(radius: 12),
+                          if (_isScanning)
+                            const CupertinoActivityIndicator(radius: 12)
+                          else
+                            const Icon(
+                                CupertinoIcons.antenna_radiowaves_left_right,
+                                color: AppTheme.textMuted),
                           const SizedBox(height: 16),
                           Text(
                             _isScanning
@@ -294,7 +334,6 @@ class _EspPairingScreenState extends State<EspPairingScreen>
                               color: AppTheme.appleMutedGray,
                               fontSize: 13.5,
                               fontWeight: FontWeight.w500,
-                              fontFamily: '-apple-system',
                             ),
                           ),
                         ],
@@ -305,7 +344,8 @@ class _EspPairingScreenState extends State<EspPairingScreen>
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: const Color(0xFFE5E5EA), width: 1),
+                        border: Border.all(
+                            color: const Color(0xFFE5E5EA), width: 1),
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black.withValues(alpha: 0.03),
@@ -328,7 +368,8 @@ class _EspPairingScreenState extends State<EspPairingScreen>
                           itemBuilder: (context, index) {
                             final device = _devices[index];
                             final isCurrentPaired = currentPairedId != null &&
-                                device.id.toLowerCase() == currentPairedId.toLowerCase();
+                                device.id.toLowerCase() ==
+                                    currentPairedId.toLowerCase();
                             final isPairing = _pairingDeviceId == device.id;
 
                             return Padding(
@@ -344,7 +385,8 @@ class _EspPairingScreenState extends State<EspPairingScreen>
                                     height: 42,
                                     decoration: BoxDecoration(
                                       color: device.isMotoLogger
-                                          ? AppTheme.appleBlue.withValues(alpha: 0.12)
+                                          ? AppTheme.appleBlue
+                                              .withValues(alpha: 0.12)
                                           : const Color(0xFFF2F2F7),
                                       borderRadius: BorderRadius.circular(10),
                                     ),
@@ -363,7 +405,8 @@ class _EspPairingScreenState extends State<EspPairingScreen>
                                   // Device info
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Row(
                                           children: [
@@ -375,7 +418,6 @@ class _EspPairingScreenState extends State<EspPairingScreen>
                                                   fontSize: 15.5,
                                                   fontWeight: FontWeight.w600,
                                                   letterSpacing: -0.3,
-                                                  fontFamily: '-apple-system',
                                                 ),
                                                 overflow: TextOverflow.ellipsis,
                                               ),
@@ -383,13 +425,16 @@ class _EspPairingScreenState extends State<EspPairingScreen>
                                             if (device.isMotoLogger) ...[
                                               const SizedBox(width: 6),
                                               Container(
-                                                padding: const EdgeInsets.symmetric(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
                                                   horizontal: 6,
                                                   vertical: 1.5,
                                                 ),
                                                 decoration: BoxDecoration(
-                                                  color: AppTheme.appleBlue.withValues(alpha: 0.12),
-                                                  borderRadius: BorderRadius.circular(6),
+                                                  color: AppTheme.appleBlue
+                                                      .withValues(alpha: 0.12),
+                                                  borderRadius:
+                                                      BorderRadius.circular(6),
                                                 ),
                                                 child: const Text(
                                                   'MotoLogger',
@@ -397,7 +442,6 @@ class _EspPairingScreenState extends State<EspPairingScreen>
                                                     color: AppTheme.appleBlue,
                                                     fontSize: 10,
                                                     fontWeight: FontWeight.w700,
-                                                    fontFamily: '-apple-system',
                                                   ),
                                                 ),
                                               ),
@@ -414,8 +458,9 @@ class _EspPairingScreenState extends State<EspPairingScreen>
                                               style: const TextStyle(
                                                 color: AppTheme.appleMutedGray,
                                                 fontSize: 11.5,
-                                                fontFamily: '-apple-system',
-                                                fontFeatures: [FontFeature.tabularFigures()],
+                                                fontFeatures: [
+                                                  FontFeature.tabularFigures()
+                                                ],
                                               ),
                                             ),
                                           ],
@@ -434,7 +479,8 @@ class _EspPairingScreenState extends State<EspPairingScreen>
                                         vertical: 5,
                                       ),
                                       decoration: BoxDecoration(
-                                        color: AppTheme.appleGreen.withValues(alpha: 0.12),
+                                        color: AppTheme.appleGreen
+                                            .withValues(alpha: 0.12),
                                         borderRadius: BorderRadius.circular(14),
                                       ),
                                       child: const Row(
@@ -452,7 +498,6 @@ class _EspPairingScreenState extends State<EspPairingScreen>
                                               color: AppTheme.appleGreen,
                                               fontSize: 12,
                                               fontWeight: FontWeight.w700,
-                                              fontFamily: '-apple-system',
                                             ),
                                           ),
                                         ],
@@ -473,7 +518,6 @@ class _EspPairingScreenState extends State<EspPairingScreen>
                                           color: Colors.white,
                                           fontSize: 13,
                                           fontWeight: FontWeight.w600,
-                                          fontFamily: '-apple-system',
                                         ),
                                       ),
                                     ),
@@ -504,18 +548,21 @@ class _EspPairingScreenState extends State<EspPairingScreen>
                     children: [
                       Icon(
                         Icons.refresh_rounded,
-                        color: _isScanning ? AppTheme.appleMutedGray : AppTheme.appleBlack,
+                        color: _isScanning
+                            ? AppTheme.appleMutedGray
+                            : AppTheme.appleBlack,
                         size: 20,
                       ),
                       const SizedBox(width: 8),
                       Text(
                         _isScanning ? 'Hledám...' : 'Znovu vyhledat',
                         style: TextStyle(
-                          color: _isScanning ? AppTheme.appleMutedGray : AppTheme.appleBlack,
+                          color: _isScanning
+                              ? AppTheme.appleMutedGray
+                              : AppTheme.appleBlack,
                           fontSize: 15,
                           fontWeight: FontWeight.w600,
                           letterSpacing: -0.2,
-                          fontFamily: '-apple-system',
                         ),
                       ),
                     ],

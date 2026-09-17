@@ -1,765 +1,365 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/services.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/preferences/app_preferences.dart';
 import '../../services/telemetry_manager.dart';
 import '../../services/ble_service.dart';
+import '../widgets/glass_surface.dart';
 import 'tank_calibration_screen.dart';
 import 'bike_learning_screen.dart';
 import 'bike_profiles_screen.dart';
 import 'esp_pairing_screen.dart';
 
-/// Settings, BLE device connection, and sensor calibration screen.
-/// Follows authentic Apple iOS Inset Grouped Settings guidelines.
-class SettingsScreen extends StatelessWidget {
-  final TelemetryManager telemetryManager;
-
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key, required this.telemetryManager});
+  final TelemetryManager telemetryManager;
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  bool _busy = false;
+  TelemetryManager get manager => widget.telemetryManager;
+
+  void _open(Widget screen) => Navigator.of(context)
+      .push(CupertinoPageRoute<void>(builder: (_) => screen));
+
+  Future<void> _perform(Future<void> Function() action) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      await action();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Změnu se nepodařilo uložit. Zkuste to znovu.')));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<bool> _confirm(String title, String message, String action) async =>
+      await showCupertinoDialog<bool>(
+          context: context,
+          builder: (context) => CupertinoAlertDialog(
+                  title: Text(title),
+                  content: Text(message),
+                  actions: [
+                    CupertinoDialogAction(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('Zrušit')),
+                    CupertinoDialogAction(
+                        isDestructiveAction: true,
+                        onPressed: () => Navigator.pop(context, true),
+                        child: Text(action)),
+                  ])) ??
+      false;
 
   @override
   Widget build(BuildContext context) {
+    final preferences = AppPreferencesScope.maybeOf(context);
     return ListenableBuilder(
-      listenable: telemetryManager,
-      builder: (context, _) {
-        final ble = telemetryManager.bleService;
-        final isConnected = ble.state == BleConnectionState.connected;
-        final isScanning = ble.state == BleConnectionState.scanning;
-
-        return Scaffold(
-          backgroundColor: const Color(0xFFF2F2F7),
-          appBar: AppBar(
-            title: const Text('Nastavení'),
-          ),
-          body: ListView(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-            children: [
-              // SECTION 1: Hardware Connection
-              _buildSectionHeader('PŘIPOJENÍ HARDWARE'),
-              _buildInsetGroup([
-                // Current device connection tile
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: isConnected
-                              ? AppTheme.appleGreen.withValues(alpha: 0.12)
-                              : isScanning
-                                  ? AppTheme.appleOrange.withValues(alpha: 0.12)
-                                  : const Color(0xFFF2F2F7),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.bluetooth_rounded,
-                          color: isConnected
-                              ? AppTheme.appleGreen
-                              : isScanning
-                                  ? AppTheme.appleOrange
-                                  : AppTheme.appleMutedGray,
-                          size: 22,
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
+        listenable: Listenable.merge([manager, manager.canProfileService]),
+        builder: (context, _) {
+          final ble = manager.bleService;
+          final demo = manager.isSimulationMode;
+          final connected = ble.state == BleConnectionState.connected && !demo;
+          final available = connected || demo;
+          return Scaffold(
+              backgroundColor: AppTheme.surfaceSecondary,
+              body: SafeArea(
+                bottom: false,
+                child: ListView(
+                  key: const PageStorageKey('settings-scroll'),
+                  padding: EdgeInsets.fromLTRB(
+                      20, 4, 20, 120 + MediaQuery.paddingOf(context).bottom),
+                  children: [
+                    const AppPageTitle('Nastavení',
+                        subtitle: 'VAŠE MOTORKA, VAŠE DATA'),
+                    ContentGroup(
+                        padding: const EdgeInsets.all(20),
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              telemetryManager.pairedDeviceName ??
-                                  (telemetryManager.isPaired ? 'MotoLogger' : 'Nespárováno'),
-                              style: const TextStyle(
-                                color: AppTheme.appleBlack,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: -0.3,
-                                fontFamily: '-apple-system',
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Row(
-                              children: [
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Row(children: [
                                 Container(
-                                  width: 7,
-                                  height: 7,
-                                  decoration: BoxDecoration(
-                                    color: isConnected
-                                        ? AppTheme.appleGreen
-                                        : isScanning
-                                            ? AppTheme.appleOrange
-                                            : AppTheme.appleMutedGray,
-                                    shape: BoxShape.circle,
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
+                                    width: 52,
+                                    height: 52,
+                                    decoration: BoxDecoration(
+                                        color: AppTheme.surfaceSecondary,
+                                        borderRadius:
+                                            BorderRadius.circular(16)),
+                                    child: const Icon(
+                                        CupertinoIcons
+                                            .antenna_radiowaves_left_right,
+                                        size: 27)),
+                                const SizedBox(width: 14),
                                 Expanded(
-                                  child: Text(
-                                    isConnected
-                                        ? (telemetryManager.pairedDeviceId != null
-                                            ? 'Připojeno (${telemetryManager.pairedDeviceId})'
-                                            : 'Připojeno')
-                                        : isScanning
-                                            ? 'Vyhledávání...'
-                                            : (telemetryManager.isPaired
-                                                ? 'Odpojeno'
-                                                : 'Žádná spárovaná jednotka'),
-                                    style: TextStyle(
-                                      color: isConnected
-                                          ? AppTheme.appleGreen
-                                          : isScanning
-                                              ? AppTheme.appleOrange
-                                              : AppTheme.appleMutedGray,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                      fontFamily: '-apple-system',
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (telemetryManager.isPaired || isConnected)
-                        CupertinoButton(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                          color: isConnected ? const Color(0xFFF2F2F7) : AppTheme.appleBlue,
-                          borderRadius: BorderRadius.circular(20),
-                          onPressed: () {
-                            if (isConnected) {
-                              ble.disconnect();
-                            } else {
-                              ble.startScanAndAutoConnect();
-                            }
-                          },
-                          child: Text(
-                            isConnected ? 'Odpojit' : 'Připojit',
-                            style: TextStyle(
-                              color: isConnected ? AppTheme.appleRed : Colors.white,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              fontFamily: '-apple-system',
-                            ),
-                          ),
-                        )
-                      else
-                        CupertinoButton(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                          color: AppTheme.appleBlue,
-                          borderRadius: BorderRadius.circular(20),
-                          onPressed: () {
-                            Navigator.of(context).push(
-                              CupertinoPageRoute(
-                                fullscreenDialog: true,
-                                builder: (context) => EspPairingScreen(
-                                  telemetryManager: telemetryManager,
-                                ),
-                              ),
-                            );
-                          },
-                          child: const Text(
-                            'Spárovat',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              fontFamily: '-apple-system',
-                            ),
-                          ),
-                        ),
+                                    child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                      Text(
+                                          demo
+                                              ? 'Demo jednotka'
+                                              : manager.pairedDeviceName ??
+                                                  'MotoLogger',
+                                          style: const TextStyle(
+                                              fontSize: 20,
+                                              fontWeight: FontWeight.w600)),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                          demo
+                                              ? 'Simulovaná data'
+                                              : connected
+                                                  ? 'Připojeno přes Bluetooth'
+                                                  : ble.state ==
+                                                          BleConnectionState
+                                                              .scanning
+                                                      ? 'Hledání jednotky…'
+                                                      : ble.state ==
+                                                              BleConnectionState
+                                                                  .error
+                                                          ? 'Bluetooth není dostupné'
+                                                          : manager.isPaired
+                                                              ? 'Jednotka je odpojena'
+                                                              : 'Zatím není spárováno',
+                                          style: const TextStyle(
+                                              fontSize: 14,
+                                              color: AppTheme.textMuted)),
+                                    ])),
+                              ]),
+                              const SizedBox(height: 20),
+                              if (!demo)
+                                PrimaryAction(
+                                    label: connected
+                                        ? 'Odpojit jednotku'
+                                        : 'Připojit jednotku',
+                                    icon: CupertinoIcons.link,
+                                    busy: _busy,
+                                    onPressed: manager.isRecording
+                                        ? null
+                                        : () {
+                                            if (connected) {
+                                              _perform(
+                                                  () async => ble.disconnect());
+                                            } else {
+                                              _open(EspPairingScreen(
+                                                  telemetryManager: manager));
+                                            }
+                                          }),
+                              if (manager.isRecording)
+                                const Padding(
+                                    padding: EdgeInsets.only(top: 8),
+                                    child: Text(
+                                        'Připojení můžete změnit po uložení jízdy.',
+                                        style: TextStyle(
+                                            fontSize: 13,
+                                            color: AppTheme.textMuted))),
+                            ])),
+                    _section('Motorka'),
+                    ContentGroup(
+                        child: Column(children: [
+                      SettingsRow(
+                          icon: CupertinoIcons.slider_horizontal_3,
+                          title: 'Profily motocyklů',
+                          subtitle:
+                              manager.canProfileService.activeProfile.name,
+                          onTap: () => _open(BikeProfilesScreen(
+                              canProfileService: manager.canProfileService,
+                              telemetryManager: manager))),
+                      _divider(),
+                      SettingsRow(
+                          icon: CupertinoIcons.compass,
+                          title: 'Kalibrace náklonu',
+                          subtitle: available
+                              ? 'Na stojánku nebo ve svislé poloze'
+                              : 'Nejprve připojte jednotku',
+                          onTap: available && !manager.isRecording
+                              ? () => _open(TankCalibrationScreen(
+                                  telemetryManager: manager))
+                              : null),
+                      _divider(),
+                      SettingsRow(
+                          icon: CupertinoIcons.waveform,
+                          title: 'Naučit se motorku',
+                          subtitle: 'Záznam signálů a import profilu',
+                          onTap: () => _open(
+                              BikeLearningScreen(telemetryManager: manager))),
+                    ])),
+                    _section('Zobrazení a ukázka'),
+                    ContentGroup(
+                        child: Column(children: [
+                      SettingsRow(
+                          icon: CupertinoIcons.layers,
+                          title: 'Omezit průhlednost',
+                          subtitle: 'Neprůhledné ovládání pro lepší čitelnost',
+                          trailing: CupertinoSwitch(
+                              value: preferences?.reduceTransparency ?? false,
+                              onChanged:
+                                  preferences == null || preferences.saving
+                                      ? null
+                                      : (value) => _perform(() => preferences
+                                          .setReduceTransparency(value)))),
+                      _divider(),
+                      SettingsRow(
+                          icon: CupertinoIcons.play_circle,
+                          title: 'Demo jízda',
+                          subtitle: manager.isRecording
+                              ? 'Režim lze změnit po uložení jízdy'
+                              : connected
+                                  ? 'Nejprve odpojte skutečnou jednotku'
+                                  : 'Simulovaná telemetrie okruhu Brno',
+                          trailing: CupertinoSwitch(
+                              value: demo,
+                              onChanged: manager.isRecording || connected
+                                  ? null
+                                  : manager.setSimulationMode)),
+                    ])),
+                    _section('Stav a úložiště'),
+                    ContentGroup(
+                        child: Column(children: [
+                      SettingsRow(
+                          icon: CupertinoIcons.location,
+                          title: 'Poloha',
+                          subtitle: demo
+                              ? 'Simulovaná trasa'
+                              : manager.latestPosition == null
+                                  ? 'Poloha zatím není dostupná'
+                                  : 'GPS aktivní'),
+                      _divider(),
+                      const SettingsRow(
+                          icon: CupertinoIcons.tray,
+                          title: 'Jízdy v telefonu',
+                          subtitle: 'Lokální úložiště · funguje bez internetu'),
+                      _divider(),
+                      const SettingsRow(
+                          icon: CupertinoIcons.info,
+                          title: 'MotoLogger',
+                          subtitle: 'Verze 1.0.0'),
+                    ])),
+                    if (manager.isPaired ||
+                        manager.mountingRollOffsetDeg != 0) ...[
+                      _section('Správa jednotky'),
+                      ContentGroup(
+                          child: Column(children: [
+                        if (available && manager.mountingRollOffsetDeg != 0)
+                          SettingsRow(
+                              icon: CupertinoIcons.arrow_counterclockwise,
+                              title: 'Obnovit nulový náklon',
+                              subtitle: 'Zruší uloženou korekci montáže',
+                              navigates: false,
+                              onTap: _busy || manager.isRecording
+                                  ? null
+                                  : () async {
+                                      if (await _confirm(
+                                              'Obnovit nulový náklon?',
+                                              'Uložená korekce se nastaví na nulu.',
+                                              'Obnovit') &&
+                                          mounted) {
+                                        await _perform(
+                                            manager.resetMountingOffset);
+                                      }
+                                    }),
+                        if (manager.isPaired)
+                          SettingsRow(
+                              icon: CupertinoIcons.link,
+                              title: 'Zapomenout jednotku',
+                              navigates: false,
+                              destructive: true,
+                              onTap: _busy || manager.isRecording
+                                  ? null
+                                  : () async {
+                                      if (await _confirm(
+                                              'Zapomenout jednotku?',
+                                              'Automatické připojení k této jednotce se vypne.',
+                                              'Zapomenout') &&
+                                          mounted) {
+                                        await _perform(manager.unpairDevice);
+                                      }
+                                    }),
+                      ])),
                     ],
-                  ),
+                  ],
                 ),
+              ));
+        });
+  }
 
-                // Pair new unit tile
-                const Divider(color: Color(0xFFE5E5EA), height: 1, indent: 16, endIndent: 16),
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () {
-                    Navigator.of(context).push(
-                      CupertinoPageRoute(
-                        fullscreenDialog: true,
-                        builder: (context) => EspPairingScreen(
-                          telemetryManager: telemetryManager,
-                        ),
-                      ),
-                    );
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-                    child: Row(
+  Widget _section(String title) => Padding(
+      padding: const EdgeInsets.fromLTRB(4, 28, 4, 10),
+      child: Semantics(
+          header: true,
+          child: Text(title,
+              style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.textMuted))));
+  Widget _divider() => const Divider(indent: 60, endIndent: 16);
+}
+
+class SettingsRow extends StatelessWidget {
+  const SettingsRow(
+      {super.key,
+      required this.icon,
+      required this.title,
+      this.subtitle,
+      this.onTap,
+      this.trailing,
+      this.navigates = true,
+      this.destructive = false});
+  final IconData icon;
+  final String title;
+  final String? subtitle;
+  final VoidCallback? onTap;
+  final Widget? trailing;
+  final bool navigates;
+  final bool destructive;
+
+  @override
+  Widget build(BuildContext context) => Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(20),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 17),
+            child: Row(children: [
+              Icon(icon,
+                  size: 23,
+                  color: destructive ? AppTheme.danger : AppTheme.textMuted),
+              const SizedBox(width: 16),
+              Expanded(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          width: 32,
-                          height: 32,
-                          decoration: BoxDecoration(
-                            color: AppTheme.appleBlue.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Icon(
-                            Icons.phonelink_ring_rounded,
-                            color: AppTheme.appleBlue,
-                            size: 18,
-                          ),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Text(
-                            telemetryManager.isPaired
-                                ? 'Spárovat jinou jednotku'
-                                : 'Vyhledat a spárovat jednotku ESP',
-                            style: const TextStyle(
-                              color: AppTheme.appleBlack,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w500,
-                              letterSpacing: -0.2,
-                              fontFamily: '-apple-system',
-                            ),
-                          ),
-                        ),
-                        const Icon(
-                          CupertinoIcons.chevron_right,
-                          color: Color(0xFFC7C7CC),
-                          size: 16,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                // Unpair device tile (if currently paired)
-                if (telemetryManager.isPaired) ...[
-                  const Divider(color: Color(0xFFE5E5EA), height: 1, indent: 16, endIndent: 16),
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () async {
-                      HapticFeedback.lightImpact();
-                      final confirmed = await showCupertinoDialog<bool>(
-                        context: context,
-                        builder: (ctx) => CupertinoAlertDialog(
-                          title: const Text('Zrušit spárování jednotky?'),
-                          content: Text(
-                            'Jednotka ${telemetryManager.pairedDeviceName ?? "MotoLogger"} bude zapomenuta. Aplikace se k ní již nebude automaticky připojovat.',
-                          ),
-                          actions: [
-                            CupertinoDialogAction(
-                              isDefaultAction: true,
-                              onPressed: () => Navigator.of(ctx).pop(false),
-                              child: const Text('Ponechat'),
-                            ),
-                            CupertinoDialogAction(
-                              isDestructiveAction: true,
-                              onPressed: () => Navigator.of(ctx).pop(true),
-                              child: const Text('Zrušit spárování'),
-                            ),
-                          ],
-                        ),
-                      );
-
-                      if (confirmed != true) return;
-
-                      HapticFeedback.mediumImpact();
-                      await telemetryManager.unpairDevice();
-                      if (!context.mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          behavior: SnackBarBehavior.floating,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          backgroundColor: const Color(0xFF1C1C1E),
-                          content: const Text(
-                            'Spárování jednotky bylo zrušeno.',
-                            style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
-                          ),
-                        ),
-                      );
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 32,
-                            height: 32,
-                            decoration: BoxDecoration(
-                              color: AppTheme.appleRed.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Icon(
-                              Icons.link_off_rounded,
-                              color: AppTheme.appleRed,
-                              size: 18,
-                            ),
-                          ),
-                          const SizedBox(width: 14),
-                          const Expanded(
-                            child: Text(
-                              'Zrušit spárování jednotky',
-                              style: TextStyle(
-                                color: AppTheme.appleRed,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w500,
-                                letterSpacing: -0.2,
-                                fontFamily: '-apple-system',
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-
-                const Divider(color: Color(0xFFE5E5EA), height: 1, indent: 16, endIndent: 16),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Režim simulace (Demo)',
+                    Text(title,
                         style: TextStyle(
-                          color: AppTheme.appleBlack,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w500,
-                          letterSpacing: -0.2,
-                          fontFamily: '-apple-system',
-                        ),
-                      ),
-                      CupertinoSwitch(
-                        activeTrackColor: AppTheme.appleGreen,
-                        value: telemetryManager.isSimulationMode,
-                        onChanged: (val) {
-                          telemetryManager.setSimulationMode(val);
-                        },
-                      ),
+                            fontSize: 17,
+                            fontWeight: FontWeight.w500,
+                            color: destructive
+                                ? AppTheme.danger
+                                : AppTheme.textPrimary)),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 4),
+                      Text(subtitle!,
+                          style: const TextStyle(
+                              fontSize: 13,
+                              height: 1.35,
+                              color: AppTheme.textMuted))
                     ],
-                  ),
-                ),
-              ]),
-
-              const SizedBox(height: 24),
-
-              // SECTION 2: Calibration
-              _buildSectionHeader('KALIBRACE NÁKLONU'),
-              _buildInsetGroup([
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () {
-                    Navigator.of(context).push(
-                      CupertinoPageRoute(
-                        fullscreenDialog: true,
-                        builder: (context) => TankCalibrationScreen(
-                          telemetryManager: telemetryManager,
-                        ),
-                      ),
-                    );
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: AppTheme.appleBlue.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(
-                            Icons.two_wheeler_rounded,
-                            color: AppTheme.appleBlue,
-                            size: 24,
-                          ),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Srovnání nulového náklonu',
-                                style: TextStyle(
-                                  color: AppTheme.appleBlack,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: -0.3,
-                                  fontFamily: '-apple-system',
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                telemetryManager.mountingRollOffsetDeg != 0.0
-                                    ? 'Zkalibrováno (uloženo v jednotce)'
-                                    : 'Na bočním stojánku nebo ve svislé poloze',
-                                style: TextStyle(
-                                  color: telemetryManager.mountingRollOffsetDeg != 0.0
-                                      ? AppTheme.appleGreen
-                                      : AppTheme.appleMutedGray,
-                                  fontSize: 12.5,
-                                  fontWeight: telemetryManager.mountingRollOffsetDeg != 0.0
-                                      ? FontWeight.w600
-                                      : FontWeight.w400,
-                                  fontFamily: '-apple-system',
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const Icon(
-                          CupertinoIcons.chevron_right,
-                          color: Color(0xFFC7C7CC),
-                          size: 18,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const Divider(color: Color(0xFFE5E5EA), height: 1, indent: 16, endIndent: 16),
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () async {
-                    HapticFeedback.lightImpact();
-
-                    final confirmed = await showCupertinoDialog<bool>(
-                      context: context,
-                      builder: (ctx) => CupertinoAlertDialog(
-                        title: const Text('Obnovit výchozí nulování?'),
-                        content: const Text(
-                          'Korekce montážního úhlu bude nastavena zpět na výchozí hodnotu (0.0°).',
-                        ),
-                        actions: [
-                          CupertinoDialogAction(
-                            isDefaultAction: true,
-                            onPressed: () => Navigator.of(ctx).pop(false),
-                            child: const Text('Zrušit'),
-                          ),
-                          CupertinoDialogAction(
-                            isDestructiveAction: true,
-                            onPressed: () => Navigator.of(ctx).pop(true),
-                            child: const Text('Obnovit'),
-                          ),
-                        ],
-                      ),
-                    );
-
-                    if (confirmed != true) return;
-
-                    HapticFeedback.mediumImpact();
-                    await telemetryManager.resetMountingOffset();
-                    if (!context.mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        behavior: SnackBarBehavior.floating,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        backgroundColor: const Color(0xFF1C1C1E),
-                        content: const Row(
-                          children: [
-                            Icon(Icons.refresh_rounded, color: Colors.white, size: 20),
-                            SizedBox(width: 10),
-                            Text(
-                              'Nulový náklon byl resetován na výchozí stav.',
-                              style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF2F2F7),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(
-                            Icons.refresh_rounded,
-                            color: AppTheme.appleBlack,
-                            size: 22,
-                          ),
-                        ),
-                        const SizedBox(width: 14),
-                        const Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Obnovit výchozí nulování',
-                                style: TextStyle(
-                                  color: AppTheme.appleBlack,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: -0.3,
-                                  fontFamily: '-apple-system',
-                                ),
-                              ),
-                              SizedBox(height: 2),
-                              Text(
-                                'Resetuje korekci montážního úhlu na 0.0°',
-                                style: TextStyle(
-                                  color: AppTheme.appleMutedGray,
-                                  fontSize: 12.5,
-                                  fontWeight: FontWeight.w400,
-                                  fontFamily: '-apple-system',
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ]),
-
-              const SizedBox(height: 24),
-
-              // SECTION 3: CAN Bus & Bike Profile
-              _buildSectionHeader('CAN SBĚRNICE & PROFIL MOTORKY'),
-              _buildInsetGroup([
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () {
-                    Navigator.of(context).push(
-                      CupertinoPageRoute(
-                        fullscreenDialog: true,
-                        builder: (context) => BikeLearningScreen(
-                          telemetryManager: telemetryManager,
-                        ),
-                      ),
-                    );
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: AppTheme.appleBlue.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(
-                            Icons.auto_awesome,
-                            color: AppTheme.appleBlue,
-                            size: 24,
-                          ),
-                        ),
-                        const SizedBox(width: 14),
-                        const Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Naučit se motorku (AI Asistent)',
-                                style: TextStyle(
-                                  color: AppTheme.appleBlack,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: -0.3,
-                                  fontFamily: '-apple-system',
-                                ),
-                              ),
-                              SizedBox(height: 2),
-                              Text(
-                                'Záznam jízdy, export pro AI a konfigurace',
-                                style: TextStyle(
-                                  color: AppTheme.appleMutedGray,
-                                  fontSize: 12.5,
-                                  fontFamily: '-apple-system',
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const Icon(
-                          CupertinoIcons.chevron_right,
-                          color: Color(0xFFC7C7CC),
-                          size: 18,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const Divider(color: Color(0xFFE5E5EA), height: 1, indent: 16, endIndent: 16),
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () {
-                    Navigator.of(context).push(
-                      CupertinoPageRoute(
-                        builder: (context) => BikeProfilesScreen(
-                          canProfileService: telemetryManager.canProfileService,
-                          telemetryManager: telemetryManager,
-                        ),
-                      ),
-                    );
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: AppTheme.applePurple.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(
-                            Icons.tune_rounded,
-                            color: AppTheme.applePurple,
-                            size: 22,
-                          ),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Profily motocyklů & CAN',
-                                style: TextStyle(
-                                  color: AppTheme.appleBlack,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: -0.3,
-                                  fontFamily: '-apple-system',
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                'Aktivní: ${telemetryManager.canProfileService.activeProfile.name}',
-                                style: TextStyle(
-                                  color: telemetryManager.canProfileService.isCustomProfileActive
-                                      ? AppTheme.appleGreen
-                                      : AppTheme.appleMutedGray,
-                                  fontSize: 12.5,
-                                  fontWeight: telemetryManager.canProfileService.isCustomProfileActive
-                                      ? FontWeight.w600
-                                      : FontWeight.w400,
-                                  fontFamily: '-apple-system',
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const Icon(
-                          CupertinoIcons.chevron_right,
-                          color: Color(0xFFC7C7CC),
-                          size: 18,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ]),
-
-              const SizedBox(height: 24),
-
-              // SECTION 4: Device Status
-              _buildSectionHeader('STAV ZAŘÍZENÍ'),
-              _buildInsetGroup([
-                _buildSpecTile('Stav telemetrie', isConnected ? 'Aktivní přenos' : 'Čeká na připojení'),
-                const Divider(color: Color(0xFFE5E5EA), height: 1, indent: 16, endIndent: 16),
-                _buildSpecTile('Záznam jízdy', 'Automatický při rozjezdu'),
-                const Divider(color: Color(0xFFE5E5EA), height: 1, indent: 16, endIndent: 16),
-                _buildSpecTile('Paměťová karta', 'Připravena k zápisu'),
-                const Divider(color: Color(0xFFE5E5EA), height: 1, indent: 16, endIndent: 16),
-                _buildSpecTile('Úsporný režim', 'Automatické uspání po 15 s'),
-              ]),
-
-              const SizedBox(height: 24),
-
-              // SECTION 4: About
-              _buildSectionHeader('O APLIKACI'),
-              _buildInsetGroup([
-                _buildSpecTile('Verze aplikace', '1.0.0 (Apple Edition)'),
-                const Divider(color: Color(0xFFE5E5EA), height: 1, indent: 16, endIndent: 16),
-                _buildSpecTile('Šifrované úložiště', 'SQLite aktivní'),
-              ]),
-
-              const SizedBox(height: 32),
-            ],
+                  ])),
+              if (trailing != null) ...[
+                const SizedBox(width: 8),
+                trailing!
+              ] else if (onTap != null && navigates) ...[
+                const SizedBox(width: 8),
+                const Icon(CupertinoIcons.chevron_right,
+                    size: 15, color: AppTheme.textMuted)
+              ],
+            ]),
           ),
-        );
-      },
-    );
-  }
-
-  Widget _buildSectionHeader(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 12, bottom: 8),
-      child: Text(
-        title,
-        style: const TextStyle(
-          color: AppTheme.appleMutedGray,
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0.6,
-          fontFamily: '-apple-system',
         ),
-      ),
-    );
-  }
-
-  Widget _buildInsetGroup(List<Widget> children) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE5E5EA), width: 1),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(14),
-        child: Column(
-          children: children,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSpecTile(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-              color: AppTheme.appleBlack,
-              fontSize: 14,
-              letterSpacing: -0.2,
-              fontFamily: '-apple-system',
-            ),
-          ),
-          Text(
-            value,
-            style: const TextStyle(
-              color: AppTheme.appleMutedGray,
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-              fontFamily: '-apple-system',
-              fontFeatures: [FontFeature.tabularFigures()],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+      );
 }

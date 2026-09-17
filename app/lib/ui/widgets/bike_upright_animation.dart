@@ -26,7 +26,18 @@ class _BikeUprightAnimationState extends State<BikeUprightAnimation>
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2600),
-    )..repeat();
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _controller.stop();
+      _controller.value = 1;
+    } else if (!_controller.isCompleted && !_controller.isAnimating) {
+      _controller.forward();
+    }
   }
 
   @override
@@ -92,9 +103,11 @@ class _BikeUprightPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round;
 
     // 1. Static Ground Reference Line (Horizontální rovina)
-    canvas.drawLine(Offset(cx - 96, groundY), Offset(cx + 96, groundY), subtlePaint);
+    canvas.drawLine(
+        Offset(cx - 96, groundY), Offset(cx + 96, groundY), subtlePaint);
     for (double x = cx - 80; x <= cx + 80; x += 16) {
-      canvas.drawLine(Offset(x, groundY), Offset(x - 4, groundY + 5), subtlePaint);
+      canvas.drawLine(
+          Offset(x, groundY), Offset(x - 4, groundY + 5), subtlePaint);
     }
 
     // 2. Animation Phases:
@@ -127,14 +140,16 @@ class _BikeUprightPainter extends CustomPainter {
 
     // 3. Static Vertical 0° Laser / Plumb Plumb-Line Guide
     final plumbPaint = Paint()
-      ..color = const Color(0xFF8E8E93).withValues(alpha: 0.25 + 0.65 * alignmentAlpha)
+      ..color = const Color(0xFF8E8E93)
+          .withValues(alpha: 0.25 + 0.65 * alignmentAlpha)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.4;
 
     // Vertical dashed plumb line through center
     double dashY = groundY - 116;
     while (dashY < groundY + 4) {
-      canvas.drawLine(Offset(cx, dashY), Offset(cx, min(dashY + 5, groundY + 4)), plumbPaint);
+      canvas.drawLine(Offset(cx, dashY),
+          Offset(cx, min(dashY + 5, groundY + 4)), plumbPaint);
       dashY += 9;
     }
 
@@ -146,18 +161,23 @@ class _BikeUprightPainter extends CustomPainter {
         ..strokeWidth = 1.8
         ..strokeCap = StrokeCap.round;
 
-      canvas.drawLine(Offset(cx, groundY - 120), Offset(cx, groundY - 112), notchPaint);
-      canvas.drawLine(Offset(cx - 4, groundY - 116), Offset(cx, groundY - 112), notchPaint);
-      canvas.drawLine(Offset(cx + 4, groundY - 116), Offset(cx, groundY - 112), notchPaint);
+      canvas.drawLine(
+          Offset(cx, groundY - 120), Offset(cx, groundY - 112), notchPaint);
+      canvas.drawLine(
+          Offset(cx - 4, groundY - 116), Offset(cx, groundY - 112), notchPaint);
+      canvas.drawLine(
+          Offset(cx + 4, groundY - 116), Offset(cx, groundY - 112), notchPaint);
     }
 
     // Expanding alignment confirmation pulse when bike reaches 0.0°
     if (pulseScale > 0.0) {
       final pulsePaint = Paint()
-        ..color = const Color(0xFF8E8E93).withValues(alpha: (1.0 - pulseScale) * 0.4)
+        ..color =
+            const Color(0xFF8E8E93).withValues(alpha: (1.0 - pulseScale) * 0.4)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.5;
-      canvas.drawCircle(Offset(cx, groundY - 60), 16.0 + pulseScale * 24.0, pulsePaint);
+      canvas.drawCircle(
+          Offset(cx, groundY - 60), 16.0 + pulseScale * 24.0, pulsePaint);
     }
 
     // 4. Draw Motorcycle Front Profile (Rotated around front tire contact patch)
@@ -182,7 +202,8 @@ class _BikeUprightPainter extends CustomPainter {
     );
     canvas.drawRRect(rimRect, subtlePaint);
     // Front axle hub
-    canvas.drawCircle(Offset(cx, groundY - 22), 2.5, Paint()..color = const Color(0xFF48484A));
+    canvas.drawCircle(Offset(cx, groundY - 22), 2.5,
+        Paint()..color = const Color(0xFF48484A));
 
     // 4b. Front Mudguard / Fender (Přední blatník)
     final fenderPath = Path()
@@ -191,8 +212,10 @@ class _BikeUprightPainter extends CustomPainter {
     canvas.drawPath(fenderPath, mainPaint);
 
     // 4c. Telescopic Inverted Front Forks (Přední vidlice)
-    canvas.drawLine(Offset(cx - 14, groundY - 22), Offset(cx - 12, groundY - 66), accentPaint);
-    canvas.drawLine(Offset(cx + 14, groundY - 22), Offset(cx + 12, groundY - 66), accentPaint);
+    canvas.drawLine(Offset(cx - 14, groundY - 22),
+        Offset(cx - 12, groundY - 66), accentPaint);
+    canvas.drawLine(Offset(cx + 14, groundY - 22),
+        Offset(cx + 12, groundY - 66), accentPaint);
 
     // 4d. Front Cowl / Headlight Mask (Maska a světlomet)
     final cowlPath = Path()
@@ -206,8 +229,10 @@ class _BikeUprightPainter extends CustomPainter {
     canvas.drawPath(cowlPath, mainPaint);
 
     // DRL / Headlight LED signature lines
-    canvas.drawLine(Offset(cx - 12, groundY - 63), Offset(cx - 4, groundY - 60), accentPaint);
-    canvas.drawLine(Offset(cx + 12, groundY - 63), Offset(cx + 4, groundY - 60), accentPaint);
+    canvas.drawLine(Offset(cx - 12, groundY - 63), Offset(cx - 4, groundY - 60),
+        accentPaint);
+    canvas.drawLine(Offset(cx + 12, groundY - 63), Offset(cx + 4, groundY - 60),
+        accentPaint);
 
     // 4e. Aerodynamic Windscreen (Štítek)
     final screenPath = Path()
@@ -223,25 +248,38 @@ class _BikeUprightPainter extends CustomPainter {
 
     // 4f. Handlebars & Grips (Řídítka)
     final barY = groundY - 75.0;
-    canvas.drawLine(Offset(cx - 44, barY + 2), Offset(cx + 44, barY + 2), mainPaint);
+    canvas.drawLine(
+        Offset(cx - 44, barY + 2), Offset(cx + 44, barY + 2), mainPaint);
     // Grips & bar ends
-    canvas.drawLine(Offset(cx - 48, barY + 2), Offset(cx - 44, barY + 2), Paint()
-      ..color = const Color(0xFF1C1C1E)
-      ..strokeWidth = 4.0
-      ..strokeCap = StrokeCap.round);
-    canvas.drawLine(Offset(cx + 44, barY + 2), Offset(cx + 48, barY + 2), Paint()
-      ..color = const Color(0xFF1C1C1E)
-      ..strokeWidth = 4.0
-      ..strokeCap = StrokeCap.round);
+    canvas.drawLine(
+        Offset(cx - 48, barY + 2),
+        Offset(cx - 44, barY + 2),
+        Paint()
+          ..color = const Color(0xFF1C1C1E)
+          ..strokeWidth = 4.0
+          ..strokeCap = StrokeCap.round);
+    canvas.drawLine(
+        Offset(cx + 44, barY + 2),
+        Offset(cx + 48, barY + 2),
+        Paint()
+          ..color = const Color(0xFF1C1C1E)
+          ..strokeWidth = 4.0
+          ..strokeCap = StrokeCap.round);
     // Levers (brzdová a spojková páčka)
-    canvas.drawLine(Offset(cx - 42, barY + 5), Offset(cx - 28, barY + 7), subtlePaint);
-    canvas.drawLine(Offset(cx + 42, barY + 5), Offset(cx + 28, barY + 7), subtlePaint);
+    canvas.drawLine(
+        Offset(cx - 42, barY + 5), Offset(cx - 28, barY + 7), subtlePaint);
+    canvas.drawLine(
+        Offset(cx + 42, barY + 5), Offset(cx + 28, barY + 7), subtlePaint);
 
     // 4g. Sleek Mirrors / Aero Winglets
-    canvas.drawLine(Offset(cx - 24, groundY - 76), Offset(cx - 46, groundY - 88), accentPaint);
-    canvas.drawLine(Offset(cx - 46, groundY - 88), Offset(cx - 40, groundY - 92), mainPaint);
-    canvas.drawLine(Offset(cx + 24, groundY - 76), Offset(cx + 46, groundY - 88), accentPaint);
-    canvas.drawLine(Offset(cx + 46, groundY - 88), Offset(cx + 40, groundY - 92), mainPaint);
+    canvas.drawLine(Offset(cx - 24, groundY - 76),
+        Offset(cx - 46, groundY - 88), accentPaint);
+    canvas.drawLine(Offset(cx - 46, groundY - 88),
+        Offset(cx - 40, groundY - 92), mainPaint);
+    canvas.drawLine(Offset(cx + 24, groundY - 76),
+        Offset(cx + 46, groundY - 88), accentPaint);
+    canvas.drawLine(Offset(cx + 46, groundY - 88),
+        Offset(cx + 40, groundY - 92), mainPaint);
 
     // 4h. Side Stand (Boční stojánek na levé straně)
     // When bike leans left (-13.5°), the stand tip reaches down to touch the ground.
@@ -265,9 +303,10 @@ class _BikeUprightPainter extends CustomPainter {
     if (alignmentAlpha > 0.0) {
       final badgePainter = TextPainter(
         text: TextSpan(
-          text: currentLeanDeg.abs() < 0.2 ? '0.0°' : '${currentLeanDeg.toStringAsFixed(1)}°',
+          text: currentLeanDeg.abs() < 0.2
+              ? '0.0°'
+              : '${currentLeanDeg.toStringAsFixed(1)}°',
           style: TextStyle(
-            fontFamily: '.SF Pro Text',
             fontSize: 11,
             fontWeight: FontWeight.w700,
             letterSpacing: -0.2,
@@ -276,12 +315,14 @@ class _BikeUprightPainter extends CustomPainter {
         ),
         textDirection: TextDirection.ltr,
       )..layout();
-      badgePainter.paint(canvas, Offset(cx - badgePainter.width / 2, groundY - 128));
+      badgePainter.paint(
+          canvas, Offset(cx - badgePainter.width / 2, groundY - 128));
     }
   }
 
   @override
   bool shouldRepaint(covariant _BikeUprightPainter oldDelegate) {
-    return oldDelegate.progress != progress || oldDelegate.isUpright != isUpright;
+    return oldDelegate.progress != progress ||
+        oldDelegate.isUpright != isUpright;
   }
 }

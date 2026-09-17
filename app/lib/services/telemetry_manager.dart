@@ -20,6 +20,11 @@ class TelemetryManager extends ChangeNotifier {
   Position? _latestPosition;
 
   bool _isRecording = false;
+  Future<void>? _starting;
+  Future<void>? _stopping;
+  Future<void>? _flushing;
+  String? _recordingError;
+  String? get recordingError => _recordingError;
   bool _isPaused = false;
   int? _currentSessionId;
   String _sessionTitle = 'Track Ride';
@@ -56,7 +61,8 @@ class TelemetryManager extends ChangeNotifier {
   int get sampleCount => _sampleCount;
   double get mountingRollOffsetDeg => _mountingRollOffsetDeg;
   double get latestRawLeanDeg => _latestRawLeanDeg;
-  List<double> get frictionEnvelopeRadii => List.unmodifiable(_frictionEnvelope);
+  List<double> get frictionEnvelopeRadii =>
+      List.unmodifiable(_frictionEnvelope);
 
   // Automatic offline sync state
   bool _isSyncing = false;
@@ -70,6 +76,7 @@ class TelemetryManager extends ChangeNotifier {
   bool get isSimulationMode => bleService.isMockMode || gpsService.isMockMode;
 
   void setSimulationMode(bool enable) {
+    if (_isRecording || _starting != null) return;
     bleService.enableMockMode(enable);
     gpsService.enableMockMode(enable);
     if (!enable) {
@@ -83,7 +90,8 @@ class TelemetryManager extends ChangeNotifier {
     required this.gpsService,
     required this.dbService,
     CanProfileService? canProfileService,
-  }) : canProfileService = canProfileService ?? CanProfileService(dbService: dbService) {
+  }) : canProfileService =
+            canProfileService ?? CanProfileService(dbService: dbService) {
     _initListeners();
     _loadSavedMountingOffset();
     _initPairedDevice();
@@ -138,7 +146,8 @@ class TelemetryManager extends ChangeNotifier {
         _topSpeed = adjustedPacket.vehicleSpeedKmh.toDouble();
       }
 
-      final currentG = sqrt(adjustedPacket.accelXG * adjustedPacket.accelXG + adjustedPacket.accelYG * adjustedPacket.accelYG);
+      final currentG = sqrt(adjustedPacket.accelXG * adjustedPacket.accelXG +
+          adjustedPacket.accelYG * adjustedPacket.accelYG);
       if (currentG > _maxG) {
         _maxG = currentG;
       }
@@ -162,7 +171,8 @@ class TelemetryManager extends ChangeNotifier {
           latitude: _latestPosition?.latitude ?? 0.0,
           longitude: _latestPosition?.longitude ?? 0.0,
           altitude: _latestPosition?.altitude ?? 0.0,
-          gpsSpeedKmh: _latestPosition != null ? (_latestPosition!.speed * 3.6) : 0.0,
+          gpsSpeedKmh:
+              _latestPosition != null ? (_latestPosition!.speed * 3.6) : 0.0,
           bearing: _latestPosition?.heading ?? 0.0,
           gpsAccuracyMeters: _latestPosition?.accuracy ?? 0.0,
         );
@@ -171,7 +181,7 @@ class TelemetryManager extends ChangeNotifier {
 
         // Flush buffer if 50 samples accumulated (~2 seconds of data)
         if (_sampleBuffer.length >= 50) {
-          _flushBuffer();
+          _flushSafely();
         }
       }
 
@@ -195,15 +205,23 @@ class TelemetryManager extends ChangeNotifier {
     // Periodic flush timer (every 2 seconds)
     _batchFlushTimer = Timer.periodic(const Duration(seconds: 2), (_) {
       if (_sampleBuffer.isNotEmpty) {
-        _flushBuffer();
+        _flushSafely();
       }
     });
   }
 
-  Future<void> startRecording([String? title]) async {
+  Future<void> startRecording([String? title]) {
+    if (_isRecording) return Future.value();
+    return _starting ??=
+        _startRecording(title).whenComplete(() => _starting = null);
+  }
+
+  Future<void> _startRecording(String? title) async {
     if (_isRecording) return;
 
-    _sessionTitle = title ?? 'Ride ${DateTime.now().toLocal().toString().substring(0, 16)}';
+    _recordingError = null;
+    _sessionTitle =
+        title ?? 'Ride ${DateTime.now().toLocal().toString().substring(0, 16)}';
     _sessionStartTime = DateTime.now();
     _maxLeanLeft = 0.0;
     _maxLeanRight = 0.0;
@@ -242,9 +260,16 @@ class TelemetryManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> stopRecording() async {
+  Future<void> stopRecording() {
+    return _stopping ??= _stopRecording().whenComplete(() => _stopping = null);
+  }
+
+  Future<void> _stopRecording() async {
     if (!_isRecording || _currentSessionId == null) return;
 
+    // Freeze incoming samples while saving. A failure leaves a retryable ride.
+    _isPaused = true;
+    notifyListeners();
     await _flushBuffer();
 
     final session = RideSession(
@@ -263,26 +288,44 @@ class TelemetryManager extends ChangeNotifier {
     await dbService.updateSession(session);
 
     _isRecording = false;
+    _recordingError = null;
     _isPaused = false;
     _currentSessionId = null;
     notifyListeners();
   }
 
-  Future<void> _flushBuffer() async {
-    if (_sampleBuffer.isEmpty) return;
-    final toWrite = List<FusedSample>.from(_sampleBuffer);
-    _sampleBuffer.clear();
-    await dbService.insertSampleBatch(toWrite);
+  Future<void> _flushSafely() async {
+    try {
+      await _flushBuffer();
+    } catch (_) {
+      _isPaused = true;
+      _recordingError =
+          'Zápis do telefonu se nezdařil. Uvolněte místo a uložte jízdu znovu.';
+      notifyListeners();
+    }
+  }
+
+  Future<void> _flushBuffer() {
+    return _flushing ??= _writeBuffer().whenComplete(() => _flushing = null);
+  }
+
+  Future<void> _writeBuffer() async {
+    // Retain samples until SQLite acknowledges them. Serialize concurrent flushes.
+    while (_sampleBuffer.isNotEmpty) {
+      final toWrite = List<FusedSample>.from(_sampleBuffer);
+      await dbService.insertSampleBatch(toWrite);
+      _sampleBuffer.removeRange(0, toWrite.length);
+    }
+    _recordingError = null;
   }
 
   Future<void> _applyMountingOffset(double offsetDeg) async {
+    if (!await bleService.sendTareOffset(offsetDeg)) {
+      throw StateError('Calibration command could not be sent');
+    }
+    await dbService.saveSetting(
+        'mounting_roll_offset', offsetDeg.toStringAsFixed(2));
     _mountingRollOffsetDeg = offsetDeg;
-
-    // Persist to local SQLite database
-    await dbService.saveSetting('mounting_roll_offset', _mountingRollOffsetDeg.toStringAsFixed(2));
-
-    // Send offset to ESP unit via BLE
-    await bleService.sendTareOffset(_mountingRollOffsetDeg);
 
     // Immediately update latest packet with calibrated offset
     final calibratedRoll = _latestRawLeanDeg - _mountingRollOffsetDeg;
@@ -332,7 +375,8 @@ class TelemetryManager extends ChangeNotifier {
 
   /// Sync active motorcycle CAN profile to ESP32 unit over BLE
   Future<bool> syncActiveProfileToEsp() async {
-    final success = await bleService.uploadBikeProfile(canProfileService.activeProfile);
+    final success =
+        await bleService.uploadBikeProfile(canProfileService.activeProfile);
     notifyListeners();
     return success;
   }

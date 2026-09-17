@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import '../../core/theme/app_theme.dart';
 
 /// Professional G-G Traction Reticle (Friction Circle) that renders directly
 /// on the canvas without any bounding card/box.
@@ -141,28 +142,28 @@ class _GgFrictionPainter extends CustomPainter {
     canvas.drawCircle(center, 2.5, Paint()..color = const Color(0xFF8E8E93));
 
     // Reference Typography (Apple SF Pro Caption Style)
-    const textStyle1G = TextStyle(
-      color: Color(0xFF8E8E93),
+    final textStyle1G = TextStyle(
+      fontFamily: AppTheme.systemFont,
+      color: AppTheme.textMuted,
       fontSize: 9.5,
       fontWeight: FontWeight.w700,
       letterSpacing: 0.5,
-      fontFamily: '-apple-system',
     );
     final tp1G = TextPainter(
-      text: const TextSpan(text: '1.0G', style: textStyle1G),
+      text: TextSpan(text: '1.0G', style: textStyle1G),
       textDirection: TextDirection.ltr,
     )..layout();
     tp1G.paint(canvas, Offset(center.dx + 6, center.dy - radius1G + 3));
 
-    const textStyle05G = TextStyle(
-      color: Color(0xFFAEAEB2),
+    final textStyle05G = TextStyle(
+      fontFamily: AppTheme.systemFont,
+      color: AppTheme.textMuted,
       fontSize: 8.5,
       fontWeight: FontWeight.w600,
       letterSpacing: 0.5,
-      fontFamily: '-apple-system',
     );
     final tp05G = TextPainter(
-      text: const TextSpan(text: '0.5G', style: textStyle05G),
+      text: TextSpan(text: '0.5G', style: textStyle05G),
       textDirection: TextDirection.ltr,
     )..layout();
     tp05G.paint(canvas, Offset(center.dx + 6, center.dy - radius05G + 3));

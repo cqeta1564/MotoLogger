@@ -10,6 +10,7 @@ import '../../models/session.dart';
 import '../../services/database_service.dart';
 import '../../services/telemetry_manager.dart';
 import '../widgets/season_summary_card.dart';
+import '../widgets/glass_surface.dart';
 import 'session_detail_screen.dart';
 
 enum HistorySortOption {
@@ -39,6 +40,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
   late Future<List<RideSession>> _sessionsFuture;
   HistorySortOption _sortOption = HistorySortOption.newest;
   String _searchQuery = '';
+  final _searchController = TextEditingController();
+  int _refreshGeneration = 0;
   bool _isImporting = false;
   bool _isSelectionMode = false;
   final Set<int> _selectedSessionIds = {};
@@ -59,6 +62,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   @override
   void dispose() {
+    _searchController.dispose();
     widget.telemetryManager?.removeListener(_onTelemetryManagerUpdated);
     super.dispose();
   }
@@ -83,12 +87,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   void _refresh() {
+    final generation = ++_refreshGeneration;
     setState(() {
       _sessionsFuture = widget.dbService.getAllSessions().then((sessions) {
-        if (mounted) {
-          setState(() {
-            _cachedSessions = sessions;
-          });
+        if (mounted && generation == _refreshGeneration) {
+          setState(() => _cachedSessions = sessions);
         }
         return sessions;
       });
@@ -139,10 +142,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
       }
 
       if (csvContent == null || csvContent.trim().isEmpty) {
-        throw const FormatException('Soubor CSV je prázdný nebo jej nelze přečíst.');
+        throw const FormatException(
+            'Soubor CSV je prázdný nebo jej nelze přečíst.');
       }
 
-      final rawName = pickedFile.name.replaceAll('.csv', '').replaceAll('.CSV', '');
+      final rawName =
+          pickedFile.name.replaceAll('.csv', '').replaceAll('.CSV', '');
       final session = await widget.dbService.importRideFromCsv(
         csvContent: csvContent,
         defaultTitle: 'MicroSD: $rawName',
@@ -156,10 +161,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
             backgroundColor: AppTheme.appleGreen,
             content: Row(
               children: [
-                const Icon(Icons.check_circle_outline_rounded, color: Colors.white, size: 20),
+                const Icon(Icons.check_circle_outline_rounded,
+                    color: Colors.white, size: 20),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: Text('Jízda „${session.title}“ byla úspěšně importována (${session.sampleCount} vzorků).'),
+                  child: Text(
+                      'Jízda „${session.title}“ byla úspěšně importována (${session.sampleCount} vzorků).'),
                 ),
               ],
             ),
@@ -234,7 +241,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(backgroundColor: AppTheme.appleRed, content: Text('Chyba při hromadném exportu: $e')),
+          SnackBar(
+              backgroundColor: AppTheme.appleRed,
+              content: Text('Chyba při hromadném exportu: $e')),
         );
       }
     } finally {
@@ -261,7 +270,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(backgroundColor: AppTheme.appleRed, content: Text('Chyba při exportu všech jízd: $e')),
+          SnackBar(
+              backgroundColor: AppTheme.appleRed,
+              content: Text('Chyba při exportu všech jízd: $e')),
         );
       }
     } finally {
@@ -310,11 +321,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
               Navigator.pop(ctx);
               try {
                 final path = await widget.dbService.exportSessionToGpx(s.id!);
-                await Share.shareXFiles([XFile(path)], text: 'MotoLogger Jízda GPX: ${s.title}');
+                await Share.shareXFiles([XFile(path)],
+                    text: 'MotoLogger Jízda GPX: ${s.title}');
               } catch (e) {
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(backgroundColor: AppTheme.appleRed, content: Text('Chyba při exportu GPX: $e')),
+                    SnackBar(
+                        backgroundColor: AppTheme.appleRed,
+                        content: Text('Chyba při exportu GPX: $e')),
                   );
                 }
               }
@@ -333,11 +347,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
               Navigator.pop(ctx);
               try {
                 final path = await widget.dbService.exportSessionToCsv(s.id!);
-                await Share.shareXFiles([XFile(path)], text: 'MotoLogger Jízda CSV: ${s.title}');
+                await Share.shareXFiles([XFile(path)],
+                    text: 'MotoLogger Jízda CSV: ${s.title}');
               } catch (e) {
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(backgroundColor: AppTheme.appleRed, content: Text('Chyba při exportu CSV: $e')),
+                    SnackBar(
+                        backgroundColor: AppTheme.appleRed,
+                        content: Text('Chyba při exportu CSV: $e')),
                   );
                 }
               }
@@ -345,7 +362,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
             child: const Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.table_chart_outlined, color: AppTheme.appleGreen, size: 20),
+                Icon(Icons.table_chart_outlined,
+                    color: AppTheme.appleGreen, size: 20),
                 SizedBox(width: 8),
                 Text('Exportovat CSV (MoTeC i2, RaceRender)'),
               ],
@@ -355,12 +373,16 @@ class _HistoryScreenState extends State<HistoryScreen> {
             onPressed: () async {
               Navigator.pop(ctx);
               try {
-                final path = await widget.dbService.exportSessionPackageToZip(s.id!);
-                await Share.shareXFiles([XFile(path)], text: 'MotoLogger Analytický balíček: ${s.title}');
+                final path =
+                    await widget.dbService.exportSessionPackageToZip(s.id!);
+                await Share.shareXFiles([XFile(path)],
+                    text: 'MotoLogger Analytický balíček: ${s.title}');
               } catch (e) {
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(backgroundColor: AppTheme.appleRed, content: Text('Chyba při exportu balíčku: $e')),
+                    SnackBar(
+                        backgroundColor: AppTheme.appleRed,
+                        content: Text('Chyba při exportu balíčku: $e')),
                   );
                 }
               }
@@ -368,7 +390,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
             child: const Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.folder_zip_outlined, color: AppTheme.applePurple, size: 20),
+                Icon(Icons.folder_zip_outlined,
+                    color: AppTheme.applePurple, size: 20),
                 SizedBox(width: 8),
                 Text('Balíček pro MoTeC i2 a RaceRender (.zip)'),
               ],
@@ -414,7 +437,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
               if (isSyncing)
                 const CupertinoActivityIndicator(radius: 8)
               else
-                const Icon(Icons.check_circle_rounded, size: 18, color: AppTheme.appleGreen),
+                const Icon(Icons.check_circle_rounded,
+                    size: 18, color: AppTheme.appleGreen),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -423,7 +447,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                     color: isSyncing ? AppTheme.appleBlue : AppTheme.appleGreen,
-                    fontFamily: '-apple-system',
                   ),
                 ),
               ),
@@ -434,7 +457,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
                     color: AppTheme.appleBlue,
-                    fontFamily: '-apple-system',
                   ),
                 ),
             ],
@@ -447,555 +469,323 @@ class _HistoryScreenState extends State<HistoryScreen> {
   @override
   Widget build(BuildContext context) {
     final cachedFiltered = _filterAndSortSessions(_cachedSessions);
-
+    final inset = AppTheme.navigationInset(context) +
+        12 +
+        MediaQuery.paddingOf(context).bottom;
     return Scaffold(
-      backgroundColor: const Color(0xFFF2F2F7),
+      backgroundColor: AppTheme.surfaceSecondary,
       appBar: AppBar(
-        leading: _isSelectionMode
-            ? CupertinoButton(
-                padding: EdgeInsets.zero,
-                onPressed: _exitSelectionMode,
-                child: const Text(
-                  'Hotovo',
-                  style: TextStyle(
-                    color: AppTheme.appleBlue,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 16,
-                  ),
-                ),
-              )
-            : null,
-        title: Text(_isSelectionMode ? 'Vybráno: ${_selectedSessionIds.length}' : 'Historie jízd'),
-        actions: _isSelectionMode
-            ? [
-                CupertinoButton(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  onPressed: () => _toggleSelectAll(cachedFiltered),
-                  child: Text(
-                    _selectedSessionIds.length == cachedFiltered.length && cachedFiltered.isNotEmpty
-                        ? 'Odznačit'
-                        : 'Vybrat vše',
-                    style: const TextStyle(
-                      color: AppTheme.appleBlue,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 15,
-                    ),
-                  ),
-                ),
-              ]
-            : [
-                IconButton(
-                  icon: _isImporting
-                      ? const CupertinoActivityIndicator(radius: 10)
-                      : const Icon(Icons.sd_card_outlined, size: 22),
-                  tooltip: 'Importovat z MicroSD',
-                  onPressed: _isImporting ? null : _importFromMicroSd,
-                ),
-                if (_cachedSessions.isNotEmpty) ...[
-                  IconButton(
-                    icon: _isExportingBulk
-                        ? const CupertinoActivityIndicator(radius: 10)
-                        : const Icon(Icons.archive_outlined, size: 22),
-                    tooltip: 'Exportovat vše do ZIP',
-                    onPressed: _isExportingBulk ? null : () => _exportAllSessionsAsZip(cachedFiltered),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.checklist_rounded, size: 22),
-                    tooltip: 'Vybrat jízdy',
-                    onPressed: _enterSelectionMode,
-                  ),
-                ],
-                IconButton(
-                  icon: const Icon(Icons.refresh_rounded, size: 22),
-                  tooltip: 'Obnovit',
-                  onPressed: _refresh,
-                ),
-              ],
+        toolbarHeight: 80,
+        centerTitle: false,
+        automaticallyImplyLeading: false,
+        title: Text(
+            _isSelectionMode
+                ? 'Vybráno: ${_selectedSessionIds.length}'
+                : 'Historie',
+            style: TextStyle(
+                fontSize: _isSelectionMode ? 22 : 34,
+                letterSpacing: -1,
+                fontWeight: FontWeight.w700)),
+        actions: [
+          if (_isSelectionMode)
+            TextButton(
+                onPressed: _exitSelectionMode, child: const Text('Hotovo'))
+          else
+            Padding(
+                padding: const EdgeInsets.only(right: 20),
+                child: GlassSurface(
+                    radius: 26,
+                    child: Row(children: [
+                      if (_cachedSessions.isNotEmpty)
+                        IconButton(
+                            tooltip: 'Vybrat jízdy',
+                            icon: const Icon(CupertinoIcons.checkmark_circle),
+                            onPressed: _enterSelectionMode),
+                      PopupMenuButton<String>(
+                          tooltip: 'Možnosti historie',
+                          icon: const Icon(CupertinoIcons.ellipsis),
+                          onSelected: (action) {
+                            if (action == 'import') _importFromMicroSd();
+                            if (action == 'export') {
+                              _exportAllSessionsAsZip(cachedFiltered);
+                            }
+                            if (action == 'refresh') _refresh();
+                          },
+                          itemBuilder: (_) => [
+                                PopupMenuItem(
+                                    value: 'import',
+                                    enabled: !_isImporting,
+                                    child: const Text('Importovat z MicroSD')),
+                                if (_cachedSessions.isNotEmpty)
+                                  PopupMenuItem(
+                                      value: 'export',
+                                      enabled: !_isExportingBulk,
+                                      child:
+                                          const Text('Exportovat vše do ZIP')),
+                                const PopupMenuItem(
+                                    value: 'refresh', child: Text('Obnovit')),
+                              ]),
+                    ]))),
+        ],
       ),
       bottomNavigationBar: _isSelectionMode
-          ? Container(
-              padding: EdgeInsets.only(
-                left: 16,
-                right: 16,
-                top: 12,
-                bottom: 12 + MediaQuery.of(context).padding.bottom,
-              ),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                border: const Border(top: BorderSide(color: Color(0xFFE5E5EA), width: 1)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 8,
-                    offset: const Offset(0, -2),
-                  ),
-                ],
-              ),
-              child: SizedBox(
-                height: 54,
-                child: CupertinoButton(
-                  color: AppTheme.appleBlue,
-                  disabledColor: AppTheme.appleBlue.withValues(alpha: 0.35),
-                  borderRadius: BorderRadius.circular(14),
-                  padding: EdgeInsets.zero,
-                  onPressed: (_selectedSessionIds.isEmpty || _isExportingBulk)
+          ? Padding(
+              padding: EdgeInsets.fromLTRB(20, 8, 20, inset),
+              child: PrimaryAction(
+                  label: 'Exportovat balíček (${_selectedSessionIds.length})',
+                  icon: CupertinoIcons.share,
+                  busy: _isExportingBulk,
+                  onPressed: _selectedSessionIds.isEmpty
                       ? null
-                      : _exportSelectedSessionsAsZip,
-                  child: _isExportingBulk
-                      ? const CupertinoActivityIndicator(color: Colors.white)
-                      : Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.folder_zip_outlined, color: Colors.white, size: 20),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Exportovat balíček (${_selectedSessionIds.length})',
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.white,
-                                fontFamily: '-apple-system',
-                              ),
-                            ),
-                          ],
-                        ),
-                ),
-              ),
+                      : _exportSelectedSessionsAsZip),
             )
           : null,
       body: FutureBuilder<List<RideSession>>(
         future: _sessionsFuture,
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting && _cachedSessions.isEmpty) {
-            return const Center(
-              child: CupertinoActivityIndicator(radius: 14),
-            );
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              _cachedSessions.isEmpty) {
+            return const Center(child: CupertinoActivityIndicator(radius: 14));
           }
           if (snapshot.hasError && _cachedSessions.isEmpty) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.error_outline_rounded, size: 48, color: AppTheme.appleRed),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'Chyba načítání historie',
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.appleBlack,
-                        fontFamily: '-apple-system',
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      '${snapshot.error}',
-                      style: const TextStyle(fontSize: 13, color: AppTheme.appleMutedGray),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 16),
-                    CupertinoButton.filled(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                      onPressed: _refresh,
-                      child: const Text('Zkusit znovu', style: TextStyle(fontSize: 14)),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }
-
-          final sessions = snapshot.data ?? _cachedSessions;
-          _cachedSessions = sessions;
-          final seasonStats = SeasonStats.fromSessions(sessions);
-
-          if (sessions.isEmpty) {
             return ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-              children: [
-                _buildSyncStatusBar(),
-                SeasonSummaryCard(stats: seasonStats),
-                const SizedBox(height: 20),
-                Container(
-                  padding: const EdgeInsets.all(32),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: const Color(0xFFE5E5EA), width: 1),
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        width: 72,
-                        height: 72,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF2F2F7),
-                          shape: BoxShape.circle,
-                          border: Border.all(color: const Color(0xFFE5E5EA), width: 1.2),
-                        ),
-                        child: const Icon(
-                          Icons.two_wheeler_rounded,
-                          size: 36,
-                          color: AppTheme.appleMutedGray,
-                        ),
-                      ),
-                      const SizedBox(height: 18),
-                      const Text(
-                        'Žádné zaznamenané jízdy',
-                        style: TextStyle(
-                          color: AppTheme.appleBlack,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -0.4,
-                          fontFamily: '-apple-system',
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Zaznamenejte jízdu v aplikaci nebo importujte záznam z MicroSD karty motocyklu.',
-                        style: TextStyle(
-                          color: AppTheme.appleMutedGray,
-                          fontSize: 13,
-                          height: 1.4,
-                          letterSpacing: -0.2,
-                          fontFamily: '-apple-system',
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 20),
-                      SizedBox(
-                        height: 48,
-                        child: OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: AppTheme.appleBlue, width: 1.5),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                          onPressed: _importFromMicroSd,
-                          icon: const Icon(Icons.sd_card_outlined, color: AppTheme.appleBlue, size: 20),
-                          label: const Text(
-                            'Importovat z MicroSD',
-                            style: TextStyle(color: AppTheme.appleBlue, fontWeight: FontWeight.w600),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            );
+                padding: EdgeInsets.fromLTRB(24, 32, 24, inset),
+                children: [
+                  const Icon(CupertinoIcons.exclamationmark_circle,
+                      size: 48, color: AppTheme.danger),
+                  const SizedBox(height: 16),
+                  const Text('Historii se nepodařilo načíst',
+                      textAlign: TextAlign.center,
+                      style:
+                          TextStyle(fontSize: 22, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 8),
+                  const Text(
+                      'Záznamy zůstávají v telefonu. Zkuste načtení znovu.',
+                      textAlign: TextAlign.center),
+                  const SizedBox(height: 24),
+                  PrimaryAction(label: 'Zkusit znovu', onPressed: _refresh),
+                ]);
           }
-
-          final filteredSessions = _filterAndSortSessions(sessions);
-
-          return ListView(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-            children: [
-              // 1. Auto-sync status bar
-              _buildSyncStatusBar(),
-
-              // 2. Season Summary Card
-              SeasonSummaryCard(stats: seasonStats),
-
-              // 3. Search Bar
-              Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                child: CupertinoSearchTextField(
-                  placeholder: 'Hledat v jízdách podle názvu či data...',
-                  style: const TextStyle(fontFamily: '-apple-system', fontSize: 14),
-                  onChanged: (val) {
-                    setState(() {
-                      _searchQuery = val;
-                    });
-                  },
-                ),
-              ),
-
-              // 4. Sorting Cupertino Segmented Control
-              Container(
-                margin: const EdgeInsets.only(bottom: 16),
-                width: double.infinity,
-                child: CupertinoSlidingSegmentedControl<HistorySortOption>(
-                  groupValue: _sortOption,
-                  children: const {
-                    HistorySortOption.newest: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                      child: Text('Nejnovější', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                    ),
-                    HistorySortOption.fastest: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                      child: Text('Nejrychlejší', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                    ),
-                    HistorySortOption.maxLean: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                      child: Text('Největší náklon', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                    ),
-                  },
-                  onValueChanged: (val) {
-                    if (val != null) {
-                      setState(() {
-                        _sortOption = val;
-                      });
-                    }
-                  },
-                ),
-              ),
-
-              // 5. Session List or Empty Filter Notice
-              if (filteredSessions.isEmpty)
-                Container(
-                  padding: const EdgeInsets.all(28),
-                  margin: const EdgeInsets.only(top: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: const Color(0xFFE5E5EA), width: 1),
-                  ),
-                  child: const Center(
-                    child: Text(
-                      'Žádné jízdy neodpovídají zadanému filtru.',
-                      style: TextStyle(
-                        color: AppTheme.appleMutedGray,
-                        fontSize: 14,
-                        fontFamily: '-apple-system',
-                      ),
-                    ),
-                  ),
-                )
-              else
-                ...filteredSessions.map((s) => _buildSessionCard(s)),
-            ],
-          );
+          final sessions = snapshot.data ?? _cachedSessions;
+          final filtered = _filterAndSortSessions(sessions);
+          return CustomScrollView(
+              key: const PageStorageKey('history-scroll'),
+              slivers: [
+                SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                    sliver: SliverToBoxAdapter(
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _buildSyncStatusBar(),
+                            if (_isImporting || _isExportingBulk)
+                              const Padding(
+                                  padding: EdgeInsets.all(16),
+                                  child: Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        CupertinoActivityIndicator(),
+                                        SizedBox(width: 12),
+                                        Text('Zpracovávám soubor…'),
+                                      ])),
+                            if (snapshot.hasError)
+                              const Text(
+                                  'Obnovení se nezdařilo. Zobrazuji dříve načtené jízdy.'),
+                            if (sessions.isEmpty)
+                              ContentGroup(
+                                  padding: const EdgeInsets.all(28),
+                                  child: Column(children: [
+                                    const Icon(CupertinoIcons.map,
+                                        size: 52, color: AppTheme.appleBlue),
+                                    const SizedBox(height: 24),
+                                    const Text('Každá jízda má svůj příběh',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                            fontSize: 24,
+                                            fontWeight: FontWeight.w600,
+                                            letterSpacing: -.5)),
+                                    const SizedBox(height: 12),
+                                    const Text(
+                                        'Zatím tu není žádná jízda. Zahajte záznam na záložce Jízda nebo načtěte soubor z motorky.',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                            fontSize: 17,
+                                            height: 1.45,
+                                            color: AppTheme.textMuted)),
+                                    const SizedBox(height: 28),
+                                    PrimaryAction(
+                                        label: 'Importovat z MicroSD',
+                                        icon: CupertinoIcons.folder,
+                                        busy: _isImporting,
+                                        onPressed: _importFromMicroSd),
+                                  ]))
+                            else ...[
+                              SeasonSummaryCard(
+                                  stats: SeasonStats.fromSessions(sessions)),
+                              const SizedBox(height: 8),
+                              CupertinoSearchTextField(
+                                  controller: _searchController,
+                                  placeholder: 'Název nebo datum jízdy',
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 14),
+                                  style: const TextStyle(fontSize: 17),
+                                  onChanged: (value) =>
+                                      setState(() => _searchQuery = value)),
+                              const SizedBox(height: 16),
+                              if (_isSelectionMode)
+                                Align(
+                                    alignment: Alignment.centerRight,
+                                    child: TextButton(
+                                        onPressed: () =>
+                                            _toggleSelectAll(filtered),
+                                        child: Text(
+                                            _selectedSessionIds.length ==
+                                                        filtered.length &&
+                                                    filtered.isNotEmpty
+                                                ? 'Odznačit'
+                                                : 'Vybrat vše')))
+                              else
+                                _sortControls(),
+                              const SizedBox(height: 20),
+                              if (filtered.isEmpty)
+                                const Padding(
+                                    padding: EdgeInsets.all(24),
+                                    child: Text(
+                                        'Žádné jízdy neodpovídají hledání.',
+                                        textAlign: TextAlign.center)),
+                            ],
+                          ]),
+                    )),
+                SliverPadding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    sliver: SliverList.builder(
+                        itemCount: filtered.length,
+                        itemBuilder: (context, index) =>
+                            _buildSessionCard(filtered[index]))),
+                SliverToBoxAdapter(
+                    child: SizedBox(height: _isSelectionMode ? 24 : inset)),
+              ]);
         },
       ),
     );
   }
 
-  Widget _buildSessionCard(RideSession s) {
-    final isSelected = s.id != null && _selectedSessionIds.contains(s.id);
+  Widget _sortControls() {
+    const labels = {
+      HistorySortOption.newest: 'Nejnovější',
+      HistorySortOption.fastest: 'Nejrychlejší',
+      HistorySortOption.maxLean: 'Největší náklon',
+    };
+    if (MediaQuery.textScalerOf(context).scale(17) > 22) {
+      return Wrap(spacing: 8, runSpacing: 8, children: [
+        for (final entry in labels.entries)
+          ChoiceChip(
+              label: Text(entry.value),
+              selected: _sortOption == entry.key,
+              onSelected: (_) => setState(() => _sortOption = entry.key)),
+      ]);
+    }
+    return CupertinoSlidingSegmentedControl<HistorySortOption>(
+      groupValue: _sortOption,
+      children: {
+        for (final entry in labels.entries)
+          entry.key: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 14),
+              child: Text(entry.value,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 13)))
+      },
+      onValueChanged: (value) {
+        if (value != null) setState(() => _sortOption = value);
+      },
+    );
+  }
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isSelected ? AppTheme.appleBlue : const Color(0xFFE5E5EA),
-          width: isSelected ? 1.8 : 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: isSelected
-                ? AppTheme.appleBlue.withValues(alpha: 0.08)
-                : Colors.black.withValues(alpha: 0.03),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(16),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: () async {
-            if (_isSelectionMode) {
-              if (s.id != null) _toggleSessionSelection(s.id!);
-              return;
-            }
-            await Navigator.push(
-              context,
-              CupertinoPageRoute(
-                builder: (_) => SessionDetailScreen(
-                  session: s,
-                  dbService: widget.dbService,
-                ),
-              ),
-            );
-            _refresh();
-          },
-          onLongPress: () {
-            if (!_isSelectionMode && s.id != null) {
-              _enterSelectionMode();
-              _toggleSessionSelection(s.id!);
-            }
-          },
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Header: (Selection indicator) + Title + Duration pill + Chevron/Checkmark
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    if (_isSelectionMode) ...[
-                      AnimatedContainer(
-                        duration: const Duration(milliseconds: 180),
-                        width: 24,
-                        height: 24,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: isSelected ? AppTheme.appleBlue : Colors.white,
-                          border: Border.all(
-                            color: isSelected ? AppTheme.appleBlue : const Color(0xFFC7C7CC),
-                            width: 2,
-                          ),
-                        ),
-                        child: isSelected
-                            ? const Icon(Icons.check_rounded, size: 16, color: Colors.white)
-                            : null,
-                      ),
-                      const SizedBox(width: 12),
-                    ],
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            s.title,
+  Widget _buildSessionCard(RideSession session) {
+    final selected = _selectedSessionIds.contains(session.id);
+    return Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Semantics(
+          selected: selected,
+          child: ContentGroup(
+              child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(24),
+              onTap: () async {
+                if (_isSelectionMode) {
+                  if (session.id != null) _toggleSessionSelection(session.id!);
+                  return;
+                }
+                await Navigator.push(
+                    context,
+                    CupertinoPageRoute<void>(
+                        builder: (_) => SessionDetailScreen(
+                            session: session, dbService: widget.dbService)));
+                if (mounted) _refresh();
+              },
+              onLongPress: () {
+                _enterSelectionMode();
+                if (session.id != null) _toggleSessionSelection(session.id!);
+              },
+              child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(children: [
+                          Expanded(
+                              child: Text(session.title,
+                                  style: const TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w600))),
+                          const SizedBox(width: 12),
+                          Icon(
+                              _isSelectionMode
+                                  ? (selected
+                                      ? CupertinoIcons.checkmark_circle_fill
+                                      : CupertinoIcons.circle)
+                                  : CupertinoIcons.chevron_right,
+                              color: selected
+                                  ? AppTheme.appleBlue
+                                  : AppTheme.textMuted,
+                              size: 20),
+                        ]),
+                        const SizedBox(height: 6),
+                        Text(
+                            '${_formatDateTime(session.startTime)} · ${_formatDuration(session.duration)}',
                             style: const TextStyle(
-                              color: AppTheme.appleBlack,
-                              fontSize: 17,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: -0.3,
-                              fontFamily: '-apple-system',
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            _formatDateTime(s.startTime),
-                            style: const TextStyle(
-                              color: AppTheme.appleMutedGray,
-                              fontSize: 12,
-                              fontFamily: '-apple-system',
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF2F2F7),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.timer_outlined, size: 13, color: AppTheme.appleMutedGray),
-                          const SizedBox(width: 4),
-                          Text(
-                            _formatDuration(s.duration),
-                            style: const TextStyle(
-                              color: AppTheme.appleBlack,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              fontFamily: '-apple-system',
-                              fontFeatures: [FontFeature.tabularFigures()],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Icon(
-                      _isSelectionMode
-                          ? (isSelected ? Icons.check_circle_rounded : Icons.radio_button_unchecked)
-                          : Icons.chevron_right_rounded,
-                      size: 20,
-                      color: _isSelectionMode
-                          ? (isSelected ? AppTheme.appleBlue : const Color(0xFFC7C7CC))
-                          : const Color(0xFFC7C7CC),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                const Divider(color: Color(0xFFE5E5EA), height: 1),
-                const SizedBox(height: 12),
-
-                // Metrics grid
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildMetricTile(
-                        label: 'NÁKLON L',
-                        value: '${s.maxLeanLeftDeg.abs().toStringAsFixed(1)}°',
-                        valueColor: AppTheme.appleGreen,
-                      ),
-                    ),
-                    Expanded(
-                      child: _buildMetricTile(
-                        label: 'NÁKLON P',
-                        value: '${s.maxLeanRightDeg.abs().toStringAsFixed(1)}°',
-                        valueColor: AppTheme.appleOrange,
-                      ),
-                    ),
-                    Expanded(
-                      child: _buildMetricTile(
-                        label: 'RYCHLOST',
-                        value: '${s.topSpeedKmh.toStringAsFixed(0)} km/h',
-                        valueColor: AppTheme.appleBlack,
-                      ),
-                    ),
-                    Expanded(
-                      child: _buildMetricTile(
-                        label: 'MAX G',
-                        value: '${s.maxGForce.toStringAsFixed(2)} G',
-                        valueColor: AppTheme.appleRed,
-                      ),
-                    ),
-                    // Quick share button
-                    if (!_isSelectionMode)
-                      IconButton(
-                        visualDensity: VisualDensity.compact,
-                        icon: const Icon(Icons.share_outlined, size: 18, color: AppTheme.appleMutedGray),
-                        tooltip: 'Exportovat data',
-                        onPressed: () => _showExportSheet(s),
-                      ),
-                  ],
-                ),
-              ],
+                                fontSize: 13, color: AppTheme.textMuted)),
+                        const SizedBox(height: 18),
+                        Wrap(spacing: 24, runSpacing: 12, children: [
+                          _metric('Vzdálenost',
+                              '${session.totalDistanceKm.toStringAsFixed(1)} km'),
+                          _metric('Max. rychlost',
+                              '${session.topSpeedKmh.round()} km/h'),
+                          _metric('Náklon L / P',
+                              '${session.maxLeanLeftDeg.abs().round()}° / ${session.maxLeanRightDeg.abs().round()}°'),
+                        ]),
+                        if (!_isSelectionMode)
+                          Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton.icon(
+                                  onPressed: () => _showExportSheet(session),
+                                  icon: const Icon(CupertinoIcons.share,
+                                      size: 18),
+                                  label: const Text('Exportovat'))),
+                      ])),
             ),
-          ),
-        ),
-      ),
-    );
+          )),
+        ));
   }
 
-  Widget _buildMetricTile({
-    required String label,
-    required String value,
-    required Color valueColor,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            color: AppTheme.appleMutedGray,
-            fontSize: 10,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.2,
-            fontFamily: '-apple-system',
-          ),
-        ),
-        const SizedBox(height: 3),
-        Text(
-          value,
-          style: TextStyle(
-            color: valueColor,
-            fontSize: 14,
-            fontWeight: FontWeight.w700,
-            letterSpacing: -0.3,
-            fontFamily: '-apple-system',
-            fontFeatures: const [FontFeature.tabularFigures()],
-          ),
-        ),
-      ],
-    );
-  }
+  Widget _metric(String label, String value) =>
+      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(label,
+            style: const TextStyle(fontSize: 12, color: AppTheme.textMuted)),
+        const SizedBox(height: 4),
+        Text(value,
+            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+      ]);
 }

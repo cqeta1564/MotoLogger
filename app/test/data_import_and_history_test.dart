@@ -200,6 +200,10 @@ timestamp_ms,recorded_at,latitude,longitude,altitude_m,gps_speed_kmh,bearing_deg
 
   group('SeasonSummaryCard Widget Tests', () {
     testWidgets('Renders aggregate season metrics with Apple aesthetic', (tester) async {
+      tester.view.physicalSize = const Size(800, 1200);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
       const stats = SeasonStats(
         totalRides: 14,
         totalDistanceKm: 1450.5,
@@ -220,7 +224,6 @@ timestamp_ms,recorded_at,latitude,longitude,altitude_m,gps_speed_kmh,bearing_deg
       // Verify Header and Badges
       expect(find.text('SEZÓNNÍ SOUHRN'), findsOneWidget);
       expect(find.text('Sezóna 2026 • 14 jízd'), findsOneWidget);
-      expect(find.text('1451 km'), findsOneWidget);
 
       // 4 Metrics
       expect(find.text('Celkový nájezd'), findsOneWidget);
@@ -230,7 +233,7 @@ timestamp_ms,recorded_at,latitude,longitude,altitude_m,gps_speed_kmh,bearing_deg
       expect(find.text('24 h 30 min'), findsOneWidget);
 
       expect(find.text('Rekord náklonu (L / P)'), findsOneWidget);
-      expect(find.text('◀ 49.2° | 52.8° ▶'), findsOneWidget);
+      expect(find.text('49.2° / 52.8°'), findsOneWidget);
 
       expect(find.text('Maximální rychlost'), findsOneWidget);
       expect(find.text('178 km/h'), findsOneWidget);
@@ -264,6 +267,10 @@ timestamp_ms,recorded_at,latitude,longitude,altitude_m,gps_speed_kmh,bearing_deg
     });
 
     testWidgets('HistoryScreen renders season summary, sort controls, and session list', (tester) async {
+      tester.view.physicalSize = const Size(800, 1200);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
       final testSessions = [
         RideSession(
           id: 1,
@@ -298,11 +305,11 @@ timestamp_ms,recorded_at,latitude,longitude,altitude_m,gps_speed_kmh,bearing_deg
       await tester.pumpAndSettle();
 
       // Verify Header & Import button
-      expect(find.text('Historie jízd'), findsOneWidget);
-      expect(find.byIcon(Icons.sd_card_outlined), findsOneWidget);
+      expect(find.text('Historie'), findsOneWidget);
+      expect(find.byTooltip('Možnosti historie'), findsOneWidget);
 
       // Verify Season Summary Card
-      expect(find.text('SEZÓNNÍ SOUHRN'), findsOneWidget);
+      expect(find.text('CELKOVÝ PŘEHLED'), findsOneWidget);
       expect(find.text('162.0 km'), findsOneWidget); // 42 + 120
 
       // Verify Sort Controls
@@ -327,6 +334,10 @@ timestamp_ms,recorded_at,latitude,longitude,altitude_m,gps_speed_kmh,bearing_deg
     });
 
     testWidgets('HistoryScreen does not flicker or enter waiting state when telemetry updates arrive during recording', (tester) async {
+      tester.view.physicalSize = const Size(800, 1200);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
       final testSessions = [
         RideSession(
           id: 1,

@@ -219,6 +219,10 @@ void main() {
 
   group('HistoryScreen Selection Mode Widget Tests', () {
     testWidgets('Toggles selection mode, selects items, and shows bulk export dock', (tester) async {
+      tester.view.physicalSize = const Size(800, 1200);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
       final db = TestMockDatabaseService(
         sessions: [
           testSession,
@@ -272,7 +276,7 @@ void main() {
       await tester.tap(find.text('Hotovo'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Historie jízd'), findsOneWidget);
+      expect(find.text('Historie'), findsOneWidget);
       expect(find.byTooltip('Vybrat jízdy'), findsOneWidget);
       expect(find.text('Exportovat balíček'), findsNothing);
     });

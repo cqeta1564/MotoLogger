@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../core/theme/app_theme.dart';
+import '../widgets/glass_surface.dart';
 import '../../services/can_profile_service.dart';
 import '../../services/telemetry_manager.dart';
 import 'import_bike_profile_screen.dart';
@@ -31,15 +32,10 @@ class BikeProfilesScreen extends StatelessWidget {
           appBar: AppBar(
             backgroundColor: const Color(0xFFF2F2F7),
             elevation: 0,
-            leading: CupertinoButton(
-              padding: EdgeInsets.zero,
-              child: const Icon(CupertinoIcons.chevron_back, color: AppTheme.appleBlack, size: 28),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
+            leading: const GlassBackButton(),
             title: const Text(
               'Profily motocyklů',
               style: TextStyle(
-                fontFamily: '.SF Pro Display',
                 fontSize: 17,
                 fontWeight: FontWeight.w600,
                 color: Colors.black,
@@ -66,7 +62,6 @@ class BikeProfilesScreen extends StatelessWidget {
                     color: AppTheme.appleBlue,
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
-                    fontFamily: '-apple-system',
                   ),
                 ),
               ),
@@ -84,7 +79,6 @@ class BikeProfilesScreen extends StatelessWidget {
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                     letterSpacing: 0.6,
-                    fontFamily: '-apple-system',
                   ),
                 ),
               ),
@@ -116,7 +110,6 @@ class BikeProfilesScreen extends StatelessWidget {
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                     letterSpacing: 0.6,
-                    fontFamily: '-apple-system',
                   ),
                 ),
               ),
@@ -127,11 +120,13 @@ class BikeProfilesScreen extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: const Color(0xFFE5E5EA), width: 1),
+                    border:
+                        Border.all(color: const Color(0xFFE5E5EA), width: 1),
                   ),
                   child: Column(
                     children: [
-                      const Icon(Icons.two_wheeler_rounded, size: 40, color: Color(0xFFC7C7CC)),
+                      const Icon(Icons.two_wheeler_rounded,
+                          size: 40, color: Color(0xFFC7C7CC)),
                       const SizedBox(height: 12),
                       const Text(
                         'Zatím nemáte naučenou žádnou motorku',
@@ -139,7 +134,6 @@ class BikeProfilesScreen extends StatelessWidget {
                           color: AppTheme.appleBlack,
                           fontSize: 15,
                           fontWeight: FontWeight.w600,
-                          fontFamily: '-apple-system',
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -149,7 +143,6 @@ class BikeProfilesScreen extends StatelessWidget {
                         style: TextStyle(
                           color: AppTheme.appleMutedGray,
                           fontSize: 13,
-                          fontFamily: '-apple-system',
                         ),
                       ),
                     ],
@@ -162,7 +155,8 @@ class BikeProfilesScreen extends StatelessWidget {
                     child: _buildProfileCard(
                       context: context,
                       name: profile.name,
-                      subtitle: '${profile.signals.length} mapovaných signálů | ${profile.canBaudrate ~/ 1000} kbps',
+                      subtitle:
+                          '${profile.signals.length} mapovaných signálů | ${profile.canBaudrate ~/ 1000} kbps',
                       isActive: active.id == profile.id,
                       canDelete: true,
                       onTap: () async {
@@ -269,7 +263,6 @@ class BikeProfilesScreen extends StatelessWidget {
                           fontSize: 15.5,
                           fontWeight: FontWeight.w600,
                           letterSpacing: -0.3,
-                          fontFamily: '-apple-system',
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -278,7 +271,6 @@ class BikeProfilesScreen extends StatelessWidget {
                         style: const TextStyle(
                           color: AppTheme.appleMutedGray,
                           fontSize: 12.5,
-                          fontFamily: '-apple-system',
                         ),
                       ),
                     ],
