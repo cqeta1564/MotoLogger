@@ -62,9 +62,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     widget.onLockChanged?.call(value);
   }
 
+  int _effectiveSpeedKmh(TelemetryPacket pkt) {
+    if (pkt.vehicleSpeedKmh > 0) return pkt.vehicleSpeedKmh;
+    final gpsSpeedMs = manager.latestPosition?.speed ?? 0.0;
+    return gpsSpeedMs > 0.5 ? (gpsSpeedMs * 3.6).round() : 0;
+  }
+
   void _onTelemetryUpdate() {
-    final speed = manager.latestPacket.vehicleSpeedKmh;
-    if (!_available || speed < 10) {
+    final speed = _effectiveSpeedKmh(manager.latestPacket);
+    if (!_available || speed <= 5) {
       _wasStopped = true;
       _autoLockTimer?.cancel();
       _autoLockTimer = null;
@@ -92,7 +98,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _autoLockTimer?.cancel();
     _autoLockTimer = null;
     _setLocked(false);
-    if (manager.latestPacket.vehicleSpeedKmh >= 10 &&
+    if (_effectiveSpeedKmh(manager.latestPacket) > 5 &&
         !manager.isSimulationMode) {
       _autoLockTimer =
           Timer(const Duration(seconds: 7), () => _setLocked(true));
@@ -339,7 +345,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   /// Speed & Gear section displayed directly on the screen canvas across full width.
   Widget _speedSection(TelemetryPacket pkt, bool hasData, bool isCompact) {
-    final speedText = hasData ? '${pkt.vehicleSpeedKmh}' : '—';
+    final effectiveSpeed = _effectiveSpeedKmh(pkt);
+    final speedText = hasData ? '$effectiveSpeed' : '—';
     final gear = pkt.gear;
     final rpm = pkt.engineRpm;
     final rpmRatio = (hasData ? (rpm / 12000.0) : 0.0).clamp(0.0, 1.0);
@@ -376,7 +383,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             children: [
               Semantics(
                 label: hasData
-                    ? 'Rychlost ${pkt.vehicleSpeedKmh} kilometrů za hodinu'
+                    ? 'Rychlost $effectiveSpeed kilometrů za hodinu'
                     : 'Rychlost není dostupná',
                 excludeSemantics: true,
                 child: Text(
@@ -419,7 +426,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ),
                 child: Text(
-                  !hasData
+                  !hasData || gear < 0
                       ? '—'
                       : gear == 0
                           ? 'N'
@@ -427,7 +434,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   style: TextStyle(
                     fontSize: isCompact ? 20 : 24,
                     fontWeight: FontWeight.w700,
-                    color: !hasData
+                    color: !hasData || gear < 0
                         ? AppTheme.textPrimary
                         : gear == 0
                             ? const Color(0xFF34C759)
@@ -638,7 +645,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _landscapeInstruments() {
     final pkt = manager.latestPacket;
     final hasData = _available;
-    final speedText = hasData ? '${pkt.vehicleSpeedKmh}' : '—';
+    final speedText = hasData ? '${_effectiveSpeedKmh(pkt)}' : '—';
     final gear = pkt.gear;
     final rpm = pkt.engineRpm;
     final rpmRatio = (hasData ? (rpm / 12000.0) : 0.0).clamp(0.0, 1.0);
@@ -737,7 +744,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               ),
                             ),
                             child: Text(
-                              !hasData
+                              !hasData || gear < 0
                                   ? '—'
                                   : gear == 0
                                       ? 'N'
@@ -745,7 +752,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               style: TextStyle(
                                 fontSize: 20,
                                 fontWeight: FontWeight.w700,
-                                color: !hasData
+                                color: !hasData || gear < 0
                                     ? AppTheme.textPrimary
                                     : gear == 0
                                         ? const Color(0xFF34C759)

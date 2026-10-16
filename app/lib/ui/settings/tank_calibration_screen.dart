@@ -163,6 +163,7 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
       );
 
   Widget _buildStandModeContent() {
+    final isDemo = widget.telemetryManager.isSimulationMode;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -173,7 +174,8 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
 
         // Humorous builder's yellow spirit level
         ConstructionSpiritLevelWidget(
-          key: const ValueKey('stand_spirit_level'),
+          key: ValueKey('stand_spirit_level_$isDemo'),
+          simulatedRollDeg: isDemo ? -12.4 : null,
           onAngleChanged: (angle) => setState(() => _phoneRollDeg = angle),
           onStabilityChanged: (stable) =>
               setState(() => _isStandStable = stable),
@@ -183,6 +185,7 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
   }
 
   Widget _buildUprightModeContent() {
+    final isDemo = widget.telemetryManager.isSimulationMode;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -193,7 +196,8 @@ class _TankCalibrationScreenState extends State<TankCalibrationScreen> {
 
         // Humorous builder's yellow spirit level
         ConstructionSpiritLevelWidget(
-          key: const ValueKey('upright_spirit_level'),
+          key: ValueKey('upright_spirit_level_$isDemo'),
+          simulatedRollDeg: isDemo ? 0.0 : null,
           onStabilityChanged: (stable) =>
               setState(() => _isUprightStable = stable),
         ),

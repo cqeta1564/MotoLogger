@@ -40,6 +40,36 @@ void main() {
     expect(find.byType(ConstructionSpiritLevelWidget), findsOneWidget);
     expect(capturedAngle, -12.4);
     expect(capturedStability, true);
+    expect(find.text('V lajně'), findsOneWidget);
+    expect(find.text('-12.4°'), findsOneWidget);
+  });
+
+  testWidgets('ConstructionSpiritLevelWidget displays upright and extreme tilt Czech labels', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: ConstructionSpiritLevelWidget(
+            simulatedRollDeg: 0.0,
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('V lajně / Na milimetr přesně!'), findsOneWidget);
+    expect(find.text('0.0°'), findsOneWidget);
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: ConstructionSpiritLevelWidget(
+            simulatedRollDeg: 28.5,
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('Křivý jak šavle'), findsOneWidget);
+    expect(find.text('28.5°'), findsOneWidget);
   });
 
   test('Mounting offset calculation math verification', () {

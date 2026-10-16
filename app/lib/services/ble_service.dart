@@ -79,6 +79,7 @@ class BleService {
   StreamSubscription? _discoveryScanSubscription;
   StreamSubscription? _notifySubscription;
   StreamSubscription? _connectionSubscription;
+  Timer? _scanTimeoutTimer;
   Timer? _mockTimer;
   bool _mockMode = false;
   bool get isMockMode => _mockMode;
@@ -87,7 +88,9 @@ class BleService {
 
   void _setState(BleConnectionState newState) {
     _state = newState;
-    _stateController.add(_state);
+    if (!_stateController.isClosed) {
+      _stateController.add(_state);
+    }
   }
 
   /// Initialize paired device identity from local database
@@ -100,7 +103,9 @@ class BleService {
         _pairedDeviceName = savedName;
         debugPrint('[BLE] Loaded paired device: $_pairedDeviceName ($_pairedDeviceId)');
       }
-      _stateController.add(_state);
+      if (!_stateController.isClosed) {
+        _stateController.add(_state);
+      }
     } catch (e) {
       debugPrint('[BLE] Error loading paired device: $e');
     }
@@ -113,6 +118,7 @@ class BleService {
     }
 
     _setState(BleConnectionState.scanning);
+    _scanTimeoutTimer?.cancel();
 
     try {
       if (await FlutterBluePlus.isSupported == false) {
@@ -121,11 +127,7 @@ class BleService {
         return;
       }
 
-      await FlutterBluePlus.startScan(
-        withServices: [Guid(BleConstants.serviceUuid)],
-        timeout: const Duration(seconds: 15),
-      );
-
+      await _scanSubscription?.cancel();
       _scanSubscription = FlutterBluePlus.scanResults.listen((results) async {
         for (ScanResult r in results) {
           final deviceId = r.device.remoteId.str.toLowerCase();
@@ -136,10 +138,22 @@ class BleService {
 
           if (isTargetDevice) {
             debugPrint('[BLE] Found MotoLogger device: ${r.device.remoteId}');
+            _scanTimeoutTimer?.cancel();
             await FlutterBluePlus.stopScan();
             await connect(r.device);
             break;
           }
+        }
+      });
+
+      await FlutterBluePlus.startScan(
+        withServices: [Guid(BleConstants.serviceUuid)],
+        timeout: const Duration(seconds: 15),
+      );
+
+      _scanTimeoutTimer = Timer(const Duration(seconds: 15), () {
+        if (_state == BleConnectionState.scanning) {
+          _setState(BleConnectionState.disconnected);
         }
       });
     } catch (e) {
@@ -297,12 +311,14 @@ class BleService {
   }
 
   Future<void> connect(BluetoothDevice device) async {
+    _scanTimeoutTimer?.cancel();
     _device = device;
     _setState(BleConnectionState.connecting);
 
     try {
       await _device!.connect(autoConnect: true, timeout: const Duration(seconds: 10));
 
+      await _connectionSubscription?.cancel();
       _connectionSubscription = _device!.connectionState.listen((BluetoothConnectionState s) {
         if (s == BluetoothConnectionState.connected) {
           _setState(BleConnectionState.connected);
@@ -346,8 +362,9 @@ class BleService {
 
     try {
       await _telemetryChar!.setNotifyValue(true);
+      await _notifySubscription?.cancel();
       _notifySubscription = _telemetryChar!.onValueReceived.listen((List<int> value) {
-        if (value.isNotEmpty) {
+        if (value.isNotEmpty && !_telemetryController.isClosed) {
           try {
             final packet = TelemetryPacket.fromBytes(Uint8List.fromList(value));
             _telemetryController.add(packet);
@@ -456,37 +473,34 @@ class BleService {
       return await sendCanProfileMode(isCustomActive: false);
     }
 
+    const disabledSlot = CanSignalMapping(
+      key: 'disabled',
+      canId: '0x000',
+      startByte: 0,
+      lengthBytes: 1,
+    );
+
     bool success = true;
-    if (profile.rpmSignal != null) {
-      success &= await sendCanSignalConfig(
-        signalIndex: BleConstants.canSignalRpm,
-        mapping: profile.rpmSignal!,
-      );
-    }
-    if (profile.speedSignal != null) {
-      success &= await sendCanSignalConfig(
-        signalIndex: BleConstants.canSignalSpeed,
-        mapping: profile.speedSignal!,
-      );
-    }
-    if (profile.throttleSignal != null) {
-      success &= await sendCanSignalConfig(
-        signalIndex: BleConstants.canSignalThrottle,
-        mapping: profile.throttleSignal!,
-      );
-    }
-    if (profile.gearSignal != null) {
-      success &= await sendCanSignalConfig(
-        signalIndex: BleConstants.canSignalGear,
-        mapping: profile.gearSignal!,
-      );
-    }
-    if (profile.coolantSignal != null) {
-      success &= await sendCanSignalConfig(
-        signalIndex: BleConstants.canSignalCoolant,
-        mapping: profile.coolantSignal!,
-      );
-    }
+    success &= await sendCanSignalConfig(
+      signalIndex: BleConstants.canSignalRpm,
+      mapping: profile.rpmSignal ?? disabledSlot,
+    );
+    success &= await sendCanSignalConfig(
+      signalIndex: BleConstants.canSignalSpeed,
+      mapping: profile.speedSignal ?? disabledSlot,
+    );
+    success &= await sendCanSignalConfig(
+      signalIndex: BleConstants.canSignalThrottle,
+      mapping: profile.throttleSignal ?? disabledSlot,
+    );
+    success &= await sendCanSignalConfig(
+      signalIndex: BleConstants.canSignalGear,
+      mapping: profile.gearSignal ?? disabledSlot,
+    );
+    success &= await sendCanSignalConfig(
+      signalIndex: BleConstants.canSignalCoolant,
+      mapping: profile.coolantSignal ?? disabledSlot,
+    );
 
     success &= await sendCanProfileMode(isCustomActive: true);
     return success;
@@ -635,6 +649,7 @@ class BleService {
 
   void disconnect() {
     _mockTimer?.cancel();
+    _scanTimeoutTimer?.cancel();
     for (final t in _mockScanTimers) {
       t.cancel();
     }

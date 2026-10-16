@@ -47,13 +47,26 @@ class _ConstructionSpiritLevelWidgetState
     _startSensorListener();
   }
 
+  @override
+  void didUpdateWidget(covariant ConstructionSpiritLevelWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.simulatedRollDeg != oldWidget.simulatedRollDeg) {
+      _accelSub?.cancel();
+      _accelSub = null;
+      _startSensorListener();
+    }
+  }
+
   void _startSensorListener() {
     if (widget.simulatedRollDeg != null) {
       _currentRollDeg = widget.simulatedRollDeg!;
       _filteredRollDeg = widget.simulatedRollDeg!;
       _isStable = true;
-      widget.onAngleChanged?.call(_filteredRollDeg);
-      widget.onStabilityChanged?.call(true);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        widget.onAngleChanged?.call(_filteredRollDeg);
+        widget.onStabilityChanged?.call(true);
+      });
       return;
     }
 
@@ -124,6 +137,14 @@ class _ConstructionSpiritLevelWidgetState
     }
   }
 
+  String get _statusLabel {
+    if (!_isStable) return 'Ustálit...';
+    final absRoll = _filteredRollDeg.abs();
+    if (absRoll <= 1.5) return 'V lajně / Na milimetr přesně!';
+    if (absRoll <= 18.0) return 'V lajně';
+    return 'Křivý jak šavle';
+  }
+
   @override
   void dispose() {
     _accelSub?.cancel();
@@ -140,30 +161,68 @@ class _ConstructionSpiritLevelWidgetState
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 17)));
     }
-    return Container(
-      width: double.infinity,
-      height: 86,
-      margin: const EdgeInsets.symmetric(horizontal: 4),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.12),
-            blurRadius: 16,
-            offset: const Offset(0, 5),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          width: double.infinity,
+          height: 86,
+          margin: const EdgeInsets.symmetric(horizontal: 4),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.12),
+                blurRadius: 16,
+                offset: const Offset(0, 5),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: CustomPaint(
-          size: const Size(double.infinity, 86),
-          painter: _ConstructionLevelPainter(
-            rollDeg: _filteredRollDeg,
-            isStable: _isStable,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: CustomPaint(
+              size: const Size(double.infinity, 86),
+              painter: _ConstructionLevelPainter(
+                rollDeg: _filteredRollDeg,
+                isStable: _isStable,
+              ),
+            ),
           ),
         ),
-      ),
+        const SizedBox(height: 10),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Flexible(
+                child: Text(
+                  _statusLabel,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: _isStable
+                        ? const Color(0xFF1C1C1E)
+                        : const Color(0xFF63636B),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '${_filteredRollDeg.toStringAsFixed(1)}°',
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF1C1C1E),
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

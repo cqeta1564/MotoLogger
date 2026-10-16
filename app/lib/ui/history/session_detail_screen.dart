@@ -85,7 +85,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
           final samples = snapshot.data ?? [];
 
           return SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            padding: EdgeInsets.fromLTRB(
+              16,
+              16,
+              16,
+              24 + MediaQuery.paddingOf(context).bottom,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -128,8 +133,11 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
     final s = widget.session;
     final double avgSpeedKmh;
     if (samples.isNotEmpty) {
-      final totalSpeed =
-          samples.map((e) => e.vehicleSpeedKmh).reduce((a, b) => a + b);
+      final totalSpeed = samples
+          .map((e) => e.vehicleSpeedKmh > 0
+              ? e.vehicleSpeedKmh.toDouble()
+              : e.gpsSpeedKmh)
+          .reduce((a, b) => a + b);
       avgSpeedKmh = totalSpeed / samples.length;
     } else if (s.duration.inSeconds > 5) {
       avgSpeedKmh = s.totalDistanceKm / (s.duration.inSeconds / 3600.0);
@@ -345,7 +353,11 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
     final step = (samples.length / 100).ceil().clamp(1, 1000);
     final spots = <FlSpot>[];
     for (int i = 0; i < samples.length; i += step) {
-      spots.add(FlSpot(i.toDouble(), samples[i].vehicleSpeedKmh.toDouble()));
+      final s = samples[i];
+      final spd = s.vehicleSpeedKmh > 0
+          ? s.vehicleSpeedKmh.toDouble()
+          : s.gpsSpeedKmh;
+      spots.add(FlSpot(i.toDouble(), spd));
     }
 
     return LineChart(

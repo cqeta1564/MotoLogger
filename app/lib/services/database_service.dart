@@ -29,6 +29,9 @@ class DatabaseService {
     return await openDatabase(
       path,
       version: 1,
+      onConfigure: (db) async {
+        await db.execute('PRAGMA foreign_keys = ON');
+      },
       onCreate: _onCreate,
     );
   }
@@ -83,6 +86,10 @@ class DatabaseService {
 
     // Index for fast session query retrieval
     await db.execute('CREATE INDEX idx_samples_session_id ON samples (session_id)');
+
+    // Settings and Bike Profiles tables
+    await _ensureSettingsTable(db);
+    await _ensureBikeProfilesTable(db);
   }
 
   Future<int> startSession(String title) async {
@@ -553,33 +560,35 @@ class DatabaseService {
     }
 
     // 2. Identify column indices dynamically
-    final colTimestamp = columns.indexOf('timestamp_ms');
-    final colRecordedAt = columns.indexOf('recorded_at');
-    final colLean = columns.indexOf('lean_angle_deg');
-    final colPitch = columns.indexOf('pitch_deg');
-    final colAccelX = columns.indexOf('accel_x_g');
-    final colAccelY = columns.indexOf('accel_y_g');
-    final colAccelZ = columns.indexOf('accel_z_g');
-    final colGyroX = columns.indexOf('gyro_x_dps');
-    final colGyroY = columns.indexOf('gyro_y_dps');
-    final colGyroZ = columns.indexOf('gyro_z_dps');
-    final colVbat = columns.contains('v_bat')
-        ? columns.indexOf('v_bat')
-        : columns.indexOf('battery_voltage');
-    final colRpm = columns.indexOf('engine_rpm');
-    final colSpeed = columns.indexOf('vehicle_speed_kmh');
-    final colThrottle = columns.indexOf('throttle_pos_pct');
-    final colCoolant = columns.indexOf('coolant_temp_c');
-    final colGear = columns.indexOf('gear');
-    final colLat = columns.indexOf('latitude');
-    final colLon = columns.indexOf('longitude');
-    final colAlt = columns.contains('altitude_m')
-        ? columns.indexOf('altitude_m')
-        : columns.indexOf('altitude');
-    final colGpsSpeed = columns.indexOf('gps_speed_kmh');
-    final colBearing = columns.contains('bearing_deg')
-        ? columns.indexOf('bearing_deg')
-        : columns.indexOf('bearing');
+    int findCol(List<String> names) {
+      for (final name in names) {
+        final idx = columns.indexOf(name);
+        if (idx >= 0) return idx;
+      }
+      return -1;
+    }
+
+    final colTimestamp = findCol(['timestamp_ms']);
+    final colRecordedAt = findCol(['recorded_at']);
+    final colLean = findCol(['lean_angle_deg', 'lean_angle']);
+    final colPitch = findCol(['pitch_deg', 'pitch_angle']);
+    final colAccelX = findCol(['accel_x_g', 'longitudinal_g']);
+    final colAccelY = findCol(['accel_y_g', 'lateral_g']);
+    final colAccelZ = findCol(['accel_z_g', 'vertical_g']);
+    final colGyroX = findCol(['gyro_x_dps']);
+    final colGyroY = findCol(['gyro_y_dps']);
+    final colGyroZ = findCol(['gyro_z_dps']);
+    final colVbat = findCol(['v_bat', 'battery_voltage', 'battery_v']);
+    final colRpm = findCol(['engine_rpm']);
+    final colSpeed = findCol(['vehicle_speed_kmh', 'speed']);
+    final colThrottle = findCol(['throttle_pos_pct', 'throttle_pct', 'throttle']);
+    final colCoolant = findCol(['coolant_temp_c', 'coolant_temp']);
+    final colGear = findCol(['gear']);
+    final colLat = findCol(['latitude']);
+    final colLon = findCol(['longitude']);
+    final colAlt = findCol(['altitude_m', 'altitude']);
+    final colGpsSpeed = findCol(['gps_speed_kmh']);
+    final colBearing = findCol(['bearing_deg', 'bearing', 'heading']);
 
     final parsedSamples = <FusedSample>[];
     double maxLeft = 0.0;
@@ -760,14 +769,18 @@ class DatabaseService {
   }
 
   // Key-Value App Settings Storage (Persistent)
-  Future<void> saveSetting(String key, String value) async {
-    final db = await database;
+  Future<void> _ensureSettingsTable(Database db) async {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS settings (
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
       )
     ''');
+  }
+
+  Future<void> saveSetting(String key, String value) async {
+    final db = await database;
+    await _ensureSettingsTable(db);
     await db.insert(
       'settings',
       {'key': key, 'value': value},
@@ -777,12 +790,7 @@ class DatabaseService {
 
   Future<String?> getSetting(String key) async {
     final db = await database;
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS settings (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL
-      )
-    ''');
+    await _ensureSettingsTable(db);
     final maps = await db.query(
       'settings',
       where: 'key = ?',
@@ -797,12 +805,7 @@ class DatabaseService {
 
   Future<void> removeSetting(String key) async {
     final db = await database;
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS settings (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL
-      )
-    ''');
+    await _ensureSettingsTable(db);
     await db.delete(
       'settings',
       where: 'key = ?',

@@ -133,10 +133,16 @@ class TelemetryManager extends ChangeNotifier {
     });
 
     _bleSub = bleService.telemetryStream.listen((packet) {
-      _latestRawLeanDeg = packet.leanAngleDeg;
-
-      // Apply calibrated mounting offset
-      final calibratedRoll = packet.leanAngleDeg - _mountingRollOffsetDeg;
+      final double calibratedRoll;
+      if (bleService.isMockMode) {
+        _latestRawLeanDeg = packet.leanAngleDeg;
+        calibratedRoll = packet.leanAngleDeg - _mountingRollOffsetDeg;
+      } else {
+        // Real ESP32 firmware already subtracts _mountingRollOffsetDeg before transmitting.
+        // Reconstruct uncalibrated raw IMU roll so repeated calibrations remain idempotent.
+        calibratedRoll = packet.leanAngleDeg;
+        _latestRawLeanDeg = packet.leanAngleDeg + _mountingRollOffsetDeg;
+      }
       final adjustedPacket = packet.copyWith(leanAngleDeg: calibratedRoll);
       _latestPacket = adjustedPacket;
 
@@ -147,8 +153,14 @@ class TelemetryManager extends ChangeNotifier {
       if (adjustedPacket.leanAngleDeg > _maxLeanRight) {
         _maxLeanRight = adjustedPacket.leanAngleDeg;
       }
-      if (adjustedPacket.vehicleSpeedKmh > _topSpeed) {
-        _topSpeed = adjustedPacket.vehicleSpeedKmh.toDouble();
+      final gpsSpeedKmh = (_latestPosition != null && _latestPosition!.speed > 0)
+          ? (_latestPosition!.speed * 3.6)
+          : 0.0;
+      final effectiveSpeedKmh = adjustedPacket.vehicleSpeedKmh > 0
+          ? adjustedPacket.vehicleSpeedKmh.toDouble()
+          : gpsSpeedKmh;
+      if (effectiveSpeedKmh > _topSpeed) {
+        _topSpeed = effectiveSpeedKmh;
       }
 
       final currentG = sqrt(adjustedPacket.accelXG * adjustedPacket.accelXG +
@@ -158,8 +170,10 @@ class TelemetryManager extends ChangeNotifier {
       }
 
       // Update polar friction envelope for G-G diagram
+      // Horizontal axis in GgFrictionReticle is lateral G (accelYG),
+      // Vertical axis is longitudinal G (accelXG).
       if (currentG > 0.05) {
-        double angle = atan2(adjustedPacket.accelYG, adjustedPacket.accelXG);
+        double angle = atan2(adjustedPacket.accelXG, adjustedPacket.accelYG);
         if (angle < 0) angle += 2 * pi;
         final sector = ((angle / (2 * pi)) * 36).floor() % 36;
         if (currentG > _frictionEnvelope[sector]) {
@@ -359,7 +373,6 @@ class TelemetryManager extends ChangeNotifier {
   /// Calibrate mounting zero offset with motorcycle held upright (0.0°)
   Future<void> calibrateUpright() async {
     await calibrateMountingOffset(targetAngleDeg: 0.0);
-    await bleService.sendTareZero();
   }
 
   /// Backward compatible alias for upright tare

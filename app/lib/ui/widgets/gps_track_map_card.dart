@@ -183,7 +183,7 @@ class _GpsTrackMapCardState extends State<GpsTrackMapCard> {
                                     ],
                                   ),
                                   child: Text(
-                                    '${_scrubbedSample!.vehicleSpeedKmh} km/h • '
+                                    '${(_scrubbedSample!.vehicleSpeedKmh > 0 ? _scrubbedSample!.vehicleSpeedKmh : _scrubbedSample!.gpsSpeedKmh.round())} km/h • '
                                     '${_scrubbedSample!.leanAngleDeg.abs().toStringAsFixed(1)}° '
                                     '${_scrubbedSample!.leanAngleDeg < 0 ? 'vlevo' : 'vpravo'}'
                                     '${_scrubbedSample!.gear > 0 ? ' • ${_scrubbedSample!.gear}. st.' : ''}',
@@ -244,7 +244,8 @@ class _GpsTrackMapCardState extends State<GpsTrackMapCard> {
   Widget _buildSpeedLegend(List<FusedSample> samples) {
     int maxSpd = 0;
     for (final s in samples) {
-      if (s.vehicleSpeedKmh > maxSpd) maxSpd = s.vehicleSpeedKmh;
+      final spd = s.vehicleSpeedKmh > 0 ? s.vehicleSpeedKmh : s.gpsSpeedKmh.round();
+      if (spd > maxSpd) maxSpd = spd;
     }
     if (maxSpd == 0) maxSpd = 100;
 
@@ -408,7 +409,8 @@ class _GpsTrackPainter extends CustomPainter {
 
     for (int i = 0; i < samples.length; i++) {
       final s = samples[i];
-      if (s.vehicleSpeedKmh > maxSpeed) maxSpeed = s.vehicleSpeedKmh;
+      final spd = s.vehicleSpeedKmh > 0 ? s.vehicleSpeedKmh : s.gpsSpeedKmh.round();
+      if (spd > maxSpeed) maxSpeed = spd;
       if (s.leanAngleDeg < maxLeftVal) {
         maxLeftVal = s.leanAngleDeg;
         maxLeftIdx = i;
@@ -446,7 +448,9 @@ class _GpsTrackPainter extends CustomPainter {
           linePaint.color = const Color(0xFFC7C7CC);
         }
       } else {
-        final avgSpd = (s1.vehicleSpeedKmh + s2.vehicleSpeedKmh) / 2.0;
+        final spd1 = s1.vehicleSpeedKmh > 0 ? s1.vehicleSpeedKmh.toDouble() : s1.gpsSpeedKmh;
+        final spd2 = s2.vehicleSpeedKmh > 0 ? s2.vehicleSpeedKmh.toDouble() : s2.gpsSpeedKmh;
+        final avgSpd = (spd1 + spd2) / 2.0;
         final ratio = (avgSpd / maxSpeed).clamp(0.0, 1.0);
         if (ratio < 0.3) {
           linePaint.color = const Color(0xFF007AFF);

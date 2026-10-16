@@ -150,6 +150,62 @@ timestamp_ms,recorded_at,latitude,longitude,altitude_m,gps_speed_kmh,bearing_deg
       expect(parsed.samples[0].gpsSpeedKmh, equals(72.0));
       expect(parsed.session.maxLeanRightDeg, equals(42.0));
     });
+
+    test('generateCsvString to parseRideCsv round-trip preserves throttle_pct and battery_v losslessly', () {
+      final db = FakeDatabaseService();
+      final originalSamples = [
+        FusedSample(
+          sessionId: 1,
+          timestampMs: 1000,
+          recordedAt: DateTime.utc(2026, 10, 16, 8, 0, 0),
+          leanAngleDeg: -28.4,
+          pitchDeg: 1.5,
+          accelXG: -0.35,
+          accelYG: -0.55,
+          accelZG: 0.99,
+          gyroXDps: 5.0,
+          gyroYDps: 1.0,
+          gyroZDps: 2.0,
+          engineRpm: 7400,
+          vehicleSpeedKmh: 94,
+          throttlePosPct: 68,
+          coolantTempC: 89,
+          gear: 3,
+          batteryVoltage: 14.3,
+          latitude: 49.2041,
+          longitude: 16.4450,
+          altitude: 382.0,
+          gpsSpeedKmh: 93.5,
+          bearing: 125.0,
+          gpsAccuracyMeters: 2.0,
+        ),
+      ];
+
+      final exported = db.generateCsvString(samples: originalSamples);
+      final reparsed = DatabaseService.parseRideCsv(csvContent: exported);
+
+      expect(reparsed.samples.length, equals(1));
+      expect(reparsed.samples.first.throttlePosPct, equals(68));
+      expect(reparsed.samples.first.batteryVoltage, closeTo(14.3, 0.01));
+      expect(reparsed.samples.first.engineRpm, equals(7400));
+      expect(reparsed.samples.first.vehicleSpeedKmh, equals(94));
+      expect(reparsed.samples.first.gear, equals(3));
+    });
+
+    test('RideSession.isDemo distinguishes demo sessions from live hardware rides', () {
+      final demoRide = RideSession(
+        title: 'Demo · Brno · 16.10. 08:30',
+        startTime: DateTime.utc(2026, 10, 16, 8, 30),
+      );
+      final hardwareRide = RideSession(
+        title: 'Jízda · 16.10. 08:30',
+        startTime: DateTime.utc(2026, 10, 16, 8, 30),
+      );
+
+      expect(demoRide.isDemo, isTrue);
+      expect(hardwareRide.isDemo, isFalse);
+      expect(hardwareRide.copyWith(isDemo: true).isDemo, isTrue);
+    });
   });
 
   group('SeasonStats Tests', () {

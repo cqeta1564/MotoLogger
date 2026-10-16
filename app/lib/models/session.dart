@@ -9,6 +9,7 @@ class RideSession {
   final double maxGForce;
   final double totalDistanceKm;
   final int sampleCount;
+  final bool? _isDemo;
 
   const RideSession({
     this.id,
@@ -21,7 +22,12 @@ class RideSession {
     this.maxGForce = 0.0,
     this.totalDistanceKm = 0.0,
     this.sampleCount = 0,
-  });
+    bool? isDemo,
+  }) : _isDemo = isDemo;
+
+  /// True if the session was recorded in demo / simulation mode.
+  bool get isDemo =>
+      _isDemo ?? title.trimLeft().toLowerCase().startsWith('demo');
 
   Duration get duration {
     final end = endTime ?? DateTime.now();
@@ -39,6 +45,7 @@ class RideSession {
     double? maxGForce,
     double? totalDistanceKm,
     int? sampleCount,
+    bool? isDemo,
   }) {
     return RideSession(
       id: id ?? this.id,
@@ -51,6 +58,7 @@ class RideSession {
       maxGForce: maxGForce ?? this.maxGForce,
       totalDistanceKm: totalDistanceKm ?? this.totalDistanceKm,
       sampleCount: sampleCount ?? this.sampleCount,
+      isDemo: isDemo ?? _isDemo,
     );
   }
 
@@ -70,9 +78,14 @@ class RideSession {
   }
 
   factory RideSession.fromMap(Map<String, dynamic> map) {
+    final title = map['title'] as String;
+    final rawIsDemo = map['is_demo'];
+    final bool? parsedIsDemo = rawIsDemo is int
+        ? rawIsDemo != 0
+        : (rawIsDemo is bool ? rawIsDemo : null);
     return RideSession(
       id: map['id'] as int?,
-      title: map['title'] as String,
+      title: title,
       startTime: DateTime.parse(map['start_time'] as String),
       endTime: map['end_time'] != null ? DateTime.parse(map['end_time'] as String) : null,
       maxLeanLeftDeg: (map['max_lean_left_deg'] as num).toDouble(),
@@ -81,6 +94,7 @@ class RideSession {
       maxGForce: (map['max_g_force'] as num).toDouble(),
       totalDistanceKm: (map['total_distance_km'] as num).toDouble(),
       sampleCount: map['sample_count'] as int,
+      isDemo: parsedIsDemo,
     );
   }
 }
