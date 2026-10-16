@@ -124,24 +124,45 @@ struct TelemetryRecord {
 };
 
 // ==============================================================================
+// Telemetry Status Flags Bitmask (BleTelemetryPacket::status_flags)
+// ==============================================================================
+constexpr uint8_t STATUS_FLAG_SD_READY           = (1 << 0);
+constexpr uint8_t STATUS_FLAG_ENGINE_RUNNING     = (1 << 1);
+constexpr uint8_t STATUS_FLAG_SHUTDOWN_COUNTDOWN = (1 << 2);
+constexpr uint8_t STATUS_FLAG_IMU_READY          = (1 << 3);
+
+// ==============================================================================
 // Packed Binary BLE Telemetry Packet (Transmitted at 25 Hz to Smartphone)
-// Exactly 28 bytes - zero parsing overhead on Flutter / iOS / Android!
+// 29 bytes total (28 bytes base payload + 1 byte status_flags at offset 28)
 // ==============================================================================
 struct __attribute__((packed)) BleTelemetryPacket {
-    uint32_t timestamp_ms;       // Monotonic timestamp (ms)
-    int16_t  lean_angle_x10;     // Roll * 10 (-1800 .. +1800 -> +/- 180.0 deg)
-    int16_t  pitch_x10;          // Pitch * 10 (-900 .. +900 -> +/- 90.0 deg)
-    int16_t  accel_x_mg;         // Longitudinal G * 1000 (+1000 = +1.0G accel)
-    int16_t  accel_y_mg;         // Lateral G * 1000
-    int16_t  accel_z_mg;         // Vertical G * 1000
-    int16_t  gyro_x_dps_x10;     // Roll rate * 10 (deg/s * 10)
-    int16_t  gyro_y_dps_x10;     // Pitch rate * 10 (deg/s * 10)
-    int16_t  gyro_z_dps_x10;     // Yaw rate * 10 (deg/s * 10)
-    uint16_t engine_rpm;         // RPM (0 - 20000)
-    uint8_t  vehicle_speed_kmh;  // Speed (0 - 255 km/h)
-    uint8_t  throttle_pos_pct;   // Throttle (0 - 100 %)
-    int8_t   coolant_temp_c;     // Engine coolant temp (-40 .. +150 C)
-    int8_t   gear;               // Calculated gear (-1 = unknown, 0 = N, 1..6)
-    uint16_t battery_mv;         // Battery voltage (e.g. 14250 = 14.25 V)
-    uint8_t  status_flags;       // Bit 0: SD active, Bit 1: Engine run, Bit 2: Countdown, Bit 3: IMU ok
+    uint32_t timestamp_ms;       // Offset 0..3:   Monotonic timestamp (ms)
+    int16_t  lean_angle_x10;     // Offset 4..5:   Roll * 10 (-1800 .. +1800 -> +/- 180.0 deg)
+    int16_t  pitch_x10;          // Offset 6..7:   Pitch * 10 (-900 .. +900 -> +/- 90.0 deg)
+    int16_t  accel_x_mg;         // Offset 8..9:   Longitudinal G * 1000 (+1000 = +1.0G accel)
+    int16_t  accel_y_mg;         // Offset 10..11: Lateral G * 1000
+    int16_t  accel_z_mg;         // Offset 12..13: Vertical G * 1000
+    int16_t  gyro_x_dps_x10;     // Offset 14..15: Roll rate * 10 (deg/s * 10)
+    int16_t  gyro_y_dps_x10;     // Offset 16..17: Pitch rate * 10 (deg/s * 10)
+    int16_t  gyro_z_dps_x10;     // Offset 18..19: Yaw rate * 10 (deg/s * 10)
+    uint16_t engine_rpm;         // Offset 20..21: RPM (0 - 25000)
+    uint8_t  vehicle_speed_kmh;  // Offset 22:     Speed (0 - 255 km/h)
+    uint8_t  throttle_pos_pct;   // Offset 23:     Throttle (0 - 100 %)
+    int8_t   coolant_temp_c;     // Offset 24:     Engine coolant temp (-40 .. +127 C)
+    int8_t   gear;               // Offset 25:     Calculated gear (-1 = unknown, 0 = N, 1..6)
+    uint16_t battery_mv;         // Offset 26..27: Battery voltage (e.g. 14250 = 14.25 V)
+    uint8_t  status_flags;       // Offset 28:     Bit 0: SD active, Bit 1: Engine run, Bit 2: Countdown, Bit 3: IMU ok
 };
+
+static_assert(sizeof(BleTelemetryPacket) == 29, "BleTelemetryPacket must be exactly 29 bytes");
+static_assert(sizeof(CanSignalConfig) == 16, "CanSignalConfig must be exactly 16 bytes");
+
+// ==============================================================================
+// Asynchronous BLE Command Event (Decouples NimBLE GATT callback from NVS/SD I/O)
+// ==============================================================================
+struct BleCommandEvent {
+    uint8_t command_id;
+    uint8_t length;
+    uint8_t payload[32];
+};
+

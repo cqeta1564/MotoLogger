@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
+#include <atomic>
 #include "driver/twai.h"
 #include "config.h"
 #include "types.h"
@@ -20,9 +21,10 @@ public:
     CanManager();
     bool begin(OperatingMode mode = OperatingMode::LISTEN_ONLY);
     void stop();
+    bool reconfigureMode(OperatingMode new_mode);
 
     bool receiveFrame(CanFrame& frame, uint32_t wait_ms = 0);
-    bool transmitFrame(const CanFrame& frame, uint32_t timeout_ms = 10);
+    bool transmitFrame(const CanFrame& frame, uint32_t timeout_ms = 10, bool single_shot = true);
 
     // Active OBD-II Engine
     void updateObdQueries();
@@ -33,24 +35,34 @@ public:
     void setProfileActive(bool active);
     void saveProfileToNvs();
     void loadProfileFromNvs();
-    bool isCustomProfileActive() const { return custom_profile_.profile_active != 0; }
-    const EspBikeCanProfile& getProfile() const { return custom_profile_; }
+    bool isCustomProfileActive() const;
+    OperatingMode getOperatingMode() const { return mode_; }
+    bool isRunning() const { return is_running_.load(std::memory_order_acquire); }
 
     // Diagnostics & Statistics
-    uint32_t getRxCount() const { return rx_count_; }
-    uint32_t getTxCount() const { return tx_count_; }
-    uint32_t getErrorCount() const { return error_count_; }
+    uint32_t getRxCount() const { return rx_count_.load(std::memory_order_relaxed); }
+    uint32_t getTxCount() const { return tx_count_.load(std::memory_order_relaxed); }
+    uint32_t getErrorCount() const { return error_count_.load(std::memory_order_relaxed); }
+    uint32_t getBusOffCount() const { return bus_off_count_.load(std::memory_order_relaxed); }
+    bool isRecovering() const { return is_recovering_.load(std::memory_order_acquire); }
+    void handleBusRecovery();
 
 private:
     OperatingMode mode_;
-    bool is_installed_;
-    bool is_running_;
-    uint32_t rx_count_;
-    uint32_t tx_count_;
-    uint32_t error_count_;
+    std::atomic<bool> is_installed_;
+    std::atomic<bool> is_running_;
+    std::atomic<bool> is_recovering_;
+    std::atomic<bool> mode_change_pending_;
+    OperatingMode pending_mode_;
+
+    std::atomic<uint32_t> rx_count_;
+    std::atomic<uint32_t> tx_count_;
+    std::atomic<uint32_t> error_count_;
+    std::atomic<uint32_t> bus_off_count_;
+    uint32_t last_bus_off_time_ms_;
 
     ObdTelemetry obd_data_;
-    portMUX_TYPE obd_mux_;
+    mutable portMUX_TYPE obd_mux_;
 
     // Custom Motorcycle CAN Mapping Profile
     EspBikeCanProfile custom_profile_;
@@ -59,9 +71,12 @@ private:
     uint8_t current_pid_index_;
     uint32_t last_query_time_ms_;
 
+    bool installAndStartTwai(OperatingMode mode);
+    void checkTelemetryTimeoutLocked(uint32_t now_ms);
     void decodeCustomFrame(const twai_message_t& msg);
     float decodeSignalValue(const CanSignalConfig& cfg, const uint8_t* payload, uint8_t dlc);
     void parseObdResponse(const twai_message_t& msg);
     void sendObdRequest(uint8_t pid);
     void calculateGear();
 };
+

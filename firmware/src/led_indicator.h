@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
+#include <atomic>
 #include "config.h"
 
 /**
@@ -14,7 +15,7 @@ public:
         SOLID_ON,
         SLOW_BLINK,    // 1 Hz (Normal operation)
         FAST_BLINK,    // 5 Hz (Shutdown countdown / alert)
-        BURST_BLINK,   // Double flash (CAN RX activity)
+        BURST_BLINK,   // Double flash heartbeat
         ERROR_BLINK    // 10 Hz rapid strobe
     };
 
@@ -26,14 +27,16 @@ public:
     void update();
 
 private:
-    Pattern yellow_pattern_;
-    Pattern blue_pattern_;
+    std::atomic<Pattern> yellow_pattern_;
+    std::atomic<Pattern> blue_pattern_;
 
     uint32_t yellow_last_toggle_ms_;
     uint32_t blue_last_toggle_ms_;
     bool yellow_state_;
     bool blue_state_;
-    uint32_t can_burst_end_ms_;
+    std::atomic<uint32_t> can_burst_start_ms_;
+    std::atomic<bool> can_burst_active_;
 
     void applyPattern(gpio_num_t pin, Pattern pattern, uint32_t& last_toggle, bool& state);
 };
+

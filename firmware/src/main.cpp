@@ -1,4 +1,7 @@
 #include <Arduino.h>
+#include <math.h>
+#include <stdarg.h>
+#include <atomic>
 #include "config.h"
 #include "types.h"
 #include "ring_buffer.h"
@@ -18,13 +21,15 @@ static ImuManager     g_imu_mgr;
 static StorageManager g_storage_mgr;
 static BleManager     g_ble_mgr;
 static LedIndicator   g_led_indicator;
+static SemaphoreHandle_t g_serial_mutex = nullptr;
 
-// Lock-free queues for inter-task telemetry streaming
+// Lock-free queues for inter-task telemetry streaming & BLE command offloading
 static RingBuffer<TelemetryRecord, 512> g_telemetry_queue;
 static RingBuffer<CanFrame, 256>        g_raw_can_queue;
+static RingBuffer<BleCommandEvent, 16>  g_ble_cmd_queue;
 
 // Synchronization flags
-static volatile bool g_system_shutdown_ready = false;
+static std::atomic<bool> g_system_shutdown_ready{false};
 
 // ==============================================================================
 // FreeRTOS Task Prototypes
@@ -36,71 +41,162 @@ void taskSupervisor(void* pvParameters);
 void taskBleStreaming(void* pvParameters);
 
 // ==============================================================================
-// BLE Smartphone Command Dispatcher
+// Thread-Safe Serial Logging Helper
+// ==============================================================================
+static void logPrintf(const char* fmt, ...) {
+    char buf[256];
+    va_list args;
+    va_start(args, fmt);
+    int n = vsnprintf(buf, sizeof(buf), fmt, args);
+    va_end(args);
+
+    if (n <= 0) return;
+
+    if (g_serial_mutex && xSemaphoreTake(g_serial_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+        Serial.print(buf);
+        xSemaphoreGive(g_serial_mutex);
+    } else if (!g_serial_mutex) {
+        Serial.print(buf);
+    }
+}
+
+// ==============================================================================
+// Fixed-Point Clamping & Rounding Helpers for BLE Telemetry Packet
+// ==============================================================================
+static inline int16_t clampRoundInt16(float value, float scale, int16_t min_val, int16_t max_val) {
+    if (!isfinite(value)) return 0;
+    long scaled = lroundf(value * scale);
+    if (scaled < static_cast<long>(min_val)) return min_val;
+    if (scaled > static_cast<long>(max_val)) return max_val;
+    return static_cast<int16_t>(scaled);
+}
+
+static inline uint16_t clampRoundUint16(float value, float scale, uint16_t max_val) {
+    if (!isfinite(value) || value <= 0.0f) return 0;
+    long scaled = lroundf(value * scale);
+    if (scaled < 0) return 0;
+    if (scaled > static_cast<long>(max_val)) return max_val;
+    return static_cast<uint16_t>(scaled);
+}
+
+static inline uint8_t clampRoundUint8(float value, uint8_t max_val) {
+    if (!isfinite(value) || value <= 0.0f) return 0;
+    long rounded = lroundf(value);
+    if (rounded < 0) return 0;
+    if (rounded > static_cast<long>(max_val)) return max_val;
+    return static_cast<uint8_t>(rounded);
+}
+
+static inline int8_t clampInt8(int32_t value, int8_t min_val, int8_t max_val) {
+    if (value < static_cast<int32_t>(min_val)) return min_val;
+    if (value > static_cast<int32_t>(max_val)) return max_val;
+    return static_cast<int8_t>(value);
+}
+
+// ==============================================================================
+// Non-Blocking BLE Command Enqueue (Runs inside NimBLE GATT Callback)
 // ==============================================================================
 static void handleBleCommand(uint8_t cmd_id, const uint8_t* payload, size_t length) {
-    switch (cmd_id) {
-        case 0x01: // Tare zero lean angle & pitch from smartphone app
-            g_imu_mgr.tareZero();
-            Serial.println("[BLE CMD] IMU Zero-Tare calibrated from mobile app!");
-            break;
+    BleCommandEvent ev = {};
+    ev.command_id = cmd_id;
+    size_t copy_len = (length > sizeof(ev.payload)) ? sizeof(ev.payload) : length;
+    ev.length = static_cast<uint8_t>(copy_len);
+    if (payload && copy_len > 0) {
+        memcpy(ev.payload, payload, copy_len);
+    }
+    g_ble_cmd_queue.push(ev);
+}
 
-        case 0x02: // Tare with mounting roll offset in tenths of a degree (int16_t, little-endian)
-            if (payload && length >= 2) {
-                int16_t offset_x10 = static_cast<int16_t>(payload[0] | (payload[1] << 8));
-                float offset_deg = static_cast<float>(offset_x10) / 10.0f;
-                g_imu_mgr.setRollOffset(offset_deg);
-                Serial.printf("[BLE CMD] Tare mounting offset calibrated: %.2f deg (saved to NVS)\n", offset_deg);
-            } else {
-                Serial.printf("[BLE CMD] Invalid payload length for Tare Offset: %u\n", length);
+// ==============================================================================
+// BLE Command Worker (Executed safely on Task_Supervisor outside NimBLE ISR/Host)
+// ==============================================================================
+static void processBleCommandQueue() {
+    BleCommandEvent ev;
+    while (g_ble_cmd_queue.pop(ev)) {
+        const uint8_t* payload = ev.payload;
+        size_t length = ev.length;
+
+        switch (ev.command_id) {
+            case 0x01: // Tare zero lean angle & pitch from smartphone app
+                g_imu_mgr.tareZero();
+                logPrintf("[BLE CMD] IMU Zero-Tare calibrated from mobile app!\n");
+                break;
+
+            case 0x02: // Tare with mounting roll offset in tenths of a degree (int16_t, little-endian)
+                if (length >= 2) {
+                    int16_t offset_x10 = static_cast<int16_t>(
+                        static_cast<uint16_t>(payload[0]) | (static_cast<uint16_t>(payload[1]) << 8)
+                    );
+                    float offset_deg = static_cast<float>(offset_x10) / 10.0f;
+                    g_imu_mgr.setRollOffset(offset_deg);
+                    logPrintf("[BLE CMD] Tare mounting offset calibrated: %.2f deg (saved to NVS)\n", offset_deg);
+                } else {
+                    logPrintf("[BLE CMD] Invalid payload length for Tare Offset: %u\n", static_cast<unsigned int>(length));
+                }
+                break;
+
+            case 0x03: // Configure CAN signal mapping (saved to NVS)
+                if (length >= 16) {
+                    uint8_t signal_id = payload[0];
+                    CanSignalConfig cfg = {};
+                    memcpy(&cfg.can_id, &payload[1], 4);
+                    cfg.start_byte = payload[5];
+                    cfg.length_bytes = payload[6];
+                    cfg.is_big_endian = payload[7];
+                    cfg.is_active = 1;
+                    memcpy(&cfg.multiplier, &payload[8], 4);
+                    memcpy(&cfg.offset, &payload[12], 4);
+
+                    g_can_mgr.setSignalConfig(signal_id, cfg);
+                    logPrintf("[BLE CMD] CAN signal %u configured and saved to NVS.\n", signal_id);
+                } else {
+                    logPrintf("[BLE CMD] Invalid payload length for CAN Signal Config: %u\n", static_cast<unsigned int>(length));
+                }
+                break;
+
+            case 0x04: // Set CAN profile active mode (1 = Custom profile, 0 = Standard OBD)
+                if (length >= 1) {
+                    bool active = (payload[0] != 0);
+                    g_can_mgr.setProfileActive(active);
+                    logPrintf("[BLE CMD] CAN profile active mode: %s (saved to NVS)\n", active ? "CUSTOM" : "OBD");
+                } else {
+                    logPrintf("[BLE CMD] Invalid payload length for CAN Profile Mode: %u\n", static_cast<unsigned int>(length));
+                }
+                break;
+
+            case 0x05: // Query un-synced offline session logs on MicroSD
+                logPrintf("[BLE CMD] Offline sync check: file=%s, session=%lu, last_synced=%lu, records=%lu\n",
+                          g_storage_mgr.getCurrentFileName(),
+                          static_cast<unsigned long>(g_storage_mgr.getCurrentSessionIndex()),
+                          static_cast<unsigned long>(g_storage_mgr.getLastSyncedSessionIndex()),
+                          static_cast<unsigned long>(g_storage_mgr.getRecordsWritten()));
+                break;
+
+            case 0x06: { // Offline session log download requested
+                char req_name[33] = {};
+                if (length > 0) {
+                    memcpy(req_name, payload, length);
+                    req_name[length] = '\0';
+                }
+                logPrintf("[BLE CMD] Offline log download requested: %s\n", req_name[0] ? req_name : "(latest)");
+                break;
             }
-            break;
 
-        case 0x03: // Configure CAN signal mapping (saved to NVS)
-            if (payload && length >= 16) {
-                uint8_t signal_id = payload[0];
-                CanSignalConfig cfg;
-                memcpy(&cfg.can_id, &payload[1], 4);
-                cfg.start_byte = payload[5];
-                cfg.length_bytes = payload[6];
-                cfg.is_big_endian = payload[7];
-                cfg.is_active = 1;
-                memcpy(&cfg.multiplier, &payload[8], 4);
-                memcpy(&cfg.offset, &payload[12], 4);
-
-                g_can_mgr.setSignalConfig(signal_id, cfg);
-                Serial.printf("[BLE CMD] CAN signal %u configured and saved to NVS.\n", signal_id);
-            } else {
-                Serial.printf("[BLE CMD] Invalid payload length for CAN Signal Config: %u\n", length);
+            case 0x07: { // Acknowledge offline log sync completed
+                char ack_name[33] = {};
+                if (length > 0) {
+                    memcpy(ack_name, payload, length);
+                    ack_name[length] = '\0';
+                }
+                g_storage_mgr.acknowledgeSessionSynced(ack_name[0] ? ack_name : nullptr);
+                logPrintf("[BLE CMD] Offline log sync acknowledged (%s).\n", ack_name[0] ? ack_name : "current");
+                break;
             }
-            break;
 
-        case 0x04: // Set CAN profile active mode (1 = Custom profile, 0 = Standard OBD)
-            if (payload && length >= 1) {
-                bool active = (payload[0] != 0);
-                g_can_mgr.setProfileActive(active);
-                Serial.printf("[BLE CMD] CAN profile active mode: %s (saved to NVS)\n", active ? "CUSTOM" : "OBD");
-            } else {
-                Serial.printf("[BLE CMD] Invalid payload length for CAN Profile Mode: %u\n", length);
-            }
-            break;
-
-        case 0x05: // Query un-synced offline session logs on MicroSD
-            Serial.printf("[BLE CMD] Offline sync check requested. Current file: %s, Records: %u\n",
-                          g_storage_mgr.getCurrentFileName(), g_storage_mgr.getRecordsWritten());
-            break;
-
-        case 0x06: // Offline session log download requested
-            Serial.printf("[BLE CMD] Offline log download requested (payload len: %u)\n", length);
-            break;
-
-        case 0x07: // Acknowledge offline log sync completed
-            Serial.printf("[BLE CMD] Offline log sync acknowledged by smartphone.\n");
-            break;
-
-        default:
-            Serial.printf("[BLE CMD] Unknown command 0x%02X received.\n", cmd_id);
-            break;
+            default:
+                logPrintf("[BLE CMD] Unknown command 0x%02X received.\n", ev.command_id);
+                break;
+        }
     }
 }
 
@@ -116,7 +212,8 @@ void setup() {
     g_led_indicator.setYellowPattern(LedIndicator::Pattern::SOLID_ON);
     g_led_indicator.setBluePattern(LedIndicator::Pattern::FAST_BLINK);
 
-    // 3. Initialize USB CDC Serial Console
+    // 3. Initialize Thread-Safe Mutex & USB CDC Serial Console
+    g_serial_mutex = xSemaphoreCreateMutex();
     Serial.begin(115200);
     delay(500);
     Serial.println("\n==============================================");
@@ -124,17 +221,18 @@ void setup() {
     Serial.println("  MotoLogger v3.4 + BNO085 + BLE Android/CarPlay");
     Serial.println("==============================================\n");
 
-    // 4. Initialize CAN / TWAI Subsystem (500 kbps, Listen-Only default)
-    Serial.print("[CAN] Initializing TWAI (500 kbps, Listen-Only)... ");
-    if (g_can_mgr.begin(CanManager::OperatingMode::LISTEN_ONLY)) {
-        Serial.println("OK");
+    // 4. Initialize CAN / TWAI Subsystem (500 kbps; auto-selects Listen-Only if custom profile active, else Active OBD)
+    Serial.print("[CAN] Initializing TWAI (500 kbps)... ");
+    if (g_can_mgr.begin(CanManager::OperatingMode::ACTIVE_OBD)) {
+        Serial.printf("OK (%s)\n",
+                      g_can_mgr.isCustomProfileActive() ? "Custom Profile / Listen-Only" : "Standard OBD-II");
     } else {
-        Serial.println("FAILED! Retrying in Normal mode...");
-        g_can_mgr.begin(CanManager::OperatingMode::ACTIVE_OBD);
+        Serial.println("FAILED! Retrying in Listen-Only mode...");
+        g_can_mgr.begin(CanManager::OperatingMode::LISTEN_ONLY);
     }
 
     // 5. Initialize BNO085 IMU Subsystem
-    Serial.print("[IMU] Initializing BNO085 (I2C 0x4A, 100 Hz GRV)... ");
+    Serial.print("[IMU] Initializing BNO085 (I2C 400 kHz, 100 Hz GRV)... ");
     if (g_imu_mgr.begin()) {
         Serial.println("OK");
     } else {
@@ -146,7 +244,9 @@ void setup() {
     Serial.print("[SD] Mounting MicroSD & opening session file... ");
     if (g_storage_mgr.begin()) {
         Serial.printf("OK -> %s\n", g_storage_mgr.getCurrentFileName());
-        g_led_indicator.setBluePattern(LedIndicator::Pattern::SLOW_BLINK);
+        if (g_imu_mgr.isReady()) {
+            g_led_indicator.setBluePattern(LedIndicator::Pattern::SLOW_BLINK);
+        }
     } else {
         Serial.println("FAILED! Check MicroSD card insertion.");
         g_led_indicator.setBluePattern(LedIndicator::Pattern::ERROR_BLINK);
@@ -174,7 +274,7 @@ void setup() {
         taskBleStreaming, "Task_BLE", STACK_BLE_TASK, nullptr, 3, nullptr, CORE_CAN_POWER
     );
 
-    // Core 0: Supervisor & Power Monitor (Normal priority)
+    // Core 0: Supervisor & Power Monitor (Low priority)
     xTaskCreatePinnedToCore(
         taskSupervisor, "Task_Supervisor", STACK_POWER_TASK, nullptr, 2, nullptr, CORE_CAN_POWER
     );
@@ -184,7 +284,7 @@ void setup() {
         taskImu, "Task_IMU", STACK_IMU_TASK, nullptr, 4, nullptr, CORE_IMU_STORAGE
     );
 
-    // Core 1: Storage DMA Writer (Above normal priority)
+    // Core 1: Storage DMA Writer (Normal priority)
     xTaskCreatePinnedToCore(
         taskStorage, "Task_Storage", STACK_STORAGE_TASK, nullptr, 3, nullptr, CORE_IMU_STORAGE
     );
@@ -200,16 +300,30 @@ void loop() {
 // Core 0 Task: CAN Bus Message Processor
 // ==============================================================================
 void taskCanBus(void* pvParameters) {
+    (void)pvParameters;
     CanFrame frame;
 
-    while (!g_system_shutdown_ready) {
+    while (!g_system_shutdown_ready.load(std::memory_order_acquire)) {
+        // Wait up to 5 ms for the first incoming CAN frame
         if (g_can_mgr.receiveFrame(frame, 5)) {
             g_led_indicator.triggerCanActivity();
             g_raw_can_queue.push(frame);
+
+            // Drain up to 31 additional queued frames non-blockingly
+            uint8_t burst_count = 1;
+            while (burst_count < 32 && g_can_mgr.receiveFrame(frame, 0)) {
+                g_raw_can_queue.push(frame);
+                burst_count++;
+            }
+
+            // If a full burst of 32 frames arrived continuously, yield 1 tick
+            // so lower-priority tasks (BLE, Supervisor, IDLE0) are never starved
+            if (burst_count >= 32) {
+                vTaskDelay(1);
+            }
         }
 
         g_can_mgr.updateObdQueries();
-        taskYIELD();
     }
 
     vTaskDelete(nullptr);
@@ -219,42 +333,49 @@ void taskCanBus(void* pvParameters) {
 // Core 0 Task: High-Speed 25 Hz BLE Telemetry Streamer
 // ==============================================================================
 void taskBleStreaming(void* pvParameters) {
+    (void)pvParameters;
     const TickType_t interval_ticks = pdMS_TO_TICKS(BLE_STREAM_INTERVAL_MS);
     TickType_t last_wake_time = xTaskGetTickCount();
 
-    while (!g_system_shutdown_ready) {
+    while (!g_system_shutdown_ready.load(std::memory_order_acquire)) {
         if (g_ble_mgr.isConnected()) {
             ImuSample imu = g_imu_mgr.getLatestSample();
             ObdTelemetry obd = g_can_mgr.getTelemetry();
             float v_bat = g_power_mgr.getBatteryVoltage();
 
-            BleTelemetryPacket pkt;
+            BleTelemetryPacket pkt = {};
             pkt.timestamp_ms       = millis();
-            pkt.lean_angle_x10     = static_cast<int16_t>(imu.roll_deg * 10.0f);
-            pkt.pitch_x10          = static_cast<int16_t>(imu.pitch_deg * 10.0f);
-            pkt.accel_x_mg         = static_cast<int16_t>(imu.accel_x_g * 1000.0f);
-            pkt.accel_y_mg         = static_cast<int16_t>(imu.accel_y_g * 1000.0f);
-            pkt.accel_z_mg         = static_cast<int16_t>(imu.accel_z_g * 1000.0f);
-            pkt.gyro_x_dps_x10     = static_cast<int16_t>(imu.gyro_x_dps * 10.0f);
-            pkt.gyro_y_dps_x10     = static_cast<int16_t>(imu.gyro_y_dps * 10.0f);
-            pkt.gyro_z_dps_x10     = static_cast<int16_t>(imu.gyro_z_dps * 10.0f);
+            pkt.lean_angle_x10     = clampRoundInt16(imu.roll_deg,   10.0f,   -1800,  1800);
+            pkt.pitch_x10          = clampRoundInt16(imu.pitch_deg,  10.0f,   -900,   900);
+            pkt.accel_x_mg         = clampRoundInt16(imu.accel_x_g,  1000.0f, -16000, 16000);
+            pkt.accel_y_mg         = clampRoundInt16(imu.accel_y_g,  1000.0f, -16000, 16000);
+            pkt.accel_z_mg         = clampRoundInt16(imu.accel_z_g,  1000.0f, -16000, 16000);
+            pkt.gyro_x_dps_x10     = clampRoundInt16(imu.gyro_x_dps, 10.0f,   -20000, 20000);
+            pkt.gyro_y_dps_x10     = clampRoundInt16(imu.gyro_y_dps, 10.0f,   -20000, 20000);
+            pkt.gyro_z_dps_x10     = clampRoundInt16(imu.gyro_z_dps, 10.0f,   -20000, 20000);
             pkt.engine_rpm         = obd.engine_rpm;
             pkt.vehicle_speed_kmh  = obd.vehicle_speed_kmh;
-            pkt.throttle_pos_pct   = static_cast<uint8_t>(obd.throttle_pos_pct);
-            pkt.coolant_temp_c     = static_cast<int8_t>(obd.coolant_temp_c);
-            pkt.gear               = obd.gear;
-            pkt.battery_mv         = static_cast<uint16_t>(v_bat * 1000.0f);
+            pkt.throttle_pos_pct   = clampRoundUint8(obd.throttle_pos_pct, 100);
+            pkt.coolant_temp_c     = clampInt8(obd.coolant_temp_c, -40, 127);
+            pkt.gear               = clampInt8(obd.gear, -1, 8);
+            pkt.battery_mv         = clampRoundUint16(v_bat, 1000.0f, 65535);
 
             uint8_t flags = 0;
-            if (g_storage_mgr.isReady())     flags |= (1 << 0);
-            if (g_power_mgr.isEngineRunning()) flags |= (1 << 1);
-            if (g_power_mgr.getState() == PowerState::COUNTDOWN_TO_SHUTDOWN) flags |= (1 << 2);
-            if (g_imu_mgr.isReady())         flags |= (1 << 3);
+            if (g_storage_mgr.isReady())     flags |= STATUS_FLAG_SD_READY;
+            if (g_power_mgr.isEngineRunning()) flags |= STATUS_FLAG_ENGINE_RUNNING;
+            if (g_power_mgr.getState() == PowerState::COUNTDOWN_TO_SHUTDOWN) {
+                flags |= STATUS_FLAG_SHUTDOWN_COUNTDOWN;
+            }
+            if (g_imu_mgr.isReady())         flags |= STATUS_FLAG_IMU_READY;
             pkt.status_flags       = flags;
 
             g_ble_mgr.sendTelemetry(pkt);
         }
 
+        TickType_t now_ticks = xTaskGetTickCount();
+        if (now_ticks - last_wake_time >= interval_ticks) {
+            last_wake_time = now_ticks;
+        }
         vTaskDelayUntil(&last_wake_time, interval_ticks);
     }
 
@@ -265,34 +386,46 @@ void taskBleStreaming(void* pvParameters) {
 // Core 1 Task: IMU 100 Hz Data Acquisition & Fusion Math
 // ==============================================================================
 void taskImu(void* pvParameters) {
-    ImuSample imu_sample;
+    (void)pvParameters;
+    ImuSample imu_sample{};
     TickType_t last_wake_time = xTaskGetTickCount();
     const TickType_t period_ticks = pdMS_TO_TICKS(10); // 100 Hz = 10 ms
 
-    while (!g_system_shutdown_ready) {
-        if (g_imu_mgr.update(imu_sample)) {
-            ObdTelemetry obd = g_can_mgr.getTelemetry();
-
-            TelemetryRecord record;
-            record.timestamp_ms      = millis();
-            record.lean_angle_deg    = imu_sample.roll_deg;
-            record.pitch_deg         = imu_sample.pitch_deg;
-            record.accel_x_g         = imu_sample.accel_x_g;
-            record.accel_y_g         = imu_sample.accel_y_g;
-            record.accel_z_g         = imu_sample.accel_z_g;
-            record.gyro_x_dps        = imu_sample.gyro_x_dps;
-            record.gyro_y_dps        = imu_sample.gyro_y_dps;
-            record.gyro_z_dps        = imu_sample.gyro_z_dps;
-            record.battery_voltage   = g_power_mgr.getBatteryVoltage();
-            record.engine_rpm        = obd.engine_rpm;
-            record.vehicle_speed_kmh = obd.vehicle_speed_kmh;
-            record.throttle_pos_pct  = obd.throttle_pos_pct;
-            record.coolant_temp_c    = obd.coolant_temp_c;
-            record.gear              = obd.gear;
-
-            g_telemetry_queue.push(record);
+    while (!g_system_shutdown_ready.load(std::memory_order_acquire)) {
+        // 1. Poll IMU sensor (updates internal sample and attempts auto-reconnect if offline)
+        bool has_new_imu = g_imu_mgr.update(imu_sample);
+        if (!has_new_imu) {
+            imu_sample = g_imu_mgr.getLatestSample();
         }
 
+        // 2. Fetch latest vehicle CAN telemetry
+        ObdTelemetry obd = g_can_mgr.getTelemetry();
+
+        // 3. Assemble unified 100 Hz telemetry record
+        TelemetryRecord record;
+        record.timestamp_ms      = millis();
+        record.lean_angle_deg    = imu_sample.roll_deg;
+        record.pitch_deg         = imu_sample.pitch_deg;
+        record.accel_x_g         = imu_sample.accel_x_g;
+        record.accel_y_g         = imu_sample.accel_y_g;
+        record.accel_z_g         = imu_sample.accel_z_g;
+        record.gyro_x_dps        = imu_sample.gyro_x_dps;
+        record.gyro_y_dps        = imu_sample.gyro_y_dps;
+        record.gyro_z_dps        = imu_sample.gyro_z_dps;
+        record.battery_voltage   = g_power_mgr.getBatteryVoltage();
+        record.engine_rpm        = obd.engine_rpm;
+        record.vehicle_speed_kmh = obd.vehicle_speed_kmh;
+        record.throttle_pos_pct  = obd.throttle_pos_pct;
+        record.coolant_temp_c    = obd.coolant_temp_c;
+        record.gear              = obd.gear;
+
+        g_telemetry_queue.push(record);
+
+        // Resynchronize wake timer if an I2C reconnect attempt exceeded one 10 ms period
+        TickType_t now_ticks = xTaskGetTickCount();
+        if (now_ticks - last_wake_time >= period_ticks) {
+            last_wake_time = now_ticks;
+        }
         vTaskDelayUntil(&last_wake_time, period_ticks);
     }
 
@@ -303,33 +436,53 @@ void taskImu(void* pvParameters) {
 // Core 1 Task: High-Speed MicroSD Block Writer
 // ==============================================================================
 void taskStorage(void* pvParameters) {
+    (void)pvParameters;
     TelemetryRecord record;
     CanFrame raw_can;
 
     while (true) {
-        while (g_telemetry_queue.pop(record)) {
-            g_storage_mgr.logTelemetry(record);
-        }
+        if (g_storage_mgr.isReady()) {
+            while (g_telemetry_queue.pop(record)) {
+                g_storage_mgr.logTelemetry(record);
+            }
 
-        while (g_raw_can_queue.pop(raw_can)) {
-            g_storage_mgr.logRawCan(raw_can);
+            while (g_raw_can_queue.pop(raw_can)) {
+                g_storage_mgr.logRawCan(raw_can);
+            }
+        } else {
+            // Keep queues clean while SD is unmounted so hot-plug starts with fresh samples
+            g_telemetry_queue.reset();
+            g_raw_can_queue.reset();
         }
 
         g_storage_mgr.update();
 
         if (g_power_mgr.isShutdownRequested()) {
-            Serial.println("\n[STORAGE] Shutdown requested! Flushing write buffers...");
-            g_system_shutdown_ready = true;
+            logPrintf("\n[STORAGE] Shutdown requested! Draining queues and flushing write buffers...\n");
+            g_system_shutdown_ready.store(true, std::memory_order_release);
+            vTaskDelay(pdMS_TO_TICKS(20));
+
+            if (g_storage_mgr.isReady()) {
+                while (g_telemetry_queue.pop(record)) {
+                    g_storage_mgr.logTelemetry(record);
+                }
+                while (g_raw_can_queue.pop(raw_can)) {
+                    g_storage_mgr.logRawCan(raw_can);
+                }
+            }
+
             g_storage_mgr.close();
-            Serial.printf("[STORAGE] File %s closed safely. Total records: %lu\n", 
-                          g_storage_mgr.getCurrentFileName(), 
-                          g_storage_mgr.getRecordsWritten());
-            
+            g_can_mgr.stop();
+
+            logPrintf("[STORAGE] File %s closed safely. Total records: %lu\n",
+                      g_storage_mgr.getCurrentFileName(),
+                      static_cast<unsigned long>(g_storage_mgr.getRecordsWritten()));
+
             vTaskDelay(pdMS_TO_TICKS(100));
-            Serial.println("[POWER] Dropping latch (FORCE_ON = LOW). Good night!");
+            logPrintf("[POWER] Dropping latch (FORCE_ON = LOW). Good night!\n");
             Serial.flush();
             g_power_mgr.forcePowerOff();
-            
+
             while (true) {
                 vTaskDelay(pdMS_TO_TICKS(1000));
             }
@@ -343,13 +496,32 @@ void taskStorage(void* pvParameters) {
 // Core 0 Task: Supervisor, Power State Machine & Telemetry Diagnostics
 // ==============================================================================
 void taskSupervisor(void* pvParameters) {
+    (void)pvParameters;
     uint32_t last_report_ms = 0;
+    bool prev_ble_connected = false;
 
-    while (!g_system_shutdown_ready) {
-        g_power_mgr.update();
+    while (!g_system_shutdown_ready.load(std::memory_order_acquire)) {
+        // 1. Process any queued BLE commands outside the NimBLE host callback
+        processBleCommandQueue();
+
+        // 2. Log BLE connection state transitions cleanly
+        bool ble_conn = g_ble_mgr.isConnected();
+        if (ble_conn != prev_ble_connected) {
+            prev_ble_connected = ble_conn;
+            if (ble_conn) {
+                logPrintf("[BLE] Smartphone connected! Telemetry stream ready.\n");
+            } else {
+                logPrintf("[BLE] Smartphone disconnected. Advertising restarted.\n");
+            }
+        }
+
+        // 3. Feed power state machine with live connectivity and CAN RPM data
+        ObdTelemetry obd = g_can_mgr.getTelemetry();
+        g_power_mgr.update(ble_conn, obd.engine_rpm);
 
         PowerState pwr_state = g_power_mgr.getState();
 
+        // 4. Update LED diagnostic patterns
         if (!g_storage_mgr.isReady() || !g_imu_mgr.isReady()) {
             g_led_indicator.setBluePattern(LedIndicator::Pattern::ERROR_BLINK);
         } else if (pwr_state == PowerState::COUNTDOWN_TO_SHUTDOWN) {
@@ -366,31 +538,44 @@ void taskSupervisor(void* pvParameters) {
 
         g_led_indicator.update();
 
-        // Periodic Serial Diagnostic Telemetry (1 Hz)
+        // 5. Periodic Serial Diagnostic Telemetry (1 Hz)
         uint32_t now = millis();
         if (now - last_report_ms >= 1000) {
             last_report_ms = now;
 
-            ObdTelemetry obd = g_can_mgr.getTelemetry();
             float v_bat = g_power_mgr.getBatteryVoltage();
             bool engine = g_power_mgr.isEngineRunning();
 
-            Serial.printf("[STAT] Bat: %.2fV (%s) | BLE: %s | CAN RX: %lu | IMU Smp: %lu | SD Rec: %lu | RPM: %u | Spd: %u km/h | Gear: %d",
-                v_bat,
-                engine ? "RUNNING" : "STOPPED",
-                g_ble_mgr.isConnected() ? "CONNECTED" : "ADVERTISING",
-                g_can_mgr.getRxCount(),
-                g_imu_mgr.getSampleCount(),
-                g_storage_mgr.getRecordsWritten(),
-                obd.engine_rpm,
-                obd.vehicle_speed_kmh,
-                obd.gear
-            );
-
             if (pwr_state == PowerState::COUNTDOWN_TO_SHUTDOWN) {
-                Serial.printf(" | SHUTDOWN IN: %lu s", g_power_mgr.getShutdownRemainingMs() / 1000);
+                logPrintf(
+                    "[STAT] Bat: %.2fV (%s) | BLE: %s | CAN RX: %lu (Off: %lu) | IMU Smp: %lu | SD Rec: %lu | RPM: %u | Spd: %u km/h | Gear: %d | SHUTDOWN IN: %lu s\n",
+                    v_bat,
+                    engine ? "RUNNING" : "STOPPED",
+                    ble_conn ? (g_ble_mgr.isSubscribed() ? "STREAMING" : "CONNECTED") : "ADVERTISING",
+                    static_cast<unsigned long>(g_can_mgr.getRxCount()),
+                    static_cast<unsigned long>(g_can_mgr.getBusOffCount()),
+                    static_cast<unsigned long>(g_imu_mgr.getSampleCount()),
+                    static_cast<unsigned long>(g_storage_mgr.getRecordsWritten()),
+                    obd.engine_rpm,
+                    obd.vehicle_speed_kmh,
+                    obd.gear,
+                    static_cast<unsigned long>(g_power_mgr.getShutdownRemainingMs() / 1000)
+                );
+            } else {
+                logPrintf(
+                    "[STAT] Bat: %.2fV (%s) | BLE: %s | CAN RX: %lu (Off: %lu) | IMU Smp: %lu | SD Rec: %lu | RPM: %u | Spd: %u km/h | Gear: %d\n",
+                    v_bat,
+                    engine ? "RUNNING" : "STOPPED",
+                    ble_conn ? (g_ble_mgr.isSubscribed() ? "STREAMING" : "CONNECTED") : "ADVERTISING",
+                    static_cast<unsigned long>(g_can_mgr.getRxCount()),
+                    static_cast<unsigned long>(g_can_mgr.getBusOffCount()),
+                    static_cast<unsigned long>(g_imu_mgr.getSampleCount()),
+                    static_cast<unsigned long>(g_storage_mgr.getRecordsWritten()),
+                    obd.engine_rpm,
+                    obd.vehicle_speed_kmh,
+                    obd.gear
+                );
             }
-            Serial.println();
         }
 
         vTaskDelay(pdMS_TO_TICKS(50));
@@ -398,4 +583,5 @@ void taskSupervisor(void* pvParameters) {
 
     vTaskDelete(nullptr);
 }
+
 

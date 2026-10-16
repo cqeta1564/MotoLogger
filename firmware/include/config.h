@@ -24,10 +24,13 @@ constexpr gpio_num_t PIN_IMU_SDA          = GPIO_NUM_1;
 constexpr gpio_num_t PIN_IMU_SCL          = GPIO_NUM_2;
 constexpr gpio_num_t PIN_IMU_INT          = GPIO_NUM_12; // H_INTN interrupt
 constexpr gpio_num_t PIN_IMU_RST          = GPIO_NUM_48; // Active low reset
-constexpr uint8_t    BNO085_I2C_ADDR      = 0x4A;        // SA0 tied to GND
+constexpr uint8_t    BNO085_I2C_ADDR      = 0x4A;        // SA0 tied to GND (default)
+constexpr uint8_t    BNO085_I2C_ADDR_ALT  = 0x4B;        // SA0 tied to VCC (fallback)
 constexpr uint32_t   I2C_FREQUENCY_HZ     = 400000;      // 400 kHz Fast-Mode
+constexpr uint32_t   I2C_TIMEOUT_MS       = 20;          // Hardware bus timeout to prevent lockups
 constexpr uint32_t   IMU_SAMPLE_RATE_HZ   = 100;         // 100 Hz update rate
 constexpr uint32_t   IMU_REPORT_MICROS    = 10000;       // 10,000 us (10 ms interval)
+constexpr uint32_t   IMU_STALE_TIMEOUT_MS = 500;         // Mark IMU offline if no report for 500 ms
 
 // ==============================================================================
 // 3. MICROSD CARD INTERFACE (SPI Mode)
@@ -48,10 +51,12 @@ constexpr gpio_num_t PIN_SENSE_V_DIG      = GPIO_NUM_8;  // Digital sense: HIGH 
 constexpr gpio_num_t PIN_SENSE_V_ANA      = GPIO_NUM_9;  // Analog voltage divider sense (ADC1_CH8)
 
 // Automotive voltage thresholds
-constexpr float      V_BAT_DIVIDER_RATIO  = 11.0f;       // R18 (120k) / R16 (12k) divider ratio
-constexpr float      V_BAT_RUNNING_VOLTS  = 13.0f;       // Engine alternator charging voltage
-constexpr float      V_BAT_CUTOFF_VOLTS   = 11.8f;       // Critical discharge cutoff
+constexpr float      V_BAT_DIVIDER_RATIO    = 11.0f;     // 1:11 resistor divider ratio
+constexpr float      V_BAT_RUNNING_VOLTS    = 13.0f;     // Engine alternator charging voltage
+constexpr float      V_BAT_CUTOFF_VOLTS     = 11.8f;     // Critical discharge cutoff
+constexpr float      V_BAT_MIN_PRESENT_VOLTS = 6.5f;     // Threshold distinguishing 12V battery from USB-only power
 constexpr uint32_t   AUTO_SHUTDOWN_DELAY_MS = 15000;     // 15 seconds countdown after ignition off
+constexpr uint32_t   CAN_TELEMETRY_TIMEOUT_MS = 1500;    // Reset stale CAN telemetry after 1.5 s of bus silence
 
 // ==============================================================================
 // 5. STATUS INDICATORS
@@ -75,8 +80,9 @@ constexpr BaseType_t CORE_CAN_POWER       = 0;           // Core 0: CAN bus, Pow
 constexpr BaseType_t CORE_IMU_STORAGE     = 1;           // Core 1: IMU fusion math & SD file I/O
 
 constexpr uint32_t   STACK_CAN_TASK       = 4096;
-constexpr uint32_t   STACK_POWER_TASK     = 3072;
-constexpr uint32_t   STACK_IMU_TASK       = 4096;
+constexpr uint32_t   STACK_POWER_TASK     = 4096;
+constexpr uint32_t   STACK_IMU_TASK       = 6144;
 constexpr uint32_t   STACK_STORAGE_TASK   = 8192;
 constexpr uint32_t   STACK_BLE_TASK       = 4096;
+
 

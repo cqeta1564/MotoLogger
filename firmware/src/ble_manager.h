@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <NimBLEDevice.h>
+#include <atomic>
 #include "config.h"
 #include "types.h"
 
@@ -18,7 +19,9 @@ public:
     bool begin();
     void update();
     void sendTelemetry(const BleTelemetryPacket& packet);
-    bool isConnected() const { return client_connected_; }
+    bool isConnected() const { return client_connected_.load(std::memory_order_acquire); }
+    bool isSubscribed() const;
+    uint32_t getPacketsSent() const { return packets_sent_.load(std::memory_order_relaxed); }
     void setCommandCallback(CommandCallback cb) { command_callback_ = cb; }
 
     // Callbacks accessed by NimBLE internal handlers
@@ -30,7 +33,8 @@ private:
     NimBLEServer*         server_;
     NimBLECharacteristic* telemetry_char_;
     NimBLECharacteristic* command_char_;
-    bool                  client_connected_;
-    uint32_t              packets_sent_;
+    std::atomic<bool>     client_connected_;
+    std::atomic<uint32_t> packets_sent_;
     CommandCallback       command_callback_;
 };
+

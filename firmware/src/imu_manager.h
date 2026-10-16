@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <Adafruit_BNO08x.h>
+#include <atomic>
 #include "config.h"
 #include "types.h"
 
@@ -18,29 +19,40 @@ public:
     bool update(ImuSample& sample);
     void tareZero();
     void setRollOffset(float offset_deg);
-    float getRollOffset() const { return roll_offset_deg_; }
+    float getRollOffset() const;
     void saveCalibrationToNvs();
     void loadCalibrationFromNvs();
     ImuSample getLatestSample();
 
-    bool isReady() const { return is_initialized_; }
-    uint32_t getSampleCount() const { return sample_count_; }
+    bool isReady() const { return is_initialized_.load(std::memory_order_acquire); }
+    uint32_t getSampleCount() const { return sample_count_.load(std::memory_order_relaxed); }
 
 private:
     Adafruit_BNO08x bno_;
     sh2_SensorValue_t sensor_value_;
-    bool is_initialized_;
-    uint32_t sample_count_;
+    std::atomic<bool> is_initialized_;
+    std::atomic<uint32_t> sample_count_;
+    uint8_t active_i2c_addr_;
 
-    // Zero-calibration offsets
+    // Uncalibrated raw orientation and zero-calibration offsets
+    float raw_roll_deg_;
+    float raw_pitch_deg_;
     float roll_offset_deg_;
     float pitch_offset_deg_;
 
     // Current cached values
     ImuSample current_sample_;
-    portMUX_TYPE imu_mux_;
+    mutable portMUX_TYPE imu_mux_;
 
+    uint32_t last_reconnect_attempt_ms_;
+    uint32_t last_event_ms_;
+
+    static float normalizeAngle180(float angle_deg);
+    static float clampPitch90(float pitch_deg);
     void quaternionToEuler(float qr, float qi, float qj, float qk, 
                            float& roll_deg, float& pitch_deg, float& yaw_deg);
+    bool initSensorHardware();
     bool enableReports();
+    bool tryReconnect();
 };
+
