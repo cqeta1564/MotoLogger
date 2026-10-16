@@ -17,6 +17,7 @@ app/build/
 
 # Android
 **/android/.gradle/
+**/android/build/
 **/android/captures/
 **/android/local.properties
 **/android/**/GeneratedPluginRegistrant.java
@@ -40,6 +41,7 @@ Thumbs.db
 Desktop.ini
 .DS_Store
 
-# Logs
+# Logs & Temporary Slicer Output
 *.log
 *.tmp
+*.gcode
