@@ -33,25 +33,51 @@ This file defines the core operating rules, architectural principles, coding con
 
 ## 3. UI/UX & Design Philosophy (Apple Design System)
 
-The user has established very strict, refined design guidelines for the MotoLogger mobile app:
+The MotoLogger mobile app follows strict, refined design guidelines based on the Apple Design System and rider ergonomics:
 
-1. **Pure Apple Aesthetic (Light Mode):**
-   - Clean, light background (`#F2F2F7` / `#FFFFFF`), crisp typography (San Francisco style / Cupertino), subtle borders (`#E5E5EA`), and dark typography (`#1C1C1E`).
-   - Secondary accents in neutral grays (`#8E8E93`, `#3A3A3C`, `#C7C7CC`).
-   - **STRICTLY FORBIDDEN:** Cheesy dark neon glow, generic gradients, robotic "futuristic AI" aesthetics, or cluttered dashboards.
+1. **Pure Apple Aesthetic (Light Mode Only):**
+   - Canvas: `#F2F2F7`, Card/Content surfaces: `#FFFFFF`, Primary text: `#1C1C1E`, Secondary text: `#63636B`, Borders/Dividers: `#E5E5EA`.
+   - Accent: System-style blue (`#0066CC`), strictly restricted to selection and primary actions.
+   - Status Bar & Chrome: Always request dark system icons (`SystemUiOverlayStyle.dark`) across all light screens. Never draw fake status bars or Dynamic Islands.
+   - **STRICTLY FORBIDDEN:** Tacky dark neon glow, generic gradients, robotic "futuristic AI" aesthetics, or cluttered dashboards.
 
-2. **Rider-Centric Ergonomics:**
-   - Large touch targets suitable for gloved fingers or mounted bike phone holders.
-   - **Fixed Button Heights & Alignment:** Primary action and confirmation buttons must maintain identical heights (`54 px`) and border radii (`14 px`) across all screens. Their vertical placement from the screen bottom must be aligned.
-   - **Automatic Screen Locking:** When the bike accelerates and is in motion, the screen locks automatically to prevent accidental touches. No manual "Lock" button cluttering the interface.
+2. **Liquid Glass Approximation (`GlassSurface`):**
+   - `GlassSurface` is a strictly bounded Flutter `BackdropFilter` approximation (local blur, neutral translucent tint, thin border highlight, soft shadow).
+   - **Where to use:** Floating navigation capsule (`AppleTabBar`) and floating contextual action panels.
+   - **Where NOT to use:** NEVER use per-row in scrollable lists or behind entire screens. Content remains crisp and opaque.
+   - **Opaque Fallback ("Omezit průhlednost"):** Respects the persisted `reduce_transparency` SQLite preference (`AppPreferences`), high contrast, and accessibility navigation. Bypasses all `BackdropFilter` shaders and renders solid opaque surfaces with subtle borders.
 
-3. **No Technical Balast / Engineer Jargon for Riders:**
-   - Do **NOT** expose raw ESP angles, internal quaternion matrices, raw sample counters, or acronyms like "TWAI", "DMA", "Game Rotation Vector", or "0x4A" in user-facing UI.
-   - Speak the rider's language: "V lajně", "Na stojánku", "Svisle", "Zahájit jízdu", "Konec jízdy", "Uložit".
+3. **Sliding Capsule Navigation & Retained State:**
+   - **Top-Level Destinations (3 Tabs):** **Jízda** (Ride / Dashboard) → **Historie** (History / Sessions) → **Nastavení** (Settings).
+   - **Sliding Capsule Indicator:** `AppleTabBar` animates tab selection with a 260 ms ease-out sliding capsule and interruptible 180 ms content transition (`TabContentTransition`).
+   - **Retained State:** Tabs use `IndexedStack` / state preservation to preserve scroll offsets, active ride recording, and search filters across tab switches.
+   - **Android Back Navigation:** Pressing Android Back on secondary tabs (History, Settings) always returns to **Jízda** first before exiting the app.
 
-4. **Visual Metaphors & Polish:**
-   - **Yellow Builder's Spirit Level (`ConstructionSpiritLevel`):** A physical yellow workshop spirit level with fluid and air bubble that riders immediately recognize and trust.
-   - **Line-Art Bike Illustrations:** Minimalist, vector-line motorcycle silhouettes on side-stand and upright with animated phone placement on the flat fuel tank lid.
+4. **Directional Lean Feedback (`CornerGradientBreather`):**
+   - Directional edge wash on screen margins driven by calibrated roll angle (negative roll = left edge, positive roll = right edge).
+   - **Visual Angle Bands:** 1° dead zone; ≤ 15° green (cruising); 15°–30° orange (sporty); ≥ 30°–45°+ red (knee-down limit). (Note: visual lean angle guides, not tire grip measurements).
+   - Blends telemetry over 100 ms; immediately clears wash upon disconnect or invalid data. Renders a narrow solid edge in reduced-transparency mode. Strictly no perpetual looping pulse.
+
+5. **Motion Policy & Accessibility (`AppMotion`):**
+   - Centralized animation controller (`AppMotion`) respecting OS reduced motion (`MediaQuery.disableAnimationsOf(context)` or user preference).
+   - Transitions (capsule slide, action panel resize) are bypassed when reduced motion is enabled to prevent layout re-entry bugs.
+   - No looping shimmer effects on unlock controls.
+
+6. **Truthful States & Error Resilience:**
+   - **No Fabricated Telemetry:** Unavailable sensor or BLE data displays an em-dash (`—`), never a fabricated `0.0°`.
+   - **Hardware vs. Demo State:** Explicit "Vyzkoušet demo" action. Demo sessions are stored with `isDemo: true` and labeled "Demo", never masquerading as live hardware.
+   - **Ride Persistence Safety:** Ride recording buffers samples in memory during transient SQLite failures, keeps the ride recoverable, and provides an explicit retry button.
+   - **Hardware Truthfulness:** Settings do not claim active SD-card logging or encryption without live BLE/service verification. Calibration handles missing phone sensors gracefully.
+
+7. **Rider-Centric Ergonomics & Touch Controls:**
+   - **Fixed Button Geometry:** Primary action and confirmation buttons (`PrimaryAction`) must maintain identical heights (`54 px`) and border radii (`14 px`) across all screens.
+   - **Minimum Touch Targets:** All interactive controls must be at least 48 logical units.
+   - **Automatic Screen Locking:** When vehicle speed exceeds 5 km/h, the screen locks automatically. Unlock is supported via both `SlideToUnlock` and an accessible unlock button.
+   - **Rider Language (No Technical Balast):** Do NOT expose raw quaternion matrices, DMA buffers, TWAI registers, or raw sample counters. Speak rider language: "V lajně", "Na stojánku", "Svisle", "Zahájit jízdu", "Konec jízdy", "Uložit".
+
+8. **Visual Metaphors & Polish:**
+   - **Yellow Builder's Spirit Level (`ConstructionSpiritLevel`):** Physical yellow workshop spirit level with fluid vial and air bubble with witty Czech states: *"Křivý jak šavle"*, *"Ustálit..."*, *"V lajně / Na milimetr přesně!"*.
+   - **Line-Art Bike Illustrations:** Minimalist vector-line silhouettes (`PhonePlacementAnimation`, `BikeUprightAnimation`) for intuitive tank lid and upright calibration.
 
 ---
 
@@ -100,12 +126,30 @@ Always verify pin assignments against this table before modifying firmware:
 
 ## 6. Mobile App Standards (`app/`)
 
-1. **Tech Stack:** Flutter (Dart 3.x), `flutter_blue_plus`, `sqflite`, `geolocator`, `share_plus`.
-2. **Architecture:** Clean layered architecture:
-   - `lib/core/` (Theme, constants, formatting).
-   - `lib/models/` (Telemetry models, sessions, GPS records).
-   - `lib/services/` (BLE service, Telemetry manager, DB service, GPS manager).
-   - `lib/ui/` (Screens, widgets, animations).
+1. **Tech Stack:** Flutter (Dart 3.x, min Android API 24), `flutter_blue_plus`, `sqflite`, `geolocator`, `share_plus`.
+2. **Architecture & Directory Structure:**
+   - `lib/core/`:
+     - `theme/app_theme.dart` (Apple light palette, typography, button geometries).
+     - `motion/app_motion.dart` (Reduced-motion policy and transition timing constants).
+     - `preferences/app_preferences.dart` (SQLite-persisted settings like `reduce_transparency`).
+   - `lib/models/`: `telemetry_sample.dart`, `session.dart`, `bike_profile.dart`, `can_definition.dart`, `gps_record.dart`.
+   - `lib/services/`: `ble_service.dart`, `telemetry_manager.dart`, `database_service.dart`, `gps_service.dart`, `can_profile_service.dart`.
+   - `lib/ui/dashboard/`: `dashboard_screen.dart` (Ride HUD, lean gauges, tachometer, lock overlay, action controls).
+   - `lib/ui/history/`: `history_screen.dart`, `session_detail_screen.dart` (Season summary, session search/sort/selection, GPS track map, G-G diagram, MoTeC i2 / GPX export).
+   - `lib/ui/settings/`:
+     - `settings_screen.dart` (Apple grouped settings, preferences).
+     - `esp_pairing_screen.dart` (Radar scan, RSSI, pairing lifecycle).
+     - `tank_calibration_screen.dart` (Fuel-tank lid and upright calibration).
+     - `bike_profiles_screen.dart`, `import_bike_profile_screen.dart`, `bike_learning_screen.dart` (CAN bus DBC/JSON mapping).
+   - `lib/ui/widgets/`:
+     - `glass_surface.dart` (`GlassSurface`, `GlassIconButton`, `PrimaryAction`, `ContentGroup`, `SettingsRow`, `AppPageTitle`).
+     - `apple_tab_bar.dart` (Sliding capsule navigation).
+     - `tab_content_transition.dart` (Interruptible tab content transition).
+     - `corner_gradient_breather.dart` (Directional lean feedback wash).
+     - `slide_to_unlock.dart` (Dual swipe & accessible unlock).
+     - `construction_spirit_level.dart` (Yellow builder's spirit level).
+     - `phone_placement_animation.dart`, `bike_upright_animation.dart` (Calibration animations).
+     - `season_summary_card.dart`, `gg_friction_card.dart`, `gg_friction_reticle.dart`, `gps_track_map_card.dart`.
 3. **Calibration Subsystem:**
    - `calibrateFromTank({required double phoneRollDeg})`: Computes mounting offset \(\theta_{\text{offset}} = \theta_{\text{esp}} - \theta_{\text{phone}}\), sends command `0x02` via BLE, saves locally.
    - `calibrateUpright()`: Computes offset relative to 0.0°, sends command `0x02`, saves locally.
@@ -115,7 +159,8 @@ Always verify pin assignments against this table before modifying firmware:
      flutter analyze
      flutter test
      ```
-   - Must achieve **0 warnings and 0 errors** on `flutter analyze`.
+   - Must achieve **0 warnings and 0 errors** on `flutter analyze`. All unit, widget, and motion tests must pass.
+   - Integration tests: `flutter test integration_test/ride_flow_test.dart` (validates real SQLite persistence in demo mode).
 
 ---
 

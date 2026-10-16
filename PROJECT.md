@@ -145,9 +145,9 @@ Motorcycles generate violent high-frequency vibrations from 1-cylinder to 4-cyli
 ### 4.4 Roll Offset Calibration & NVS Storage
 The hardware board may be installed inside the bike at a slight roll offset relative to the motorcycle's frame:
 $$\theta_{\text{corrected}} = \theta_{\text{raw}} - \theta_{\text{offset}}$$
-- In firmware (`imu_manager.cpp`), the roll offset \(\theta_{\text{offset}}\) is stored permanently in the ESP32 non-volatile storage (NVS) using the `Preferences` library (namespace: `motologger`, key: `roll_offset`).
-- On boot, `ImuManager::begin()` loads the stored offset.
-- When the smartphone sends a calibration command, `setRollOffset(deg)` immediately updates the live offset and writes it to NVS.
+- In firmware (`imu_manager.cpp`), the roll and pitch offsets are stored permanently in the ESP32 non-volatile storage (NVS) using the `Preferences` library (namespace: `motologger`, keys: `roll_off`, `pitch_off`).
+- On boot, `ImuManager::begin()` loads the stored offsets.
+- When the smartphone sends a calibration command, `setRollOffset(deg)` or `zeroTare()` immediately updates the live offset and writes it to NVS.
 
 ### 4.5 BLE GATT Protocol & Packet Specification
 The BLE server uses **NimBLE** with high transmit power (+9 dBm) to guarantee a reliable connection through the rider's jacket or tank bag.
@@ -179,7 +179,7 @@ struct __attribute__((packed)) BleTelemetryPacket {
 *Advantage:* Zero JSON overhead, zero string parsing, exactly 28 bytes unpacked directly via Dart `ByteData` in microseconds.
 
 - **Command Characteristic (Write, WriteNR):**
-  - `0x01`: Instant Zero-Tare (taring current position to 0.0°).
+  - `0x01`: Instant Zero-Tare (taring current roll & pitch position to 0.0° and persisting in NVS).
   - `0x02`: Calibrate Tare Mounting Offset (`payload: int16_t offset_x10` in tenths of a degree, little-endian).
 
 ---
@@ -187,20 +187,27 @@ struct __attribute__((packed)) BleTelemetryPacket {
 ## 5. Mobile Companion App (`app/`)
 
 ### 5.1 Technology Stack & Architecture
-- Framework: **Flutter 3.x** / Dart 3.x (Multiplatform Android & iOS).
+- Framework: **Flutter 3.x** / Dart 3.x (Minimum Android API 24).
 - Key Plugins:
-  - `flutter_blue_plus`: Bluetooth Low Energy connection and background streaming.
-  - `sqflite`: High-speed local SQLite database for session and sample storage.
+  - `flutter_blue_plus`: Bluetooth Low Energy connection, auto-reconnect, binary telemetry streaming.
+  - `sqflite`: High-speed local SQLite database for session and sample storage, preferences persistence.
   - `geolocator`: Smartphone GPS fusion (coordinates, speed, heading, altitude).
-  - `share_plus`: File sharing for exported CSV and GPX files.
+  - `share_plus`: Native share sheet for exported CSV, GPX, and ZIP bundles.
 - Directory Structure:
-  - `lib/core/`: Apple Design System theme (`AppTheme`), formatting utilities, constants.
-  - `lib/models/`: `TelemetrySample`, `Session`, `CalibrationSettings`.
-  - `lib/services/`: `BleService`, `TelemetryManager`, `DatabaseService`, `GpsService`.
-  - `lib/ui/dashboard/`: Main telemetry dashboard, lean gauge, friction circle, tachometer.
-  - `lib/ui/settings/`: `TankCalibrationScreen`, device connection, logger settings.
-  - `lib/ui/sessions/`: Session history, lap browser, CSV/GPX export.
-  - `lib/ui/widgets/`: `ConstructionSpiritLevel`, `PhonePlacementAnimation`, `BikeUprightAnimation`.
+  - `lib/core/`: Apple Design System theme (`AppTheme`), motion timing & reduced-motion policy (`AppMotion`), persistent SQLite preferences (`AppPreferences`).
+  - `lib/models/`: `TelemetrySample`, `Session`, `BikeProfile`, `CanDefinition`, `GpsRecord`.
+  - `lib/services/`: `BleService`, `TelemetryManager`, `DatabaseService`, `GpsService`, `CanProfileService`.
+  - `lib/ui/dashboard/`: Ride HUD (`DashboardScreen`), lean angle arc, digital readouts, friction circle, tachometer, auto-lock overlay.
+  - `lib/ui/history/`: Season summary (`SeasonSummaryCard`), ride history list (`HistoryScreen`), detailed analytics (`SessionDetailScreen`), track maps (`GpsTrackMapCard`), G-G diagrams (`GgFrictionCard`), MoTeC i2 CSV / GPX export.
+  - `lib/ui/settings/`: `SettingsScreen`, `EspPairingScreen` (radar pairing), `TankCalibrationScreen` (tank lid & upright calibration), `BikeProfilesScreen`, `ImportBikeProfileScreen`, `BikeLearningScreen`.
+  - `lib/ui/widgets/`:
+    - `GlassSurface`: Bounded Flutter BackdropFilter approximation with neutral tint, thin borders, and opaque fallback.
+    - `AppleTabBar`: Sliding capsule navigation bar for top-level tabs (Jízda, Historie, Nastavení).
+    - `TabContentTransition`: Retained interruptible cross-fade transitions.
+    - `CornerGradientBreather`: Calibrated directional lean feedback wash on screen margins.
+    - `SlideToUnlock`: Rider-safe swipe and accessible button unlock.
+    - `ConstructionSpiritLevel`: Physical yellow workshop spirit level with fluid vial and air bubble.
+    - `PhonePlacementAnimation`, `BikeUprightAnimation`: Line-art motorcycle calibration animations.
 
 ### 5.2 The Smart Fuel-Tank Calibration System
 Motorcyclists rarely carry bubble levels or paddock stands with them. MotoLogger features a calibration mechanism:
@@ -232,10 +239,13 @@ Motorcyclists rarely carry bubble levels or paddock stands with them. MotoLogger
   - *"V lajně / Na milimetr přesně!"* (Leveled)
 
 ### 5.3 Apple Design System & Ergonomics
-- **Light Theme Only:** Pure `#F2F2F7` background, `#FFFFFF` cards, `#1C1C1E` typography.
-- **No AI Aesthetic:** No fake neon glow, no robotic gradients, no generic AI greeting text.
+- **Light Theme Only:** Pure `#F2F2F7` background, `#FFFFFF` cards, `#1C1C1E` typography. Request `SystemUiOverlayStyle.dark` for crisp status icons.
+- **Liquid Glass Approximation (`GlassSurface`):** Bounded blur/tint surface for floating navigation and floating action groups. Content remains opaque. Persisted "Omezit průhlednost" preference drops all blurs for solid opaque surfaces.
+- **Directional Lean Feedback (`CornerGradientBreather`):** Calibrated roll-driven wash on screen edges (negative = left, positive = right) with smooth 100 ms blending and distinct angle bands (Green ≤ 15°, Orange 15–30°, Red ≥ 30–45°+).
+- **Accessible Motion (`AppMotion`):** Respects OS reduced motion (`MediaQuery.disableAnimationsOf(context)`), cleanly bypassing transitions to prevent layout re-entry bugs.
 - **Button Uniformity:** All action and confirmation buttons share identical height (`54 px`), border radius (`14 px`), and aligned vertical bottom margins across screens.
-- **Automatic Screen Locking:** The screen automatically locks when vehicle speed exceeds 5 km/h, preventing accidental touches from raindrops, wind, or gloves.
+- **Automatic Screen Locking:** The screen automatically locks when vehicle speed exceeds 5 km/h, preventing accidental touches from raindrops, wind, or gloves. Unlock via slider or accessible button.
+- **Truthful Telemetry:** Em-dash (`—`) displayed for missing/disconnected telemetry (no fabricated 0.0°). Buffered samples retained on SQLite save errors with retry capability.
 
 ### 5.4 Android Auto & CarPlay Head Unit Projection
 - Android Auto integration via Android `CarAppService` (`android/` configuration).
@@ -251,8 +261,14 @@ MotoLogger/
 ├── GEMINI.md                                # Antigravity project configuration & rules
 ├── PROJECT.md                               # Complete system architecture and documentation
 ├── README.md                                # Public repository overview and quickstart
+├── docs/                                    # Design & project management documentation
+│   ├── DESIGN.md                            # Interface specifications & Apple HIG guidelines
+│   ├── lean-canvas-motologger.xlsx          # Project Lean Canvas business model
+│   ├── Casovy_harmonogram_MotoLogger.xlsx   # Project timeline & milestone schedule
+│   └── review/                              # Visual verification evidence & benchmarks
 │
-├── hardware/                                # Production PCB manufacturing & assembly data
+├── hardware/                                # Production PCB manufacturing, assembly & 3D enclosure
+│   ├── 3dprint/                             # 3D-printable enclosure models (BASE.stl, LID.stl, print.3mf)
 │   ├── gerbers/                             # Cleaned Gerber ZIP files (neutral silkscreen)
 │   ├── assembly/                            # BOM (CSV/XLSX) and Part Placement files
 │   └── schematics/                          # Circuit diagrams, JSON source, pinout headers
@@ -260,13 +276,19 @@ MotoLogger/
 ├── firmware/                                # Modular C++ ESP32-S3 Firmware (PlatformIO)
 │   ├── platformio.ini                       # Build environment and dependencies
 │   ├── include/                             # Header files (config.h, types.h, ring_buffer.h)
-│   └── src/                                 # Drivers (can, imu, ble, power, storage, main)
+│   └── src/                                 # Drivers (can, imu, ble, power, storage, led, main)
 │
 └── app/                                     # Companion Flutter Mobile App
     ├── pubspec.yaml                         # Flutter dependencies
-    ├── lib/                                 # Dart source code (Clean Architecture)
+    ├── lib/                                 # Dart source code (Clean Layered Architecture)
+    │   ├── core/                            # Theme, motion policies, preferences
+    │   ├── models/                          # Telemetry, sessions, bike profiles, GPS records
+    │   ├── services/                        # BLE, TelemetryManager, SQLite DB, GPS, CAN profiles
+    │   ├── ui/                              # Dashboard, History, Settings, and custom Widgets
+    │   └── main.dart                        # Application entrypoint & retained tab scaffold
     ├── android/                             # Android configuration + Android Auto Service
-    └── test/                                # Automated unit test suite (tank calibration, etc.)
+    ├── integration_test/                    # End-to-end integration tests (ride flow)
+    └── test/                                # Automated unit & widget tests (61+ tests)
 ```
 
 ---

@@ -74,8 +74,14 @@ MotoLogger/
 ├── GEMINI.md                                # Antigravity project configuration & rules
 ├── PROJECT.md                               # Complete system architecture and technical specs
 ├── README.md                                # Repository overview and quickstart
+├── docs/                                    # Design & project management documentation
+│   ├── DESIGN.md                            # Interface specifications & Apple HIG guidelines
+│   ├── lean-canvas-motologger.xlsx          # Project Lean Canvas business model
+│   ├── Casovy_harmonogram_MotoLogger.xlsx   # Project timeline & milestone schedule
+│   └── review/                              # Visual verification evidence & benchmarks
 │
-├── hardware/                                # Complete PCB manufacturing & assembly files
+├── hardware/                                # Complete PCB manufacturing, assembly & 3D enclosure
+│   ├── 3dprint/                             # 3D-printable enclosure (BASE.stl, LID.stl, print.3mf)
 │   ├── gerbers/                             # Production Gerber ZIP archives (neutral silkscreen)
 │   │   ├── MotoLogger_Clean_Gerber.zip      # Main board gerbers
 │   │   └── MotoLogger_OBD2_Plug_Gerber.zip  # OBD-II sandwich board gerbers
@@ -92,13 +98,14 @@ MotoLogger/
 ├── firmware/                                # Modular C++ ESP32-S3 Firmware (PlatformIO)
 │   ├── platformio.ini                       # PlatformIO build configuration
 │   ├── include/                             # Header definitions (config.h, types.h, ring_buffer.h)
-│   └── src/                                 # Subsystem implementations (CAN, IMU, BLE, Power, Storage)
+│   └── src/                                 # Subsystem implementations (CAN, IMU, BLE, Power, Storage, LED)
 │
 └── app/                                     # Companion Mobile App (Flutter)
     ├── pubspec.yaml                         # Flutter dependencies
-    ├── lib/                                 # Dart source code (UI, BLE, GPS, SQLite, Models)
+    ├── lib/                                 # Dart source code (Clean Layered Architecture)
     ├── android/                             # Android configuration + Android Auto Service
-    └── test/                                # Automated unit test suite
+    ├── integration_test/                    # End-to-end integration tests
+    └── test/                                # Automated unit & widget test suite (61+ tests)
 ```
 
 ---
