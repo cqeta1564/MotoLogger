@@ -61,6 +61,11 @@ class TelemetryManager extends ChangeNotifier {
   int get sampleCount => _sampleCount;
   double get mountingRollOffsetDeg => _mountingRollOffsetDeg;
   double get latestRawLeanDeg => _latestRawLeanDeg;
+  DateTime? get sessionStartTime => _sessionStartTime;
+  Duration get currentRideDuration =>
+      _sessionStartTime != null && _isRecording
+          ? DateTime.now().difference(_sessionStartTime!)
+          : Duration.zero;
   List<double> get frictionEnvelopeRadii =>
       List.unmodifiable(_frictionEnvelope);
 

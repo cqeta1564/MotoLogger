@@ -5,21 +5,24 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/motion/app_motion.dart';
+import '../../models/telemetry_packet.dart';
 import '../../services/ble_service.dart';
 import '../../services/telemetry_manager.dart';
 import '../settings/esp_pairing_screen.dart';
 import '../widgets/glass_surface.dart';
-import '../widgets/gg_friction_reticle.dart';
 import '../widgets/slide_to_unlock.dart';
 import '../widgets/corner_gradient_breather.dart';
+import '../widgets/gg_friction_reticle.dart';
 
-/// Live ride instruments with a separate, bounded control layer.
+/// Live ride cockpit with simplified, rider-centric instruments and Apple aesthetic.
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen(
-      {super.key,
-      required this.telemetryManager,
-      this.onNavigateTab,
-      this.onLockChanged});
+  const DashboardScreen({
+    super.key,
+    required this.telemetryManager,
+    this.onNavigateTab,
+    this.onLockChanged,
+  });
+
   final TelemetryManager telemetryManager;
   final ValueChanged<int>? onNavigateTab;
   final ValueChanged<bool>? onLockChanged;
@@ -34,6 +37,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _busy = false;
   String? _error;
   Timer? _autoLockTimer;
+
   TelemetryManager get manager => widget.telemetryManager;
   bool get _available =>
       manager.isSimulationMode ||
@@ -179,6 +183,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           final pkt = manager.latestPacket;
           final hasData = _available;
           final bottom = MediaQuery.paddingOf(context).bottom;
+          final size = MediaQuery.sizeOf(context);
+          final isCompact = size.height < 640;
+
           return Scaffold(
             backgroundColor: AppTheme.surfaceSecondary,
             body: Stack(children: [
@@ -189,385 +196,643 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ),
               Positioned.fill(
-                  child: SafeArea(
-                      bottom: false,
-                      child: MediaQuery.sizeOf(context).width >
-                                  MediaQuery.sizeOf(context).height &&
-                              MediaQuery.textScalerOf(context).scale(17) <= 22
-                          ? _landscapeInstruments()
-                          : SingleChildScrollView(
-                              key: const PageStorageKey('ride-scroll'),
-                              padding:
-                                  EdgeInsets.fromLTRB(20, 4, 20, 240 + bottom),
-                              child: Center(
-                                  child: ConstrainedBox(
-                                constraints:
-                                    const BoxConstraints(maxWidth: 680),
-                                child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.stretch,
-                                    children: [
-                                      AppPageTitle('Jízda',
-                                          subtitle: 'MOTOLOGGER',
-                                          trailing: _isLocked
-                                              ? null
-                                              : GlassIconButton(
-                                                  icon: CupertinoIcons.ellipsis,
-                                                  label: 'Ovládání jízdy',
-                                                  onPressed: _showMenu)),
-                                      _status(),
-                                      const SizedBox(height: 20),
-                                      ContentGroup(
-                                          padding: const EdgeInsets.fromLTRB(
-                                              20, 20, 20, 16),
-                                          child: Column(children: [
-                                            Text(
-                                                manager.isRecording
-                                                    ? (manager.isPaused
-                                                        ? 'ZÁZNAM POZASTAVEN'
-                                                        : 'PROBÍHÁ ZÁZNAM')
-                                                    : 'RYCHLOST',
-                                                style: TextStyle(
-                                                    fontSize: 12,
-                                                    letterSpacing: 1.4,
-                                                    fontWeight: FontWeight.w600,
-                                                    color: manager
-                                                                .isRecording &&
-                                                            !manager.isPaused
-                                                        ? AppTheme.appleBlue
-                                                        : AppTheme.textMuted)),
-                                            Semantics(
-                                                label: hasData
-                                                    ? 'Rychlost ${pkt.vehicleSpeedKmh} kilometrů za hodinu'
-                                                    : 'Rychlost není dostupná',
-                                                excludeSemantics: true,
-                                                child: Text(
-                                                    hasData
-                                                        ? '${pkt.vehicleSpeedKmh}'
-                                                        : '—',
-                                                    style: TextStyle(
-                                                        fontSize: MediaQuery.sizeOf(
-                                                                        context)
-                                                                    .height <
-                                                                700
-                                                            ? 76
-                                                            : 88,
-                                                        fontWeight: FontWeight.w600,
-                                                        height: 1.2,
-                                                        letterSpacing: -5,
-                                                        fontFeatures: [
-                                                          FontFeature
-                                                              .tabularFigures()
-                                                        ]))),
-                                            const Text('km/h',
-                                                style: TextStyle(
-                                                    fontSize: 17,
-                                                    color: AppTheme.textMuted)),
-                                            const SizedBox(height: 24),
-                                            Row(
-                                                children: List.generate(
-                                                    28,
-                                                    (index) => Expanded(
-                                                        child: Container(
-                                                            height: 5,
-                                                            margin:
-                                                                const EdgeInsets
-                                                                    .symmetric(
-                                                                    horizontal:
-                                                                        1.5),
-                                                            decoration: BoxDecoration(
-                                                                borderRadius:
-                                                                    BorderRadius.circular(
-                                                                        2),
-                                                                color: hasData &&
-                                                                        index <
-                                                                            (pkt.engineRpm /
-                                                                                12000 *
-                                                                                28)
-                                                                    ? (index > 23
-                                                                        ? AppTheme
-                                                                            .danger
-                                                                        : AppTheme
-                                                                            .appleBlue)
-                                                                    : AppTheme.surfaceBorder))))),
-                                            const SizedBox(height: 16),
-                                            Row(children: [
-                                              Expanded(
-                                                  child: _metric(
-                                                      'Otáčky',
-                                                      hasData
-                                                          ? '${pkt.engineRpm}'
-                                                          : '—',
-                                                      unit: 'ot/min')),
-                                              Container(
-                                                  width: 1,
-                                                  height: 34,
-                                                  color:
-                                                      AppTheme.surfaceBorder),
-                                              Expanded(
-                                                  child: _metric(
-                                                      'Převod',
-                                                      hasData
-                                                          ? (pkt.gear == 0
-                                                              ? 'N'
-                                                              : '${pkt.gear}')
-                                                          : '—')),
-                                            ]),
-                                          ])),
-                                      const SizedBox(height: 20),
-                                      LayoutBuilder(
-                                          builder: (context, constraints) {
-                                        final largeText =
-                                            MediaQuery.textScalerOf(context)
-                                                    .scale(17) >
-                                                23;
-                                        final reticle = Semantics(
-                                            label:
-                                                'Přetížení ${sqrt(pkt.accelXG * pkt.accelXG + pkt.accelYG * pkt.accelYG).toStringAsFixed(2)} G',
-                                            child: RepaintBoundary(
-                                                child: GgFrictionReticle(
-                                                    accelXG: hasData
-                                                        ? pkt.accelXG
-                                                        : 0,
-                                                    accelYG: hasData
-                                                        ? pkt.accelYG
-                                                        : 0,
-                                                    frictionEnvelope: manager
-                                                        .frictionEnvelopeRadii,
-                                                    size: largeText
-                                                        ? 150
-                                                        : min(
-                                                            160,
-                                                            constraints
-                                                                    .maxWidth *
-                                                                .46))));
-                                        final left = _lean(
-                                            'Vlevo',
-                                            hasData
-                                                ? max(0, -pkt.leanAngleDeg)
-                                                : null,
-                                            manager.maxLeanLeft.abs(),
-                                            CupertinoIcons.arrow_turn_up_left);
-                                        final right = _lean(
-                                            'Vpravo',
-                                            hasData
-                                                ? max(0, pkt.leanAngleDeg)
-                                                : null,
-                                            manager.maxLeanRight.abs(),
-                                            CupertinoIcons.arrow_turn_up_right);
-                                        if (largeText) {
-                                          return Column(children: [
-                                            Row(children: [
-                                              Expanded(child: left),
-                                              Expanded(child: right)
-                                            ]),
-                                            const SizedBox(height: 12),
-                                            reticle
-                                          ]);
-                                        }
-                                        return Row(children: [
-                                          Expanded(child: left),
-                                          reticle,
-                                          Expanded(child: right)
-                                        ]);
-                                      }),
-                                      const SizedBox(height: 16),
-                                      const Divider(),
-                                      const SizedBox(height: 16),
-                                      Row(children: [
-                                        Expanded(
-                                            child: _metric(
-                                                'Vzdálenost',
-                                                manager.totalDistanceKm
-                                                    .toStringAsFixed(1),
-                                                unit: 'km')),
-                                        Expanded(
-                                            child: _metric(
-                                                'Max. rychlost',
-                                                manager.topSpeed
-                                                    .toStringAsFixed(0),
-                                                unit: 'km/h')),
-                                      ]),
-                                      const SizedBox(height: 16),
-                                      Text(
-                                          manager.isSimulationMode
-                                              ? 'Demo · simulovaná telemetrie a trasa Brno'
-                                              : manager.latestPosition == null
-                                                  ? 'GPS zatím není dostupné. Trasa nemusí být zaznamenána.'
-                                                  : 'GPS aktivní · záznam se ukládá do telefonu',
-                                          textAlign: TextAlign.center,
-                                          style: const TextStyle(
-                                              fontSize: 13,
-                                              color: AppTheme.textMuted)),
-                                    ]),
-                              )),
-                            ))),
+                child: SafeArea(
+                  bottom: false,
+                  child: size.width > size.height &&
+                          MediaQuery.textScalerOf(context).scale(17) <= 22
+                      ? _landscapeInstruments()
+                      : SingleChildScrollView(
+                          key: const PageStorageKey('ride-scroll'),
+                          physics: const NeverScrollableScrollPhysics(),
+                          primary: false,
+                          padding: EdgeInsets.fromLTRB(
+                            16,
+                            4,
+                            16,
+                            (_isLocked
+                                    ? 155
+                                    : AppTheme.navigationInset(context) + 56) +
+                                bottom,
+                          ),
+                          child: Center(
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 680),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _cockpitHeader(),
+                                  SizedBox(height: isCompact ? 6 : 10),
+                                  _speedSection(pkt, hasData, isCompact),
+                                  SizedBox(height: isCompact ? 10 : 16),
+                                  _leanAndGgSection(pkt, hasData, isCompact),
+                                  SizedBox(height: isCompact ? 6 : 10),
+                                  _gpsStatusFootnote(isCompact),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                ),
+              ),
               Positioned(
-                  left: 20,
-                  right: 20,
-                  bottom: (_isLocked ? 12 : AppTheme.navigationInset(context)) +
-                      bottom,
-                  child: Center(
-                      child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 680),
-                          child: _animatedControls(context)))),
+                left: 20,
+                right: 20,
+                bottom: (_isLocked ? 12 : AppTheme.navigationInset(context)) +
+                    bottom,
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 680),
+                    child: _animatedControls(context),
+                  ),
+                ),
+              ),
             ]),
           );
         },
       );
 
+  Widget _cockpitHeader() {
+    final demo = manager.isSimulationMode;
+    final connected = manager.bleService.state == BleConnectionState.connected;
+    final error = manager.bleService.state == BleConnectionState.error;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, bottom: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Icon(
+            demo
+                ? CupertinoIcons.play_circle
+                : connected
+                    ? CupertinoIcons.link
+                    : CupertinoIcons.antenna_radiowaves_left_right,
+            size: 20,
+            color: demo
+                ? AppTheme.appleOrange
+                : connected
+                    ? AppTheme.appleBlue
+                    : AppTheme.textMuted,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  demo
+                      ? 'Demo jízda'
+                      : connected
+                          ? 'Jednotka připojena'
+                          : 'Připojte svou motorku',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.3,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  demo
+                      ? 'Simulovaná data · okruh Brno'
+                      : connected
+                          ? (manager.pairedDeviceName ?? 'MotoLogger')
+                          : error
+                              ? 'Bluetooth není dostupné'
+                              : 'Jednotka zatím není připojena',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppTheme.textMuted,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          if (!_isLocked && !demo && !connected)
+            TextButton(
+              onPressed: _pair,
+              style: TextButton.styleFrom(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                minimumSize: const Size(48, 32),
+              ),
+              child: const Text('Připojit'),
+            ),
+          if (!_isLocked) ...[
+            const SizedBox(width: 4),
+            GlassIconButton(
+              icon: CupertinoIcons.ellipsis,
+              label: 'Ovládání jízdy',
+              onPressed: _showMenu,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Speed & Gear section displayed directly on the screen canvas across full width.
+  Widget _speedSection(TelemetryPacket pkt, bool hasData, bool isCompact) {
+    final speedText = hasData ? '${pkt.vehicleSpeedKmh}' : '—';
+    final gear = pkt.gear;
+    final rpm = pkt.engineRpm;
+    final rpmRatio = (hasData ? (rpm / 12000.0) : 0.0).clamp(0.0, 1.0);
+    final isRedline = rpm >= 9500;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        // Status header above speed
+        Text(
+          manager.isRecording
+              ? (manager.isPaused ? 'ZÁZNAM POZASTAVEN' : 'PROBÍHÁ ZÁZNAM')
+              : 'RYCHLOST',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 11,
+            letterSpacing: 1.3,
+            fontWeight: FontWeight.w700,
+            color: manager.isRecording && !manager.isPaused
+                ? AppTheme.appleBlue
+                : AppTheme.textMuted,
+          ),
+        ),
+        SizedBox(height: isCompact ? 1 : 2),
+
+        // Giant Speed + Gear Badge in a balanced row
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Semantics(
+                label: hasData
+                    ? 'Rychlost ${pkt.vehicleSpeedKmh} kilometrů za hodinu'
+                    : 'Rychlost není dostupná',
+                excludeSemantics: true,
+                child: Text(
+                  speedText,
+                  style: TextStyle(
+                    fontSize: isCompact ? 72 : 88,
+                    fontWeight: FontWeight.w600,
+                    height: 1.0,
+                    letterSpacing: -4,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              const Text(
+                'km/h',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                  color: AppTheme.textMuted,
+                ),
+              ),
+              const SizedBox(width: 14),
+              // Distinct Gear Badge
+              Container(
+                padding: EdgeInsets.symmetric(
+                  horizontal: isCompact ? 10 : 12,
+                  vertical: isCompact ? 4 : 6,
+                ),
+                decoration: BoxDecoration(
+                  color: hasData && gear == 0
+                      ? const Color(0xFF34C759).withValues(alpha: 0.12)
+                      : const Color(0xFFE5E5EA),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: hasData && gear == 0
+                        ? const Color(0xFF34C759)
+                        : const Color(0xFFD1D1D6),
+                    width: 1,
+                  ),
+                ),
+                child: Text(
+                  !hasData
+                      ? '—'
+                      : gear == 0
+                          ? 'N'
+                          : '$gear',
+                  style: TextStyle(
+                    fontSize: isCompact ? 20 : 24,
+                    fontWeight: FontWeight.w700,
+                    color: !hasData
+                        ? AppTheme.textPrimary
+                        : gear == 0
+                            ? const Color(0xFF34C759)
+                            : AppTheme.textPrimary,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(height: isCompact ? 6 : 8),
+
+        // Apple-style RPM ribbon
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(3),
+            child: Container(
+              height: isCompact ? 4 : 5,
+              color: const Color(0xFFE5E5EA),
+              alignment: Alignment.centerLeft,
+              child: LayoutBuilder(
+                builder: (context, constraints) => Container(
+                  width: constraints.maxWidth * rpmRatio,
+                  decoration: BoxDecoration(
+                    color: isRedline ? AppTheme.danger : AppTheme.appleBlue,
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Full-width row combining Left Lean, Central G-G Reticle, and Right Lean.
+  Widget _leanAndGgSection(
+      TelemetryPacket pkt, bool hasData, bool isCompact) {
+    final leftAngle = hasData ? max(0.0, -pkt.leanAngleDeg) : null;
+    final rightAngle = hasData ? max(0.0, pkt.leanAngleDeg) : null;
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final screenHeight = MediaQuery.sizeOf(context).height;
+    final reticleSize = isCompact
+        ? (screenWidth < 360 ? 115.0 : 135.0)
+        : screenHeight >= 750
+            ? 175.0
+            : 145.0;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // Left Lean Section
+          Expanded(
+            child: _leanSection(
+              label: 'VLEVO',
+              value: leftAngle,
+              peak: manager.maxLeanLeft.abs(),
+              icon: CupertinoIcons.arrow_turn_up_left,
+              isCompact: isCompact,
+            ),
+          ),
+          // Center G-G Friction Reticle
+          Semantics(
+            label: 'G-G diagram zrychlení a přetížení',
+            child: GgFrictionReticle(
+              accelXG: hasData ? pkt.accelYG : 0.0,
+              accelYG: hasData ? pkt.accelXG : 0.0,
+              frictionEnvelope: manager.frictionEnvelopeRadii,
+              size: reticleSize,
+            ),
+          ),
+          // Right Lean Section
+          Expanded(
+            child: _leanSection(
+              label: 'VPRAVO',
+              value: rightAngle,
+              peak: manager.maxLeanRight.abs(),
+              icon: CupertinoIcons.arrow_turn_up_right,
+              isCompact: isCompact,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _leanSection({
+    required String label,
+    required double? value,
+    required double peak,
+    required IconData icon,
+    bool isCompact = false,
+  }) {
+    final angle = value ?? 0;
+    Color angleColor = AppTheme.textPrimary;
+    if (value != null && angle > 1) {
+      if (angle <= 15) {
+        angleColor = const Color(0xFF34C759);
+      } else if (angle <= 30) {
+        angleColor = const Color(0xFFFF9500);
+      } else {
+        angleColor = AppTheme.danger;
+      }
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: isCompact ? 12 : 14, color: AppTheme.textMuted),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: isCompact ? 10 : 11,
+                  letterSpacing: 1.1,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.textMuted,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: isCompact ? 2 : 4),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            value == null ? '—' : '${value.round()}°',
+            style: TextStyle(
+              fontSize: isCompact ? 26 : 28,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -1,
+              color: angleColor,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ),
+        SizedBox(height: isCompact ? 1 : 2),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            'max ${peak.round()}°',
+            style: TextStyle(
+              fontSize: isCompact ? 11 : 12,
+              color: AppTheme.textMuted,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Subtle GPS status line at the bottom.
+  Widget _gpsStatusFootnote(bool isCompact) {
+    final demo = manager.isSimulationMode;
+    final hasGps = manager.latestPosition != null;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: demo
+                  ? AppTheme.appleOrange
+                  : hasGps
+                      ? const Color(0xFF34C759)
+                      : AppTheme.textMuted,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              demo
+                  ? 'Demo · okruh Brno'
+                  : hasGps
+                      ? 'GPS aktivní · záznam se ukládá do telefonu'
+                      : 'GPS zatím není dostupné',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: isCompact ? 11 : 12,
+                color: AppTheme.textMuted,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Ergonomic landscape view for handlebar mounts across full screen canvas.
   Widget _landscapeInstruments() {
-    final packet = manager.latestPacket;
+    final pkt = manager.latestPacket;
+    final hasData = _available;
+    final speedText = hasData ? '${pkt.vehicleSpeedKmh}' : '—';
+    final gear = pkt.gear;
+    final rpm = pkt.engineRpm;
+    final rpmRatio = (hasData ? (rpm / 12000.0) : 0.0).clamp(0.0, 1.0);
+    final isRedline = rpm >= 9500;
+    final bottom = MediaQuery.paddingOf(context).bottom;
+
+    final leftAngle = hasData ? max(0.0, -pkt.leanAngleDeg) : null;
+    final rightAngle = hasData ? max(0.0, pkt.leanAngleDeg) : null;
+
     return SingleChildScrollView(
       key: const PageStorageKey('ride-scroll'),
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 200),
-      child: Column(children: [
-        Row(children: [
-          const Text('Jízda',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
-          const SizedBox(width: 16),
-          Expanded(
-              child: Text(
+      physics: const NeverScrollableScrollPhysics(),
+      primary: false,
+      padding: EdgeInsets.fromLTRB(
+        20,
+        0,
+        20,
+        (_isLocked ? 155 : AppTheme.navigationInset(context) + 56) + bottom,
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              const Text(
+                'Jízda',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
                   manager.isSimulationMode
                       ? 'Demo · okruh Brno'
-                      : _available
+                      : hasData
                           ? 'Jednotka připojena'
                           : 'Jednotka je odpojena',
-                  style: const TextStyle(
-                      fontSize: 13, color: AppTheme.textMuted))),
-          if (!_isLocked)
-            GlassIconButton(
-                icon: CupertinoIcons.ellipsis,
-                label: 'Ovládání jízdy',
-                onPressed: _showMenu),
-        ]),
-        const SizedBox(height: 8),
-        Row(children: [
-          Expanded(
-              child: ContentGroup(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(children: [
-                    Row(
+                  style: const TextStyle(fontSize: 13, color: AppTheme.textMuted),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (!_isLocked)
+                GlassIconButton(
+                  icon: CupertinoIcons.ellipsis,
+                  label: 'Ovládání jízdy',
+                  onPressed: _showMenu,
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // 1. Left: Speed, Gear & RPM
+              Expanded(
+                flex: 4,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.baseline,
                         textBaseline: TextBaseline.alphabetic,
                         children: [
-                          Text(_available ? '${packet.vehicleSpeedKmh}' : '—',
-                              style: const TextStyle(
-                                  fontSize: 60,
-                                  height: 1,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: -2)),
-                          const SizedBox(width: 8),
-                          const Text('km/h',
+                          Text(
+                            speedText,
+                            style: const TextStyle(
+                              fontSize: 58,
+                              height: 1,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: -2,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          const Text(
+                            'km/h',
+                            style: TextStyle(
+                              fontSize: 15,
+                              color: AppTheme.textMuted,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: hasData && gear == 0
+                                  ? const Color(0xFF34C759).withValues(alpha: 0.15)
+                                  : const Color(0xFFF2F2F7),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: hasData && gear == 0
+                                    ? const Color(0xFF34C759)
+                                    : const Color(0xFFE5E5EA),
+                                width: 1,
+                              ),
+                            ),
+                            child: Text(
+                              !hasData
+                                  ? '—'
+                                  : gear == 0
+                                      ? 'N'
+                                      : '$gear',
                               style: TextStyle(
-                                  fontSize: 15, color: AppTheme.textMuted)),
-                        ]),
-                    const SizedBox(height: 12),
+                                fontSize: 20,
+                                fontWeight: FontWeight.w700,
+                                color: !hasData
+                                    ? AppTheme.textPrimary
+                                    : gear == 0
+                                        ? const Color(0xFF34C759)
+                                        : AppTheme.textPrimary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(3),
+                      child: Container(
+                        height: 5,
+                        color: const Color(0xFFE5E5EA),
+                        alignment: Alignment.centerLeft,
+                        child: LayoutBuilder(
+                          builder: (context, constraints) => Container(
+                            width: constraints.maxWidth * rpmRatio,
+                            decoration: BoxDecoration(
+                              color: isRedline
+                                  ? AppTheme.danger
+                                  : AppTheme.appleBlue,
+                              borderRadius: BorderRadius.circular(3),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
                     Text(
-                        _available
-                            ? '${packet.engineRpm} ot/min · Převod ${packet.gear == 0 ? 'N' : packet.gear}'
-                            : 'Čekám na telemetrii',
-                        style: const TextStyle(
-                            fontSize: 15, color: AppTheme.textMuted)),
-                  ]))),
-          const SizedBox(width: 20),
-          Expanded(
-              child: Row(children: [
-            Expanded(
-                child: _lean(
-                    'Vlevo',
-                    _available ? max(0, -packet.leanAngleDeg) : null,
-                    manager.maxLeanLeft.abs(),
-                    CupertinoIcons.arrow_turn_up_left)),
-            GgFrictionReticle(
-                accelXG: _available ? packet.accelXG : 0,
-                accelYG: _available ? packet.accelYG : 0,
-                frictionEnvelope: manager.frictionEnvelopeRadii,
-                size: 100),
-            Expanded(
-                child: _lean(
-                    'Vpravo',
-                    _available ? max(0, packet.leanAngleDeg) : null,
-                    manager.maxLeanRight.abs(),
-                    CupertinoIcons.arrow_turn_up_right)),
-          ])),
-        ]),
-      ]),
+                      hasData
+                          ? '$rpm ot/min · ${manager.totalDistanceKm.toStringAsFixed(1)} km'
+                          : 'Čekám na telemetrii',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppTheme.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              // 2. Center: G-G Reticle
+              Semantics(
+                label: 'G-G diagram zrychlení a přetížení',
+                child: GgFrictionReticle(
+                  accelXG: hasData ? pkt.accelYG : 0.0,
+                  accelYG: hasData ? pkt.accelXG : 0.0,
+                  frictionEnvelope: manager.frictionEnvelopeRadii,
+                  size: 140,
+                ),
+              ),
+              const SizedBox(width: 12),
+              // 3. Right: Lean angles
+              Expanded(
+                flex: 4,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _leanSection(
+                        label: 'VLEVO',
+                        value: leftAngle,
+                        peak: manager.maxLeanLeft.abs(),
+                        icon: CupertinoIcons.arrow_turn_up_left,
+                        isCompact: true,
+                      ),
+                    ),
+                    Expanded(
+                      child: _leanSection(
+                        label: 'VPRAVO',
+                        value: rightAngle,
+                        peak: manager.maxLeanRight.abs(),
+                        icon: CupertinoIcons.arrow_turn_up_right,
+                        isCompact: true,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
-
-  Widget _status() {
-    final demo = manager.isSimulationMode;
-    final connected = manager.bleService.state == BleConnectionState.connected;
-    final error = manager.bleService.state == BleConnectionState.error;
-    return Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
-      Icon(
-          demo
-              ? CupertinoIcons.play_circle
-              : connected
-                  ? CupertinoIcons.link
-                  : CupertinoIcons.antenna_radiowaves_left_right,
-          size: 20,
-          color: demo
-              ? AppTheme.appleOrange
-              : connected
-                  ? AppTheme.appleBlue
-                  : AppTheme.textMuted),
-      const SizedBox(width: 10),
-      Expanded(
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(
-            demo
-                ? 'Demo jízda'
-                : connected
-                    ? 'Jednotka připojena'
-                    : 'Připojte svou motorku',
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-        const SizedBox(height: 2),
-        Text(
-            demo
-                ? 'Simulovaná data · okruh Brno'
-                : connected
-                    ? (manager.pairedDeviceName ?? 'MotoLogger')
-                    : error
-                        ? 'Bluetooth není dostupné'
-                        : 'Jednotka zatím není připojena',
-            style: const TextStyle(fontSize: 13, color: AppTheme.textMuted)),
-      ])),
-      if (!_isLocked && !demo && !connected)
-        TextButton(onPressed: _pair, child: const Text('Připojit')),
-    ]);
-  }
-
-  Widget _metric(String label, String value, {String? unit}) =>
-      Column(children: [
-        Text(label,
-            style: const TextStyle(fontSize: 13, color: AppTheme.textMuted)),
-        const SizedBox(height: 4),
-        Text([value, if (unit != null) unit].join(' '),
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-                fontFeatures: [FontFeature.tabularFigures()])),
-      ]);
-
-  Widget _lean(String label, double? value, double peak, IconData icon) =>
-      Column(children: [
-        Icon(icon, size: 20, color: AppTheme.textMuted),
-        const SizedBox(height: 8),
-        Text(value == null ? '—' : '${value.round()}°',
-            style: const TextStyle(
-                fontSize: 30, letterSpacing: -1, fontWeight: FontWeight.w600)),
-        Text(label,
-            style: const TextStyle(fontSize: 13, color: AppTheme.textMuted)),
-        const SizedBox(height: 8),
-        Text('max ${peak.round()}°',
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 12, color: AppTheme.textMuted)),
-      ]);
 
   Widget _animatedControls(BuildContext context) {
     final duration = AppMotion.duration(context, 220);
@@ -584,66 +849,92 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _controls() {
     if (_isLocked) {
       return GlassSurface(
-          padding: const EdgeInsets.all(12),
-          child: Column(children: [
-            const Text('Ovládání uzamčeno za jízdy',
-                style: TextStyle(fontSize: 13, color: AppTheme.textMuted)),
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          children: [
+            const Text(
+              'Ovládání uzamčeno za jízdy',
+              style: TextStyle(fontSize: 13, color: AppTheme.textMuted),
+            ),
             const SizedBox(height: 8),
             SlideToUnlock(onUnlocked: _unlock, label: 'Přejetím odemknout'),
             TextButton(
-                onPressed: _unlock, child: const Text('Odemknout ovládání')),
-          ]));
+              onPressed: _unlock,
+              child: const Text('Odemknout ovládání'),
+            ),
+          ],
+        ),
+      );
     }
     return Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (_error != null || manager.recordingError != null)
-            Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                    color: const Color(0xFFFFECEB),
-                    borderRadius: BorderRadius.circular(14)),
-                child: Semantics(
-                    liveRegion: true,
-                    child: Text(_error ?? manager.recordingError!,
-                        style: const TextStyle(
-                            color: Color(0xFFB3261E), fontSize: 14)))),
-          if (!manager.isRecording)
-            PrimaryAction(
-                label: _available ? 'Zahájit jízdu' : 'Vyzkoušet demo',
-                icon: _available
-                    ? CupertinoIcons.circle_filled
-                    : CupertinoIcons.play_fill,
-                busy: _busy,
-                onPressed: _available
-                    ? _startRide
-                    : () => manager.setSimulationMode(true))
-          else if (!manager.isPaused)
-            PrimaryAction(
-                label: 'Pozastavit jízdu',
-                icon: CupertinoIcons.pause_fill,
-                onPressed: _busy ? null : manager.pauseRecording)
-          else
-            GlassSurface(
-                radius: 24,
-                padding: const EdgeInsets.all(6),
-                child: Row(children: [
-                  Expanded(
-                      child: TextButton(
-                          onPressed: _busy ? null : manager.resumeRecording,
-                          child: const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 8),
-                              child: Text('Pokračovat')))),
-                  const SizedBox(width: 4),
-                  Expanded(
-                      child: PrimaryAction(
-                          label: 'Uložit jízdu',
-                          icon: CupertinoIcons.checkmark,
-                          busy: _busy,
-                          onPressed: _saveRide)),
-                ])),
-        ]);
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (_error != null || manager.recordingError != null)
+          Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFECEB),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Semantics(
+              liveRegion: true,
+              child: Text(
+                _error ?? manager.recordingError!,
+                style: const TextStyle(
+                  color: Color(0xFFB3261E),
+                  fontSize: 14,
+                ),
+              ),
+            ),
+          ),
+        if (!manager.isRecording)
+          PrimaryAction(
+            label: _available ? 'Zahájit jízdu' : 'Vyzkoušet demo',
+            icon: _available
+                ? CupertinoIcons.circle_filled
+                : CupertinoIcons.play_fill,
+            busy: _busy,
+            onPressed: _available
+                ? _startRide
+                : () => manager.setSimulationMode(true),
+          )
+        else if (!manager.isPaused)
+          PrimaryAction(
+            label: 'Pozastavit jízdu',
+            icon: CupertinoIcons.pause_fill,
+            onPressed: _busy ? null : manager.pauseRecording,
+          )
+        else
+          GlassSurface(
+            radius: 24,
+            padding: const EdgeInsets.all(6),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextButton(
+                    onPressed: _busy ? null : manager.resumeRecording,
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      child: Text('Pokračovat'),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: PrimaryAction(
+                    label: 'Uložit jízdu',
+                    icon: CupertinoIcons.checkmark,
+                    busy: _busy,
+                    onPressed: _saveRide,
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
   }
 }
+

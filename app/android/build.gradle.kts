@@ -23,6 +23,8 @@ subprojects {
         if (!plugins.hasPlugin("org.jetbrains.kotlin.android")) {
             plugins.apply("org.jetbrains.kotlin.android")
         }
+        val android = project.extensions.findByType(com.android.build.gradle.BaseExtension::class.java)
+        android?.compileSdkVersion(36)
     }
     tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
         compilerOptions {
