@@ -84,10 +84,10 @@ bool BleManager::begin() {
     initial_pkt.battery_mv = 12600;
     telemetry_char_->setValue(reinterpret_cast<const uint8_t*>(&initial_pkt), sizeof(initial_pkt));
 
-    // 5. Create Command Write Characteristic (Zero tare, mounting offset, CAN profile, offline sync)
+    // 5. Create Command Characteristic (Bi-directional: Write commands, Notify responses & sync chunks)
     command_char_ = service->createCharacteristic(
         BLE_CHAR_COMMAND_UUID,
-        NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR
+        NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR | NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ
     );
     if (!s_command_callbacks) {
         s_command_callbacks = new CommandCallbacks(this);
@@ -131,6 +131,21 @@ bool BleManager::isSubscribed() const {
     return client_connected_.load(std::memory_order_acquire) &&
            telemetry_char_ &&
            (telemetry_char_->getSubscribedCount() > 0);
+}
+
+bool BleManager::isCommandSubscribed() const {
+    return client_connected_.load(std::memory_order_acquire) &&
+           command_char_ &&
+           (command_char_->getSubscribedCount() > 0);
+}
+
+bool BleManager::sendCommandResponse(const uint8_t* data, size_t length) {
+    if (!client_connected_.load(std::memory_order_acquire) || !command_char_) {
+        return false;
+    }
+    command_char_->setValue(data, length);
+    command_char_->notify();
+    return true;
 }
 
 void BleManager::sendTelemetry(const BleTelemetryPacket& packet) {

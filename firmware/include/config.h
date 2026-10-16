@@ -73,6 +73,26 @@ constexpr gpio_num_t PIN_LED_YELLOW       = GPIO_NUM_11; // Yellow LED: Power st
 #define BLE_CHAR_COMMAND_UUID       "19b10002-e8f2-537e-4f6c-d104768a1214"
 constexpr uint32_t   BLE_STREAM_INTERVAL_MS = 40;        // 25 Hz live stream rate (every 40 ms)
 
+// BLE Commands from Smartphone
+constexpr uint8_t CMD_TARE_ZERO         = 0x01;
+constexpr uint8_t CMD_TARE_OFFSET       = 0x02;
+constexpr uint8_t CMD_SET_CAN_SIGNAL    = 0x03;
+constexpr uint8_t CMD_SET_CAN_MODE      = 0x04;
+constexpr uint8_t CMD_SYNC_CHECK_LEGACY = 0x05;
+constexpr uint8_t CMD_SYNC_REQ_LEGACY   = 0x06;
+constexpr uint8_t CMD_SYNC_ACK_LEGACY   = 0x07;
+constexpr uint8_t CMD_SYNC_CHECK        = 0x20;
+constexpr uint8_t CMD_SYNC_REQUEST_FILE = 0x21;
+constexpr uint8_t CMD_SYNC_ACK          = 0x22;
+
+// BLE Responses from ESP32 on Command Characteristic
+constexpr uint8_t RESP_SYNC_CHECK        = 0xA0; // 0x20 | 0x80
+constexpr uint8_t RESP_SYNC_CHECK_LEGACY = 0x85; // 0x05 | 0x80
+constexpr uint8_t RESP_SYNC_CHUNK        = 0xA1; // 0x21 | 0x80
+constexpr uint8_t RESP_SYNC_CHUNK_LEGACY = 0x86; // 0x06 | 0x80
+constexpr uint8_t RESP_SYNC_ACK          = 0xA2; // 0x22 | 0x80
+constexpr uint8_t RESP_SYNC_ACK_LEGACY   = 0x87; // 0x07 | 0x80
+
 // ==============================================================================
 // 7. FREERTOS TASK CONFIGURATION (Dual-Core Affinity)
 // ==============================================================================

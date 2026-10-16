@@ -34,6 +34,14 @@ public:
     uint32_t getCurrentSessionIndex() const { return current_session_idx_.load(std::memory_order_relaxed); }
     uint32_t getLastSyncedSessionIndex() const;
     void acknowledgeSessionSynced(const char* log_name);
+    void markSessionSynced(const char* log_name);
+
+    // MicroSD Offline Session Log BLE Synchronization
+    size_t getUnsyncedSessionFiles(char* out_buffer, size_t max_len, uint8_t& out_count);
+    bool openStreamingFile(const char* filename);
+    bool readStreamingChunk(uint8_t* out_buffer, size_t max_len, size_t& bytes_read, bool& is_eof);
+    void closeStreamingFile();
+    bool isStreamingOpen() const { return is_streaming_open_; }
 
     const char* getCurrentFileName() const { return current_filename_; }
     const char* getCanFileName() const { return can_filename_; }
@@ -42,12 +50,16 @@ private:
     SPIClass spi_sd_;
     File log_file_;
     File can_file_;
+    File streaming_file_;
+    SemaphoreHandle_t sd_mutex_;
     bool spi_initialized_;
+    bool is_streaming_open_;
     std::atomic<bool> is_mounted_;
     std::atomic<bool> is_file_open_;
     std::atomic<uint32_t> current_session_idx_;
     char current_filename_[32];
     char can_filename_[32];
+    char streaming_filename_[32];
 
     std::atomic<uint32_t> records_written_;
     std::atomic<uint32_t> bytes_written_;

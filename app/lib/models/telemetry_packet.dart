@@ -42,6 +42,11 @@ class TelemetryPacket {
   bool get isShutdownCountdown => (statusFlags & (1 << 2)) != 0;
   bool get isImuHealthy => (statusFlags & (1 << 3)) != 0;
 
+  // Semantic status flag aliases
+  bool get isSdCardMounted => isSdLoggingActive;
+  bool get isImuCalibrated => isImuHealthy;
+  bool get isObdConnected => (isEngineRunning || engineRpm > 0 || vehicleSpeedKmh > 0);
+
   // Zero-copy binary parser from incoming BLE notification byte buffer
   factory TelemetryPacket.fromBytes(Uint8List bytes) {
     if (bytes.lengthInBytes < 28) {

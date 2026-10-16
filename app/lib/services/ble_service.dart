@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import '../core/constants/ble_constants.dart';
@@ -78,6 +79,7 @@ class BleService {
   StreamSubscription? _scanSubscription;
   StreamSubscription? _discoveryScanSubscription;
   StreamSubscription? _notifySubscription;
+  StreamSubscription? _commandSubscription;
   StreamSubscription? _connectionSubscription;
   Timer? _scanTimeoutTimer;
   Timer? _mockTimer;
@@ -85,6 +87,13 @@ class BleService {
   bool get isMockMode => _mockMode;
 
   final List<Timer> _mockScanTimers = [];
+
+  // BLE offline file sync state
+  Completer<List<String>>? _syncCheckCompleter;
+  Completer<String?>? _syncFileCompleter;
+  Completer<bool>? _syncAckCompleter;
+  final BytesBuilder _fileChunkBuffer = BytesBuilder();
+  void Function(int bytesRead)? onSyncProgress;
 
   void _setState(BleConnectionState newState) {
     _state = newState;
@@ -348,12 +357,77 @@ class BleService {
               await _subscribeToTelemetry();
             } else if (c.uuid == Guid(BleConstants.commandCharUuid)) {
               _commandChar = c;
+              await _subscribeToCommands();
             }
           }
         }
       }
     } catch (e) {
       debugPrint('[BLE] Service discovery error: $e');
+    }
+  }
+
+  Future<void> _subscribeToCommands() async {
+    if (_commandChar == null) return;
+
+    try {
+      await _commandChar!.setNotifyValue(true);
+      await _commandSubscription?.cancel();
+      _commandSubscription = _commandChar!.onValueReceived.listen((List<int> value) {
+        _handleCommandResponse(value);
+      });
+      debugPrint('[BLE] Subscribed to command notifications.');
+    } catch (e) {
+      debugPrint('[BLE] Command notification subscription error: $e');
+    }
+  }
+
+  void _handleCommandResponse(List<int> value) {
+    if (value.isEmpty) return;
+    final int opcode = value[0];
+
+    if (opcode == BleConstants.respSyncCheck || opcode == BleConstants.respSyncCheckLegacy) {
+      final int count = value.length > 1 ? value[1] : 0;
+      if (count == 0 || value.length <= 2) {
+        _syncCheckCompleter?.complete(<String>[]);
+      } else {
+        final payload = utf8.decode(value.sublist(2), allowMalformed: true);
+        final files = payload
+            .split('\n')
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .toList();
+        _syncCheckCompleter?.complete(files);
+      }
+      _syncCheckCompleter = null;
+    } else if (opcode == BleConstants.respSyncChunk || opcode == BleConstants.respSyncChunkLegacy) {
+      if (value.length < 4) {
+        _syncFileCompleter?.complete(null);
+        _syncFileCompleter = null;
+        return;
+      }
+      final int flags = value[3];
+      if (flags == 0xFF) {
+        // Error or file not found on SD
+        _syncFileCompleter?.complete(null);
+        _syncFileCompleter = null;
+        return;
+      }
+
+      if (value.length > 4) {
+        _fileChunkBuffer.add(value.sublist(4));
+        onSyncProgress?.call(_fileChunkBuffer.length);
+      }
+
+      if ((flags & 0x01) != 0) {
+        // EOF reached
+        final csv = utf8.decode(_fileChunkBuffer.takeBytes(), allowMalformed: true);
+        _syncFileCompleter?.complete(csv);
+        _syncFileCompleter = null;
+      }
+    } else if (opcode == BleConstants.respSyncAck || opcode == BleConstants.respSyncAckLegacy) {
+      _syncAckCompleter?.complete(true);
+      _syncAckCompleter = null;
     }
   }
 
@@ -591,19 +665,34 @@ class BleService {
 
     if (_commandChar == null) return [];
 
+    final completer = Completer<List<String>>();
     try {
+      _syncCheckCompleter?.complete([]);
+      _syncCheckCompleter = completer;
+
       final cmd = [BleConstants.cmdSyncCheck];
       await _commandChar!.write(cmd, withoutResponse: false);
       debugPrint('[BLE] Sent offline sync check command.');
-      return [];
+
+      return await completer.future.timeout(
+        const Duration(seconds: 4),
+        onTimeout: () {
+          debugPrint('[BLE] checkOfflineLogs timed out.');
+          return [];
+        },
+      );
     } catch (e) {
       debugPrint('[BLE] checkOfflineLogs error: $e');
       return [];
+    } finally {
+      if (_syncCheckCompleter == completer) {
+        _syncCheckCompleter = null;
+      }
     }
   }
 
   /// Downloads an offline session log by filename/id
-  Future<String?> downloadOfflineLog(String logId) async {
+  Future<String?> downloadOfflineLog(String logId, {void Function(int bytesRead)? onProgress}) async {
     if (_mockMode) {
       if (_mockOfflineLogQueue.isNotEmpty) {
         return _mockOfflineLogQueue.first;
@@ -613,14 +702,32 @@ class BleService {
 
     if (_commandChar == null) return null;
 
+    final completer = Completer<String?>();
     try {
+      _syncFileCompleter?.complete(null);
+      _fileChunkBuffer.clear();
+      _syncFileCompleter = completer;
+      onSyncProgress = onProgress;
+
       final bytes = [BleConstants.cmdSyncRequestFile, ...utf8.encode(logId)];
       await _commandChar!.write(bytes, withoutResponse: false);
       debugPrint('[BLE] Requested log file download: $logId');
-      return null;
+
+      return await completer.future.timeout(
+        const Duration(seconds: 30),
+        onTimeout: () {
+          debugPrint('[BLE] downloadOfflineLog timed out.');
+          return null;
+        },
+      );
     } catch (e) {
       debugPrint('[BLE] downloadOfflineLog error: $e');
       return null;
+    } finally {
+      onSyncProgress = null;
+      if (_syncFileCompleter == completer) {
+        _syncFileCompleter = null;
+      }
     }
   }
 
@@ -636,14 +743,26 @@ class BleService {
 
     if (_commandChar == null) return false;
 
+    final completer = Completer<bool>();
     try {
+      _syncAckCompleter?.complete(false);
+      _syncAckCompleter = completer;
+
       final bytes = [BleConstants.cmdSyncAck, ...utf8.encode(logId)];
-      await _commandChar!.write(bytes, withoutResponse: true);
+      await _commandChar!.write(bytes, withoutResponse: false);
       debugPrint('[BLE] Acknowledged offline log sync: $logId');
-      return true;
+
+      return await completer.future.timeout(
+        const Duration(seconds: 4),
+        onTimeout: () => true,
+      );
     } catch (e) {
       debugPrint('[BLE] acknowledgeOfflineLogSync error: $e');
       return false;
+    } finally {
+      if (_syncAckCompleter == completer) {
+        _syncAckCompleter = null;
+      }
     }
   }
 
@@ -657,7 +776,15 @@ class BleService {
     _scanSubscription?.cancel();
     _discoveryScanSubscription?.cancel();
     _notifySubscription?.cancel();
+    _commandSubscription?.cancel();
     _connectionSubscription?.cancel();
+    _syncCheckCompleter?.complete([]);
+    _syncCheckCompleter = null;
+    _syncFileCompleter?.complete(null);
+    _syncFileCompleter = null;
+    _syncAckCompleter?.complete(false);
+    _syncAckCompleter = null;
+    _fileChunkBuffer.clear();
     _device?.disconnect();
     _setState(BleConnectionState.disconnected);
   }

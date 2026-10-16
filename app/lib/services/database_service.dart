@@ -8,6 +8,7 @@ import 'package:sqflite/sqflite.dart';
 import '../models/session.dart';
 import '../models/fused_sample.dart';
 import '../models/can_profile.dart';
+import 'lap_timer_service.dart';
 
 class DatabaseService {
   static final DatabaseService instance = DatabaseService._internal();
@@ -286,13 +287,18 @@ class DatabaseService {
     // Row 1: Channel Names
     buffer.writeln('"Time","Distance","GPS_Lat","GPS_Long","GPS_Alt","GPS_Speed","Lean_Angle","Pitch_Angle",'
                    '"Accel_X","Accel_Y","Accel_Z","Gyro_X","Gyro_Y","Gyro_Z",'
-                   '"Engine_RPM","Vehicle_Speed","Throttle_Pos","Coolant_Temp","Gear","Battery_Volt"');
+                   '"Engine_RPM","Vehicle_Speed","Throttle_Pos","Coolant_Temp","Gear","Battery_Volt","Beacon","Lap"');
     // Row 2: Physical Units
     buffer.writeln('"s","m","deg","deg","m","km/h","deg","deg",'
                    '"G","G","G","deg/s","deg/s","deg/s",'
-                   '"rpm","km/h","%","C","","V"');
+                   '"rpm","km/h","%","C","","V","",""');
 
     if (samples.isEmpty) return buffer.toString();
+
+    // Circuit beacon detection for automated MoTeC lap splitting
+    final lapService = LapTimerService();
+    final crossings = lapService.detectCrossings(samples);
+    final beaconIndices = crossings.map((c) => c.sampleIndex).toSet();
 
     final initialMs = samples.first.timestampMs;
     double cumulativeDistanceM = 0.0;
@@ -301,7 +307,11 @@ class DatabaseService {
         ? samples.first.vehicleSpeedKmh.toDouble()
         : samples.first.gpsSpeedKmh;
 
-    for (final s in samples) {
+    int currentLap = 1;
+    final firstCrossingIdx = crossings.isNotEmpty ? crossings.first.sampleIndex : -1;
+
+    for (int i = 0; i < samples.length; i++) {
+      final s = samples[i];
       final relTimeSec = (s.timestampMs - initialMs) / 1000.0;
       final dtSec = (s.timestampMs - prevTs) / 1000.0;
       final currSpeed = s.vehicleSpeedKmh > 0 ? s.vehicleSpeedKmh.toDouble() : s.gpsSpeedKmh;
@@ -313,13 +323,18 @@ class DatabaseService {
       prevTs = s.timestampMs;
       prevSpeedKmh = currSpeed;
 
+      final isBeacon = beaconIndices.contains(i);
+      if (isBeacon && i > firstCrossingIdx) {
+        currentLap++;
+      }
+
       buffer.writeln('${relTimeSec.toStringAsFixed(3)},${cumulativeDistanceM.toStringAsFixed(1)},'
                      '${s.latitude.toStringAsFixed(6)},${s.longitude.toStringAsFixed(6)},${s.altitude.toStringAsFixed(1)},'
                      '${s.gpsSpeedKmh.toStringAsFixed(1)},${s.leanAngleDeg.toStringAsFixed(2)},${s.pitchDeg.toStringAsFixed(2)},'
                      '${s.accelXG.toStringAsFixed(3)},${s.accelYG.toStringAsFixed(3)},${s.accelZG.toStringAsFixed(3)},'
                      '${s.gyroXDps.toStringAsFixed(2)},${s.gyroYDps.toStringAsFixed(2)},${s.gyroZDps.toStringAsFixed(2)},'
                      '${s.engineRpm},${s.vehicleSpeedKmh},${s.throttlePosPct},${s.coolantTempC},${s.gear},'
-                     '${s.batteryVoltage.toStringAsFixed(2)}');
+                     '${s.batteryVoltage.toStringAsFixed(2)},${isBeacon ? 1 : 0},$currentLap');
     }
 
     return buffer.toString();

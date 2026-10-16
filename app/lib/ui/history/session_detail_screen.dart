@@ -5,7 +5,9 @@ import 'package:share_plus/share_plus.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/session.dart';
 import '../../models/fused_sample.dart';
+import '../../models/lap_split.dart';
 import '../../services/database_service.dart';
+import '../../services/lap_timer_service.dart';
 import '../widgets/gps_track_map_card.dart';
 import '../widgets/gg_friction_card.dart';
 import '../widgets/glass_surface.dart';
@@ -83,6 +85,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
                     )));
           }
           final samples = snapshot.data ?? [];
+          final laps = LapTimerService().detectLaps(samples);
 
           return SingleChildScrollView(
             padding: EdgeInsets.fromLTRB(
@@ -97,6 +100,12 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
                 // Apple Summary Card
                 _buildSummaryCard(samples),
                 const SizedBox(height: 16),
+
+                // Circuit Lap Timing Card (rendered only when closed-circuit laps are detected)
+                if (laps.isNotEmpty) ...[
+                  _buildLapTimesCard(laps),
+                  const SizedBox(height: 16),
+                ],
 
                 // GPS Track Trajectory Map Card
                 GpsTrackMapCard(samples: samples),
@@ -125,6 +134,140 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildLapTimesCard(List<LapSplit> laps) {
+    return ContentGroup(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: AppTheme.applePurple.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  CupertinoIcons.stopwatch,
+                  size: 21,
+                  color: AppTheme.applePurple,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'ČASY NA KOLO',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.5,
+                        color: AppTheme.textMuted,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${laps.length} ${laps.length == 1 ? "dokončené kolo" : (laps.length < 5 ? "dokončená kola" : "dokončených kol")}',
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const Divider(height: 1),
+          for (int i = 0; i < laps.length; i++) ...[
+            _buildLapRow(laps[i]),
+            if (i < laps.length - 1) const Divider(height: 1),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLapRow(LapSplit lap) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Text(
+                'Kolo ${lap.lapNumber}',
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: AppTheme.textMuted,
+                ),
+              ),
+              const Spacer(),
+              if (lap.isBestLap)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: AppTheme.applePurple.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text(
+                    'Nejlepší',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.applePurple,
+                    ),
+                  ),
+                )
+              else
+                Text(
+                  lap.formattedDelta,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: AppTheme.textMuted,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(
+                lap.formattedLapTime,
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  color: lap.isBestLap ? AppTheme.applePurple : AppTheme.textPrimary,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '${lap.topSpeedKmh.toStringAsFixed(0)} km/h · ${lap.maxLeanRightDeg.toStringAsFixed(0)}° / ${lap.maxLeanLeftDeg.abs().toStringAsFixed(0)}°',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: AppTheme.textMuted,
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

@@ -19,8 +19,10 @@ public:
     bool begin();
     void update();
     void sendTelemetry(const BleTelemetryPacket& packet);
+    bool sendCommandResponse(const uint8_t* data, size_t length);
     bool isConnected() const { return client_connected_.load(std::memory_order_acquire); }
     bool isSubscribed() const;
+    bool isCommandSubscribed() const;
     uint32_t getPacketsSent() const { return packets_sent_.load(std::memory_order_relaxed); }
     void setCommandCallback(CommandCallback cb) { command_callback_ = cb; }
 

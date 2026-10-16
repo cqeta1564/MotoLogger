@@ -217,6 +217,47 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   ? null
                                   : manager.setSimulationMode)),
                     ])),
+                    _section('Diagnostika jednotky'),
+                    ContentGroup(
+                        child: Column(children: [
+                      SettingsRow(
+                          icon: CupertinoIcons.doc_text,
+                          title: 'MicroSD záznam',
+                          subtitle: connected
+                              ? (manager.latestPacket.isSdCardMounted
+                                  ? 'Aktivní (100 Hz CSV zápis)'
+                                  : 'Není vložena / Chyba')
+                              : '—',
+                          navigates: false),
+                      _divider(),
+                      SettingsRow(
+                          icon: CupertinoIcons.compass,
+                          title: 'Senzor IMU (BNO085)',
+                          subtitle: connected
+                              ? (manager.latestPacket.isImuCalibrated
+                                  ? 'Zkalibrováno (100 Hz fusion)'
+                                  : 'Není připraven')
+                              : '—',
+                          navigates: false),
+                      _divider(),
+                      SettingsRow(
+                          icon: CupertinoIcons.battery_charging,
+                          title: 'Napětí baterie',
+                          subtitle: connected
+                              ? '${manager.latestPacket.batteryVoltage.toStringAsFixed(1)} V · ${manager.latestPacket.isEngineRunning ? 'Dobíjení (motor běží)' : 'Klidové napětí'}'
+                              : '—',
+                          navigates: false),
+                      _divider(),
+                      SettingsRow(
+                          icon: CupertinoIcons.waveform_path_ecg,
+                          title: 'Palubní sběrnice',
+                          subtitle: connected
+                              ? (manager.latestPacket.isObdConnected
+                                  ? 'Příjem dat aktivní'
+                                  : 'Čekání na data motocyklu')
+                              : '—',
+                          navigates: false),
+                    ])),
                     _section('Stav a úložiště'),
                     ContentGroup(
                         child: Column(children: [

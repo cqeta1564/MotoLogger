@@ -9,7 +9,9 @@ static const char CSV_HEADER[] =
 
 StorageManager::StorageManager()
     : spi_sd_(FSPI),
+      sd_mutex_(xSemaphoreCreateRecursiveMutex()),
       spi_initialized_(false),
+      is_streaming_open_(false),
       is_mounted_(false),
       is_file_open_(false),
       current_session_idx_(0),
@@ -22,10 +24,15 @@ StorageManager::StorageManager()
       can_buffer_head_(0) {
     memset(current_filename_, 0, sizeof(current_filename_));
     memset(can_filename_, 0, sizeof(can_filename_));
+    memset(streaming_filename_, 0, sizeof(streaming_filename_));
 }
 
 bool StorageManager::begin() {
     last_reconnect_ms_ = millis();
+
+    if (sd_mutex_ && xSemaphoreTakeRecursive(sd_mutex_, pdMS_TO_TICKS(1000)) != pdTRUE) {
+        return false;
+    }
 
     // 1. Initialize custom SPI bus once for ESP32-S3 MicroSD interface
     if (!spi_initialized_) {
@@ -37,6 +44,7 @@ bool StorageManager::begin() {
     if (!SD.begin(PIN_SD_CS, spi_sd_, SD_SPI_SPEED_MHZ * 1000000UL)) {
         is_mounted_.store(false, std::memory_order_release);
         is_file_open_.store(false, std::memory_order_release);
+        if (sd_mutex_) xSemaphoreGiveRecursive(sd_mutex_);
         return false;
     }
     is_mounted_.store(true, std::memory_order_release);
@@ -44,14 +52,20 @@ bool StorageManager::begin() {
     // 3. Open next sequential session file (LOG_0001.CSV and CAN_0001.LOG)
     if (!openNextSessionFile()) {
         is_file_open_.store(false, std::memory_order_release);
+        if (sd_mutex_) xSemaphoreGiveRecursive(sd_mutex_);
         return false;
     }
 
+    if (sd_mutex_) xSemaphoreGiveRecursive(sd_mutex_);
     return true;
 }
 
 bool StorageManager::tryReconnect() {
     last_reconnect_ms_ = millis();
+
+    if (sd_mutex_ && xSemaphoreTakeRecursive(sd_mutex_, pdMS_TO_TICKS(1000)) != pdTRUE) {
+        return false;
+    }
 
     // Cleanly close any stale file handles and unmount VFS before re-probing SD card
     if (log_file_) {
@@ -60,6 +74,10 @@ bool StorageManager::tryReconnect() {
     if (can_file_) {
         can_file_.close();
     }
+    if (streaming_file_) {
+        streaming_file_.close();
+    }
+    is_streaming_open_ = false;
     SD.end();
 
     if (!spi_initialized_) {
@@ -70,16 +88,19 @@ bool StorageManager::tryReconnect() {
     if (!SD.begin(PIN_SD_CS, spi_sd_, SD_SPI_SPEED_MHZ * 1000000UL)) {
         is_mounted_.store(false, std::memory_order_release);
         is_file_open_.store(false, std::memory_order_release);
+        if (sd_mutex_) xSemaphoreGiveRecursive(sd_mutex_);
         return false;
     }
     is_mounted_.store(true, std::memory_order_release);
 
     if (!openNextSessionFile()) {
         is_file_open_.store(false, std::memory_order_release);
+        if (sd_mutex_) xSemaphoreGiveRecursive(sd_mutex_);
         return false;
     }
 
     Serial.printf("\n[SD] MicroSD hot-plug mount successful! New session: %s\n", current_filename_);
+    if (sd_mutex_) xSemaphoreGiveRecursive(sd_mutex_);
     return true;
 }
 
@@ -150,6 +171,8 @@ bool StorageManager::openNextSessionFile() {
 void StorageManager::commitBufferToFile() {
     if (!is_file_open_.load(std::memory_order_acquire) || buffer_head_ == 0) return;
 
+    if (sd_mutex_ && xSemaphoreTakeRecursive(sd_mutex_, pdMS_TO_TICKS(100)) != pdTRUE) return;
+
     size_t written = log_file_.write(reinterpret_cast<const uint8_t*>(write_buffer_), buffer_head_);
     if (written == buffer_head_) {
         bytes_written_.fetch_add(static_cast<uint32_t>(written), std::memory_order_relaxed);
@@ -166,10 +189,14 @@ void StorageManager::commitBufferToFile() {
             buffer_head_ = 0;
         }
     }
+
+    if (sd_mutex_) xSemaphoreGiveRecursive(sd_mutex_);
 }
 
 void StorageManager::commitCanBufferToFile() {
     if (!is_file_open_.load(std::memory_order_acquire) || !can_file_ || can_buffer_head_ == 0) return;
+
+    if (sd_mutex_ && xSemaphoreTakeRecursive(sd_mutex_, pdMS_TO_TICKS(100)) != pdTRUE) return;
 
     size_t written = can_file_.write(reinterpret_cast<const uint8_t*>(can_write_buffer_), can_buffer_head_);
     if (written == can_buffer_head_) {
@@ -185,6 +212,8 @@ void StorageManager::commitCanBufferToFile() {
             can_buffer_head_ = 0;
         }
     }
+
+    if (sd_mutex_) xSemaphoreGiveRecursive(sd_mutex_);
 }
 
 bool StorageManager::logTelemetry(const TelemetryRecord& r) {
@@ -286,26 +315,33 @@ void StorageManager::flush() {
     if (!is_file_open_.load(std::memory_order_acquire)) return;
     commitBufferToFile();
     commitCanBufferToFile();
-    if (is_file_open_.load(std::memory_order_acquire)) {
-        log_file_.flush();
-        if (can_file_) {
-            can_file_.flush();
+    if (sd_mutex_ && xSemaphoreTakeRecursive(sd_mutex_, pdMS_TO_TICKS(100)) == pdTRUE) {
+        if (is_file_open_.load(std::memory_order_acquire)) {
+            log_file_.flush();
+            if (can_file_) {
+                can_file_.flush();
+            }
         }
+        if (sd_mutex_) xSemaphoreGiveRecursive(sd_mutex_);
     }
 }
 
 void StorageManager::close() {
-    if (is_file_open_.load(std::memory_order_acquire)) {
-        flush();
-        log_file_.close();
-        if (can_file_) {
-            can_file_.close();
+    closeStreamingFile();
+    if (sd_mutex_ && xSemaphoreTakeRecursive(sd_mutex_, pdMS_TO_TICKS(1000)) == pdTRUE) {
+        if (is_file_open_.load(std::memory_order_acquire)) {
+            flush();
+            log_file_.close();
+            if (can_file_) {
+                can_file_.close();
+            }
+            is_file_open_.store(false, std::memory_order_release);
         }
-        is_file_open_.store(false, std::memory_order_release);
-    }
-    if (is_mounted_.load(std::memory_order_acquire)) {
-        SD.end();
-        is_mounted_.store(false, std::memory_order_release);
+        if (is_mounted_.load(std::memory_order_acquire)) {
+            SD.end();
+            is_mounted_.store(false, std::memory_order_release);
+        }
+        if (sd_mutex_) xSemaphoreGiveRecursive(sd_mutex_);
     }
 }
 
@@ -338,6 +374,200 @@ void StorageManager::acknowledgeSessionSynced(const char* log_name) {
             prefs.putUInt("last_sync", synced_idx);
         }
         prefs.end();
+    }
+}
+
+void StorageManager::markSessionSynced(const char* log_name) {
+    if (!log_name || log_name[0] == '\0') return;
+
+    const char* clean_name = log_name;
+    if (clean_name[0] == '/') clean_name++;
+
+    if (sd_mutex_ && xSemaphoreTakeRecursive(sd_mutex_, pdMS_TO_TICKS(500)) == pdTRUE) {
+        if (is_mounted_.load(std::memory_order_acquire)) {
+            File sf = SD.open("/synced.txt", FILE_APPEND);
+            if (sf) {
+                sf.println(clean_name);
+                sf.flush();
+                sf.close();
+            }
+        }
+        if (sd_mutex_) xSemaphoreGiveRecursive(sd_mutex_);
+    }
+
+    acknowledgeSessionSynced(clean_name);
+}
+
+size_t StorageManager::getUnsyncedSessionFiles(char* out_buffer, size_t max_len, uint8_t& out_count) {
+    out_count = 0;
+    if (!out_buffer || max_len == 0) return 0;
+    out_buffer[0] = '\0';
+
+    if (sd_mutex_ && xSemaphoreTakeRecursive(sd_mutex_, pdMS_TO_TICKS(1000)) != pdTRUE) {
+        return 0;
+    }
+
+    if (!is_mounted_.load(std::memory_order_acquire)) {
+        if (sd_mutex_) xSemaphoreGiveRecursive(sd_mutex_);
+        return 0;
+    }
+
+    // Read synced file markers from /synced.txt if present
+    char synced_cache[2048] = {};
+    if (SD.exists("/synced.txt")) {
+        File sf = SD.open("/synced.txt", FILE_READ);
+        if (sf) {
+            size_t bytes = sf.read(reinterpret_cast<uint8_t*>(synced_cache), sizeof(synced_cache) - 1);
+            synced_cache[bytes] = '\0';
+            sf.close();
+        }
+    }
+
+    uint32_t last_nvs_sync = getLastSyncedSessionIndex();
+
+    File root = SD.open("/");
+    if (!root || !root.isDirectory()) {
+        if (sd_mutex_) xSemaphoreGiveRecursive(sd_mutex_);
+        return 0;
+    }
+
+    size_t out_pos = 0;
+    File file = root.openNextFile();
+
+    const char* active_name = current_filename_;
+    if (active_name[0] == '/') active_name++;
+
+    while (file && out_count < 32 && out_pos < max_len - 16) {
+        if (!file.isDirectory()) {
+            const char* name = file.name();
+            if (name[0] == '/') name++;
+
+            // Only match LOG_xxxx.CSV (exclude CAN logs, only sync CSV telemetry)
+            if (strncasecmp(name, "LOG_", 4) == 0 && (strstr(name, ".CSV") || strstr(name, ".csv"))) {
+                // Must not be the currently active open recording
+                if (strcasecmp(name, active_name) != 0) {
+                    bool already_synced = (strstr(synced_cache, name) != nullptr);
+
+                    // Check session index
+                    const char* p = name;
+                    while (*p && (*p < '0' || *p > '9')) p++;
+                    if (*p) {
+                        uint32_t idx = static_cast<uint32_t>(strtoul(p, nullptr, 10));
+                        if (idx > 0 && idx <= last_nvs_sync) {
+                            already_synced = true;
+                        }
+                    }
+
+                    if (!already_synced) {
+                        size_t name_len = strlen(name);
+                        if (out_pos + name_len + 1 < max_len) {
+                            memcpy(&out_buffer[out_pos], name, name_len);
+                            out_pos += name_len;
+                            out_buffer[out_pos++] = '\n';
+                            out_buffer[out_pos] = '\0';
+                            out_count++;
+                        }
+                    }
+                }
+            }
+        }
+        file = root.openNextFile();
+    }
+    root.close();
+
+    if (sd_mutex_) xSemaphoreGiveRecursive(sd_mutex_);
+    return out_pos;
+}
+
+bool StorageManager::openStreamingFile(const char* filename) {
+    if (!filename || filename[0] == '\0') return false;
+
+    if (sd_mutex_ && xSemaphoreTakeRecursive(sd_mutex_, pdMS_TO_TICKS(1000)) != pdTRUE) {
+        return false;
+    }
+
+    if (!is_mounted_.load(std::memory_order_acquire)) {
+        if (sd_mutex_) xSemaphoreGiveRecursive(sd_mutex_);
+        return false;
+    }
+
+    if (streaming_file_) {
+        streaming_file_.close();
+    }
+
+    char path[40];
+    if (filename[0] == '/') {
+        snprintf(path, sizeof(path), "%s", filename);
+    } else {
+        snprintf(path, sizeof(path), "/%s", filename);
+    }
+
+    // Never stream currently open session file
+    if (strcasecmp(path, current_filename_) == 0) {
+        if (sd_mutex_) xSemaphoreGiveRecursive(sd_mutex_);
+        return false;
+    }
+
+    if (!SD.exists(path)) {
+        if (sd_mutex_) xSemaphoreGiveRecursive(sd_mutex_);
+        return false;
+    }
+
+    streaming_file_ = SD.open(path, FILE_READ);
+    if (!streaming_file_) {
+        if (sd_mutex_) xSemaphoreGiveRecursive(sd_mutex_);
+        return false;
+    }
+
+    strncpy(streaming_filename_, path, sizeof(streaming_filename_) - 1);
+    streaming_filename_[sizeof(streaming_filename_) - 1] = '\0';
+    is_streaming_open_ = true;
+
+    if (sd_mutex_) xSemaphoreGiveRecursive(sd_mutex_);
+    return true;
+}
+
+bool StorageManager::readStreamingChunk(uint8_t* out_buffer, size_t max_len, size_t& bytes_read, bool& is_eof) {
+    bytes_read = 0;
+    is_eof = false;
+    if (!out_buffer || max_len == 0) return false;
+
+    if (sd_mutex_ && xSemaphoreTakeRecursive(sd_mutex_, pdMS_TO_TICKS(500)) != pdTRUE) {
+        return false;
+    }
+
+    if (!is_streaming_open_ || !streaming_file_) {
+        if (sd_mutex_) xSemaphoreGiveRecursive(sd_mutex_);
+        return false;
+    }
+
+    int n = streaming_file_.read(out_buffer, max_len);
+    if (n < 0) {
+        streaming_file_.close();
+        is_streaming_open_ = false;
+        if (sd_mutex_) xSemaphoreGiveRecursive(sd_mutex_);
+        return false;
+    }
+
+    bytes_read = static_cast<size_t>(n);
+    is_eof = (streaming_file_.available() == 0);
+
+    if (is_eof) {
+        streaming_file_.close();
+        is_streaming_open_ = false;
+    }
+
+    if (sd_mutex_) xSemaphoreGiveRecursive(sd_mutex_);
+    return true;
+}
+
+void StorageManager::closeStreamingFile() {
+    if (sd_mutex_ && xSemaphoreTakeRecursive(sd_mutex_, pdMS_TO_TICKS(500)) == pdTRUE) {
+        if (streaming_file_) {
+            streaming_file_.close();
+        }
+        is_streaming_open_ = false;
+        if (sd_mutex_) xSemaphoreGiveRecursive(sd_mutex_);
     }
 }
 

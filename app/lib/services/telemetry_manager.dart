@@ -437,7 +437,13 @@ class TelemetryManager extends ChangeNotifier {
           _syncProgress = (i + 0.2) / logs.length;
           notifyListeners();
 
-          final csvContent = await bleService.downloadOfflineLog(logId);
+          final csvContent = await bleService.downloadOfflineLog(
+            logId,
+            onProgress: (bytesRead) {
+              _syncStatusMessage = 'Stahuji jízdu ${i + 1} z ${logs.length} ($bytesRead B)...';
+              notifyListeners();
+            },
+          );
           if (csvContent != null && csvContent.trim().isNotEmpty) {
             _syncStatusMessage = 'Ukládám jízdu do databáze...';
             _syncProgress = (i + 0.8) / logs.length;

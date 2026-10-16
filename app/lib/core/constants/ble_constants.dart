@@ -14,9 +14,20 @@ class BleConstants {
   static const int cmdTareWithOffset = 0x02; // Set mounting roll offset in tenths of a degree (int16_t)
   static const int cmdSetCanSignal = 0x03; // Set CAN signal mapping (17 bytes: signal, ID, start, len, endian, mult, offset)
   static const int cmdSetCanProfileMode = 0x04; // 1 = Custom CAN profile active, 0 = Standard OBD
-  static const int cmdSyncCheck = 0x05; // Query ESP32 for un-synced offline session logs on SD card
-  static const int cmdSyncRequestFile = 0x06; // Request transfer of specific offline session
-  static const int cmdSyncAck = 0x07; // Acknowledge successful session sync
+  static const int cmdSyncCheck = 0x20; // Query ESP32 for un-synced offline session logs on SD card
+  static const int cmdSyncRequestFile = 0x21; // Request chunked transfer of specific offline session
+  static const int cmdSyncAck = 0x22; // Acknowledge successful session sync
+  static const int cmdSyncCheckLegacy = 0x05;
+  static const int cmdSyncRequestFileLegacy = 0x06;
+  static const int cmdSyncAckLegacy = 0x07;
+
+  // ESP32 -> Mobile Command Responses
+  static const int respSyncCheck = 0xA0; // 0x20 | 0x80
+  static const int respSyncCheckLegacy = 0x85; // 0x05 | 0x80
+  static const int respSyncChunk = 0xA1; // 0x21 | 0x80
+  static const int respSyncChunkLegacy = 0x86; // 0x06 | 0x80
+  static const int respSyncAck = 0xA2; // 0x22 | 0x80
+  static const int respSyncAckLegacy = 0x87; // 0x07 | 0x80
 
   // CAN Signal Indices matching ESP32 firmware CanSignalType enum
   static const int canSignalRpm = 0;

@@ -164,31 +164,107 @@ static void processBleCommandQueue() {
                 }
                 break;
 
-            case 0x05: // Query un-synced offline session logs on MicroSD
-                logPrintf("[BLE CMD] Offline sync check: file=%s, session=%lu, last_synced=%lu, records=%lu\n",
-                          g_storage_mgr.getCurrentFileName(),
-                          static_cast<unsigned long>(g_storage_mgr.getCurrentSessionIndex()),
-                          static_cast<unsigned long>(g_storage_mgr.getLastSyncedSessionIndex()),
-                          static_cast<unsigned long>(g_storage_mgr.getRecordsWritten()));
-                break;
+            case CMD_SYNC_CHECK_LEGACY:
+            case CMD_SYNC_CHECK: {
+                uint8_t count = 0;
+                char list_buf[256] = {};
+                size_t list_len = g_storage_mgr.getUnsyncedSessionFiles(list_buf, sizeof(list_buf) - 2, count);
 
-            case 0x06: { // Offline session log download requested
-                char req_name[33] = {};
-                if (length > 0) {
-                    memcpy(req_name, payload, length);
-                    req_name[length] = '\0';
+                uint8_t resp_buf[256];
+                resp_buf[0] = (ev.command_id == CMD_SYNC_CHECK) ? RESP_SYNC_CHECK : RESP_SYNC_CHECK_LEGACY;
+                resp_buf[1] = count;
+                if (list_len > 0) {
+                    memcpy(&resp_buf[2], list_buf, list_len);
                 }
-                logPrintf("[BLE CMD] Offline log download requested: %s\n", req_name[0] ? req_name : "(latest)");
+                g_ble_mgr.sendCommandResponse(resp_buf, 2 + list_len);
+                logPrintf("[BLE CMD] Offline sync check: found %u unsynced files (%u bytes list)\n",
+                          static_cast<unsigned int>(count), static_cast<unsigned int>(list_len));
                 break;
             }
 
-            case 0x07: { // Acknowledge offline log sync completed
+            case CMD_SYNC_REQ_LEGACY:
+            case CMD_SYNC_REQUEST_FILE: {
+                char req_name[33] = {};
+                if (length > 0) {
+                    size_t copy_len = (length < 32) ? length : 32;
+                    memcpy(req_name, payload, copy_len);
+                    req_name[copy_len] = '\0';
+                }
+
+                uint8_t resp_opcode = (ev.command_id == CMD_SYNC_REQUEST_FILE) ? RESP_SYNC_CHUNK : RESP_SYNC_CHUNK_LEGACY;
+
+                logPrintf("[BLE CMD] Offline log download requested: %s\n", req_name[0] ? req_name : "(none)");
+
+                if (!req_name[0] || !g_storage_mgr.openStreamingFile(req_name)) {
+                    logPrintf("[BLE CMD] Failed to open %s for streaming!\n", req_name);
+                    uint8_t err_pkt[4] = { resp_opcode, 0x00, 0x00, 0xFF };
+                    g_ble_mgr.sendCommandResponse(err_pkt, sizeof(err_pkt));
+                    break;
+                }
+
+                uint16_t seq = 0;
+                bool is_eof = false;
+                uint8_t chunk_payload[180];
+                size_t bytes_read = 0;
+                uint32_t total_streamed = 0;
+
+                while (!is_eof && g_ble_mgr.isConnected() && !g_system_shutdown_ready.load(std::memory_order_acquire)) {
+                    bool ok = g_storage_mgr.readStreamingChunk(chunk_payload, sizeof(chunk_payload), bytes_read, is_eof);
+                    if (!ok) {
+                        uint8_t err_pkt[4] = {
+                            resp_opcode,
+                            static_cast<uint8_t>(seq & 0xFF),
+                            static_cast<uint8_t>((seq >> 8) & 0xFF),
+                            0xFF
+                        };
+                        g_ble_mgr.sendCommandResponse(err_pkt, sizeof(err_pkt));
+                        break;
+                    }
+
+                    uint8_t pkt[4 + sizeof(chunk_payload)];
+                    pkt[0] = resp_opcode;
+                    pkt[1] = static_cast<uint8_t>(seq & 0xFF);
+                    pkt[2] = static_cast<uint8_t>((seq >> 8) & 0xFF);
+                    pkt[3] = is_eof ? 0x01 : 0x00;
+                    if (bytes_read > 0) {
+                        memcpy(&pkt[4], chunk_payload, bytes_read);
+                    }
+
+                    g_ble_mgr.sendCommandResponse(pkt, 4 + bytes_read);
+                    total_streamed += bytes_read;
+                    seq++;
+
+                    // 15 ms delay yields CPU to FreeRTOS (BLE task, CAN task, Supervisor)
+                    vTaskDelay(pdMS_TO_TICKS(15));
+                }
+
+                g_storage_mgr.closeStreamingFile();
+                logPrintf("[BLE CMD] Streamed %lu bytes (%u chunks, eof=%d) for %s\n",
+                          static_cast<unsigned long>(total_streamed),
+                          static_cast<unsigned int>(seq),
+                          is_eof ? 1 : 0,
+                          req_name);
+                break;
+            }
+
+            case CMD_SYNC_ACK_LEGACY:
+            case CMD_SYNC_ACK: {
                 char ack_name[33] = {};
                 if (length > 0) {
-                    memcpy(ack_name, payload, length);
-                    ack_name[length] = '\0';
+                    size_t copy_len = (length < 32) ? length : 32;
+                    memcpy(ack_name, payload, copy_len);
+                    ack_name[copy_len] = '\0';
                 }
-                g_storage_mgr.acknowledgeSessionSynced(ack_name[0] ? ack_name : nullptr);
+                if (ack_name[0]) {
+                    g_storage_mgr.markSessionSynced(ack_name);
+                } else {
+                    g_storage_mgr.acknowledgeSessionSynced(nullptr);
+                }
+
+                uint8_t resp_opcode = (ev.command_id == CMD_SYNC_ACK) ? RESP_SYNC_ACK : RESP_SYNC_ACK_LEGACY;
+                uint8_t ack_resp[2] = { resp_opcode, 0x01 };
+                g_ble_mgr.sendCommandResponse(ack_resp, sizeof(ack_resp));
+
                 logPrintf("[BLE CMD] Offline log sync acknowledged (%s).\n", ack_name[0] ? ack_name : "current");
                 break;
             }
