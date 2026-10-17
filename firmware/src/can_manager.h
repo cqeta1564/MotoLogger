@@ -26,8 +26,16 @@ public:
     bool receiveFrame(CanFrame& frame, uint32_t wait_ms = 0);
     bool transmitFrame(const CanFrame& frame, uint32_t timeout_ms = 10, bool single_shot = true);
 
-    // Active OBD-II Engine
+    // Active OBD-II Engine & Dedicated Diagnostic Mode
+    void setDiagnosticMode(bool enable);
+    bool isDiagnosticModeActive() const {
+        return diag_mode_active_.load(std::memory_order_acquire) &&
+               (mode_ == OperatingMode::ACTIVE_OBD);
+    }
     void updateObdQueries();
+    void requestDtcScan();
+    bool requestClearDtc();
+    size_t getFormattedDtcList(char* out_buffer, size_t max_len, uint8_t& out_count) const;
     ObdTelemetry getTelemetry();
 
     // Motorcycle Custom CAN Profile (NVS Persistence & Real-Time TWAI decoding)
@@ -48,7 +56,10 @@ public:
     void handleBusRecovery();
 
 private:
+    static constexpr size_t MAX_DTC_ENTRIES = 16;
+
     OperatingMode mode_;
+    std::atomic<bool> diag_mode_active_;
     std::atomic<bool> is_installed_;
     std::atomic<bool> is_running_;
     std::atomic<bool> is_recovering_;
@@ -62,6 +73,9 @@ private:
     uint32_t last_bus_off_time_ms_;
 
     ObdTelemetry obd_data_;
+    ObdDtcEntry dtc_list_[MAX_DTC_ENTRIES];
+    uint8_t dtc_count_;
+    uint8_t isotp_pending_service_;
     mutable portMUX_TYPE obd_mux_;
 
     // Custom Motorcycle CAN Mapping Profile
@@ -70,13 +84,20 @@ private:
     // OBD Request State Machine
     uint8_t current_pid_index_;
     uint32_t last_query_time_ms_;
+    std::atomic<bool> dtc_scan_requested_;
+    std::atomic<bool> dtc_clear_requested_;
+    std::atomic<bool> dtc_clear_acknowledged_;
 
     bool installAndStartTwai(OperatingMode mode);
     void checkTelemetryTimeoutLocked(uint32_t now_ms);
     void decodeCustomFrame(const twai_message_t& msg);
     float decodeSignalValue(const CanSignalConfig& cfg, const uint8_t* payload, uint8_t dlc);
     void parseObdResponse(const twai_message_t& msg);
+    void parseDtcBytesLocked(const uint8_t* bytes, size_t len, uint8_t is_pending);
+    void addDtcEntryLocked(uint8_t b1, uint8_t b2, uint8_t is_pending);
     void sendObdRequest(uint8_t pid);
+    void sendObdServiceRequest(uint8_t service_id);
+    void sendIsoTpFlowControl(uint32_t response_can_id);
     void calculateGear();
 };
 

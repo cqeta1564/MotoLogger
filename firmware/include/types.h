@@ -124,12 +124,21 @@ struct TelemetryRecord {
 };
 
 // ==============================================================================
+// OBD-II Diagnostic Trouble Code (DTC) Entry
+// ==============================================================================
+struct ObdDtcEntry {
+    char    code[6];        // Standard 5-char SAE J2012 code e.g. "P0115" + null terminator
+    uint8_t is_pending;     // 0 = Stored (Mode 03), 1 = Pending (Mode 07)
+};
+
+// ==============================================================================
 // Telemetry Status Flags Bitmask (BleTelemetryPacket::status_flags)
 // ==============================================================================
 constexpr uint8_t STATUS_FLAG_SD_READY           = (1 << 0);
 constexpr uint8_t STATUS_FLAG_ENGINE_RUNNING     = (1 << 1);
 constexpr uint8_t STATUS_FLAG_SHUTDOWN_COUNTDOWN = (1 << 2);
 constexpr uint8_t STATUS_FLAG_IMU_READY          = (1 << 3);
+constexpr uint8_t STATUS_FLAG_DIAG_ACTIVE        = (1 << 4); // 1 = Active CAN TX (Diagnostics), 0 = Listen-Only RX
 
 // ==============================================================================
 // Packed Binary BLE Telemetry Packet (Transmitted at 25 Hz to Smartphone)

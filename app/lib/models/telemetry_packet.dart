@@ -41,6 +41,7 @@ class TelemetryPacket {
   bool get isEngineRunning => (statusFlags & (1 << 1)) != 0;
   bool get isShutdownCountdown => (statusFlags & (1 << 2)) != 0;
   bool get isImuHealthy => (statusFlags & (1 << 3)) != 0;
+  bool get isDiagnosticModeActive => (statusFlags & (1 << 4)) != 0;
 
   // Semantic status flag aliases
   bool get isSdCardMounted => isSdLoggingActive;

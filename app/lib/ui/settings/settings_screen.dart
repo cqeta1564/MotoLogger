@@ -9,6 +9,7 @@ import 'tank_calibration_screen.dart';
 import 'bike_learning_screen.dart';
 import 'bike_profiles_screen.dart';
 import 'esp_pairing_screen.dart';
+import 'diagnostics_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key, required this.telemetryManager});
@@ -187,6 +188,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           subtitle: 'Záznam signálů a import profilu',
                           onTap: () => _open(
                               BikeLearningScreen(telemetryManager: manager))),
+                      _divider(),
+                      SettingsRow(
+                          icon: CupertinoIcons.wrench,
+                          title: 'Diagnostika motocyklu (OBD-II)',
+                          subtitle: available
+                              ? 'Vyčtení a mazání závad ECU · Aktivní dotazování CAN'
+                              : 'Nejprve připojte jednotku nebo zapněte Demo',
+                          onTap: available && !manager.isRecording
+                              ? () => _open(DiagnosticsScreen(
+                                  telemetryManager: manager))
+                              : null),
                     ])),
                     _section('Zobrazení a ukázka'),
                     ContentGroup(
@@ -252,9 +264,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           icon: CupertinoIcons.waveform_path_ecg,
                           title: 'Palubní sběrnice',
                           subtitle: connected
-                              ? (manager.latestPacket.isObdConnected
-                                  ? 'Příjem dat aktivní'
-                                  : 'Čekání na data motocyklu')
+                              ? (manager.isDiagnosticModeActive
+                                  ? 'Aktivní diagnostika (Vysílání OBD-II)'
+                                  : (manager.latestPacket.isObdConnected
+                                      ? 'Pasivní příjem aktivní (Listen-Only)'
+                                      : 'Pasivní poslech (Listen-Only)'))
                               : '—',
                           navigates: false),
                     ])),

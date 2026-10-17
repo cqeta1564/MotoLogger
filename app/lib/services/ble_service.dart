@@ -7,6 +7,7 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import '../core/constants/ble_constants.dart';
 import '../models/telemetry_packet.dart';
 import '../models/can_profile.dart';
+import '../models/dtc_code.dart';
 
 import 'database_service.dart';
 
@@ -95,6 +96,16 @@ class BleService {
   Timer? _chunkWatchdogTimer;
   final BytesBuilder _fileChunkBuffer = BytesBuilder();
   void Function(int bytesRead)? onSyncProgress;
+
+  // Dedicated OBD-II Diagnostic Mode state & completers
+  Completer<bool>? _diagModeCompleter;
+  Completer<List<DiagnosticTroubleCode>>? _diagDtcListCompleter;
+  Completer<bool>? _diagClearAckCompleter;
+  bool _mockDiagModeActive = false;
+  final List<DiagnosticTroubleCode> _mockDtcList = [
+    const DiagnosticTroubleCode(code: 'P0122', isPending: false),
+    const DiagnosticTroubleCode(code: 'C0035', isPending: true),
+  ];
 
   void _setState(BleConnectionState newState) {
     _state = newState;
@@ -470,6 +481,32 @@ class BleService {
       if (c != null && !c.isCompleted) {
         c.complete(true);
       }
+    } else if (opcode == BleConstants.respDiagMode) {
+      final bool active = value.length > 1 && value[1] != 0;
+      final c = _diagModeCompleter;
+      _diagModeCompleter = null;
+      if (c != null && !c.isCompleted) {
+        c.complete(active);
+      }
+    } else if (opcode == BleConstants.respDiagDtcList) {
+      final int count = value.length > 1 ? value[1] : 0;
+      final c = _diagDtcListCompleter;
+      _diagDtcListCompleter = null;
+      if (c != null && !c.isCompleted) {
+        if (count == 0 || value.length <= 2) {
+          c.complete(<DiagnosticTroubleCode>[]);
+        } else {
+          final payload = utf8.decode(value.sublist(2), allowMalformed: true);
+          c.complete(DiagnosticTroubleCode.parseList(payload));
+        }
+      }
+    } else if (opcode == BleConstants.respDiagClearAck) {
+      final bool ok = value.length > 1 ? (value[1] != 0) : true;
+      final c = _diagClearAckCompleter;
+      _diagClearAckCompleter = null;
+      if (c != null && !c.isCompleted) {
+        c.complete(ok);
+      }
     }
   }
 
@@ -632,6 +669,30 @@ class BleService {
 
       _mockTimer = Timer.periodic(const Duration(milliseconds: 40), (timer) {
         time += 0.04;
+        if (_mockDiagModeActive) {
+          // Stationary workshop diagnostic simulation (engine idling on stand)
+          final diagPacket = TelemetryPacket(
+            timestampMs: (time * 1000).toInt(),
+            leanAngleDeg: 0.2 * sin(time * 1.5),
+            pitchDeg: 0.1 * cos(time * 1.5),
+            accelXG: 0.01 * cos(time * 2.0),
+            accelYG: 0.01 * sin(time * 2.0),
+            accelZG: 1.0,
+            gyroXDps: 0.0,
+            gyroYDps: 0.0,
+            gyroZDps: 0.0,
+            engineRpm: 1250 + (35 * sin(time * 3.0)).round(),
+            vehicleSpeedKmh: 0,
+            throttlePosPct: 0,
+            coolantTempC: 88,
+            gear: 0,
+            batteryVoltage: 14.1,
+            statusFlags: 0x1F, // SD OK, Engine Run, IMU OK, Diagnostic TX Active
+          );
+          _telemetryController.add(diagPacket);
+          return;
+        }
+
         // Generate realistic motorcycle lean curve (sweeper corners)
         double lean = 44.0 * sin(time * 0.8);
         double pitch = 4.0 * cos(time * 0.8);
@@ -655,12 +716,13 @@ class BleService {
           coolantTempC: 88,
           gear: gear,
           batteryVoltage: 14.2,
-          statusFlags: 0x0F, // SD OK, Engine Run, IMU OK
+          statusFlags: 0x0F, // SD OK, Engine Run, IMU OK (Listen-Only)
         );
 
         _telemetryController.add(mockPacket);
       });
     } else {
+      _mockDiagModeActive = false;
       _mockTimer?.cancel();
       _mockTimer = null;
       _setState(BleConnectionState.disconnected);
@@ -682,6 +744,149 @@ class BleService {
         batteryVoltage: 12.6,
         statusFlags: 0,
       ));
+    }
+  }
+
+  @visibleForTesting
+  void emitMockTelemetryPacket(TelemetryPacket packet) {
+    if (!_telemetryController.isClosed) {
+      _telemetryController.add(packet);
+    }
+  }
+
+  @visibleForTesting
+  void setMockDtcList(List<DiagnosticTroubleCode> codes) {
+    _mockDtcList
+      ..clear()
+      ..addAll(codes);
+  }
+
+  /// Enables or disables dedicated OBD-II Diagnostic Mode on the ESP32-S3.
+  /// This is the ONLY mode in which the ESP32 transmits frames on the CAN bus.
+  Future<bool> setDiagnosticMode(bool enable) async {
+    if (_mockMode) {
+      _mockDiagModeActive = enable;
+      if (!_telemetryController.isClosed) {
+        _telemetryController.add(TelemetryPacket(
+          timestampMs: DateTime.now().millisecondsSinceEpoch,
+          leanAngleDeg: 0.0,
+          pitchDeg: 0.0,
+          accelXG: 0.0,
+          accelYG: 0.0,
+          accelZG: 1.0,
+          gyroXDps: 0.0,
+          gyroYDps: 0.0,
+          gyroZDps: 0.0,
+          engineRpm: enable ? 1250 : 0,
+          vehicleSpeedKmh: 0,
+          throttlePosPct: 0,
+          coolantTempC: 88,
+          gear: 0,
+          batteryVoltage: 14.1,
+          statusFlags: enable ? 0x1F : 0x0F,
+        ));
+      }
+      debugPrint('[BLE MOCK] Diagnostic mode set to: $enable');
+      return enable;
+    }
+
+    if (_commandChar == null) return false;
+
+    final completer = Completer<bool>();
+    try {
+      if (_diagModeCompleter != null && !_diagModeCompleter!.isCompleted) {
+        _diagModeCompleter!.complete(false);
+      }
+      _diagModeCompleter = completer;
+
+      final bytes = [BleConstants.cmdDiagSetMode, enable ? 1 : 0];
+      await _commandChar!.write(bytes, withoutResponse: false);
+      debugPrint('[BLE] Sent CMD_DIAG_SET_MODE: $enable');
+
+      return await completer.future.timeout(
+        const Duration(seconds: 3),
+        onTimeout: () => enable,
+      );
+    } catch (e) {
+      debugPrint('[BLE] setDiagnosticMode error: $e');
+      return false;
+    } finally {
+      if (_diagModeCompleter == completer) {
+        _diagModeCompleter = null;
+      }
+    }
+  }
+
+  /// Requests an OBD-II Mode 03 (Stored) & Mode 07 (Pending) DTC scan from the ECU.
+  Future<List<DiagnosticTroubleCode>> readDiagnosticTroubleCodes() async {
+    if (_mockMode) {
+      await Future.delayed(const Duration(milliseconds: 120));
+      return List<DiagnosticTroubleCode>.unmodifiable(_mockDtcList);
+    }
+
+    if (_commandChar == null) return const [];
+
+    final completer = Completer<List<DiagnosticTroubleCode>>();
+    try {
+      if (_diagDtcListCompleter != null && !_diagDtcListCompleter!.isCompleted) {
+        _diagDtcListCompleter!.complete(const []);
+      }
+      _diagDtcListCompleter = completer;
+
+      final bytes = [BleConstants.cmdDiagReadDtc];
+      await _commandChar!.write(bytes, withoutResponse: false);
+      debugPrint('[BLE] Sent CMD_DIAG_READ_DTC (Mode 03 & Mode 07 scan).');
+
+      return await completer.future.timeout(
+        const Duration(seconds: 4),
+        onTimeout: () {
+          debugPrint('[BLE] readDiagnosticTroubleCodes timed out.');
+          return const [];
+        },
+      );
+    } catch (e) {
+      debugPrint('[BLE] readDiagnosticTroubleCodes error: $e');
+      return const [];
+    } finally {
+      if (_diagDtcListCompleter == completer) {
+        _diagDtcListCompleter = null;
+      }
+    }
+  }
+
+  /// Requests OBD-II Mode 04 (Clear DTCs and reset MIL / Check Engine light).
+  Future<bool> clearDiagnosticTroubleCodes() async {
+    if (_mockMode) {
+      await Future.delayed(const Duration(milliseconds: 120));
+      _mockDtcList.clear();
+      debugPrint('[BLE MOCK] Cleared all OBD-II DTC fault codes.');
+      return true;
+    }
+
+    if (_commandChar == null) return false;
+
+    final completer = Completer<bool>();
+    try {
+      if (_diagClearAckCompleter != null && !_diagClearAckCompleter!.isCompleted) {
+        _diagClearAckCompleter!.complete(false);
+      }
+      _diagClearAckCompleter = completer;
+
+      final bytes = [BleConstants.cmdDiagClearDtc];
+      await _commandChar!.write(bytes, withoutResponse: false);
+      debugPrint('[BLE] Sent CMD_DIAG_CLEAR_DTC (Mode 04 Clear).');
+
+      return await completer.future.timeout(
+        const Duration(seconds: 4),
+        onTimeout: () => false,
+      );
+    } catch (e) {
+      debugPrint('[BLE] clearDiagnosticTroubleCodes error: $e');
+      return false;
+    } finally {
+      if (_diagClearAckCompleter == completer) {
+        _diagClearAckCompleter = null;
+      }
     }
   }
 
@@ -813,6 +1018,7 @@ class BleService {
   }
 
   void disconnect() {
+    _mockDiagModeActive = false;
     _mockTimer?.cancel();
     _scanTimeoutTimer?.cancel();
     _chunkWatchdogTimer?.cancel();
@@ -837,6 +1043,18 @@ class BleService {
       _syncAckCompleter!.complete(false);
     }
     _syncAckCompleter = null;
+    if (_diagModeCompleter != null && !_diagModeCompleter!.isCompleted) {
+      _diagModeCompleter!.complete(false);
+    }
+    _diagModeCompleter = null;
+    if (_diagDtcListCompleter != null && !_diagDtcListCompleter!.isCompleted) {
+      _diagDtcListCompleter!.complete(const []);
+    }
+    _diagDtcListCompleter = null;
+    if (_diagClearAckCompleter != null && !_diagClearAckCompleter!.isCompleted) {
+      _diagClearAckCompleter!.complete(false);
+    }
+    _diagClearAckCompleter = null;
     _fileChunkBuffer.clear();
     _device?.disconnect();
     _setState(BleConnectionState.disconnected);

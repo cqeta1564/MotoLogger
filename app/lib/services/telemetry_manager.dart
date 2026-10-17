@@ -5,6 +5,7 @@ import 'package:geolocator/geolocator.dart';
 import '../models/telemetry_packet.dart';
 import '../models/fused_sample.dart';
 import '../models/session.dart';
+import '../models/dtc_code.dart';
 import 'ble_service.dart';
 import 'gps_service.dart';
 import 'database_service.dart';
@@ -78,10 +79,40 @@ class TelemetryManager extends ChangeNotifier {
   double get syncProgress => _syncProgress;
   String? get syncStatusMessage => _syncStatusMessage;
 
+  // Dedicated OBD-II Diagnostic Mode state (ONLY mode with active CAN TX)
+  bool _isDiagnosticModeActive = false;
+  bool _isScanningDtc = false;
+  bool _isClearingDtc = false;
+  List<DiagnosticTroubleCode> _diagnosticTroubleCodes = const [];
+  DateTime? _lastDtcScanTime;
+  String? _diagnosticStatusMessage;
+
+  bool get isDiagnosticModeActive =>
+      _isDiagnosticModeActive || _latestPacket.isDiagnosticModeActive;
+  bool get isScanningDtc => _isScanningDtc;
+  bool get isClearingDtc => _isClearingDtc;
+  List<DiagnosticTroubleCode> get diagnosticTroubleCodes =>
+      List.unmodifiable(_diagnosticTroubleCodes);
+  DateTime? get lastDtcScanTime => _lastDtcScanTime;
+  String? get diagnosticStatusMessage => _diagnosticStatusMessage;
+
+  double get currentEffectiveSpeedKmh {
+    final gpsSpeedKmh = (_latestPosition != null && _latestPosition!.speed > 0)
+        ? (_latestPosition!.speed * 3.6)
+        : 0.0;
+    return _latestPacket.vehicleSpeedKmh > 0
+        ? _latestPacket.vehicleSpeedKmh.toDouble()
+        : gpsSpeedKmh;
+  }
+
   bool get isSimulationMode => bleService.isMockMode || gpsService.isMockMode;
 
   void setSimulationMode(bool enable) {
     if (_isRecording || _starting != null) return;
+    if (!enable) {
+      _isDiagnosticModeActive = false;
+      _diagnosticStatusMessage = null;
+    }
     bleService.enableMockMode(enable);
     gpsService.enableMockMode(enable);
     if (!enable) {
@@ -128,6 +159,8 @@ class TelemetryManager extends ChangeNotifier {
         }
         // Automatically check and synchronize any offline sessions from ESP32 MicroSD
         autoSyncOfflineSessions();
+      } else {
+        _isDiagnosticModeActive = false;
       }
       notifyListeners();
     });
@@ -161,6 +194,19 @@ class TelemetryManager extends ChangeNotifier {
           : gpsSpeedKmh;
       if (effectiveSpeedKmh > _topSpeed) {
         _topSpeed = effectiveSpeedKmh;
+      }
+
+      // Safety interlock: if Diagnostic Mode is active and motorcycle starts moving (> 5 km/h),
+      // immediately disable active CAN transmission and return to Listen-Only passive mode.
+      final bool movingAboveSafetyLimit = adjustedPacket.vehicleSpeedKmh > 5 ||
+          (!isSimulationMode && effectiveSpeedKmh > 5.0);
+      if (isDiagnosticModeActive && movingAboveSafetyLimit) {
+        _isDiagnosticModeActive = false;
+        _diagnosticStatusMessage =
+            'Diagnostika byla automaticky ukončena (detekován pohyb > 5 km/h). Jednotka přešla do pasivního režimu.';
+        bleService.setDiagnosticMode(false);
+      } else {
+        _isDiagnosticModeActive = adjustedPacket.isDiagnosticModeActive;
       }
 
       final currentG = sqrt(adjustedPacket.accelXG * adjustedPacket.accelXG +
@@ -237,6 +283,11 @@ class TelemetryManager extends ChangeNotifier {
 
   Future<void> _startRecording(String? title) async {
     if (_isRecording) return;
+
+    // Safety interlock: ensure active OBD-II CAN transmission is disabled before riding
+    if (isDiagnosticModeActive) {
+      await setDiagnosticMode(false);
+    }
 
     _recordingError = null;
     _sessionTitle =
@@ -482,8 +533,103 @@ class TelemetryManager extends ChangeNotifier {
     return importedCount;
   }
 
+  /// Enables or disables dedicated OBD-II Diagnostic Mode on the ESP32-S3.
+  /// This is the ONLY mode in which the ESP32 transmits frames on the CAN bus.
+  Future<bool> setDiagnosticMode(bool enable) async {
+    if (enable) {
+      if (_isRecording) {
+        _diagnosticStatusMessage =
+            'Diagnostiku nelze zapnout během aktivního záznamu jízdy.';
+        notifyListeners();
+        return false;
+      }
+      if (bleService.state != BleConnectionState.connected) {
+        _diagnosticStatusMessage = 'Jednotka MotoLogger není připojena.';
+        notifyListeners();
+        return false;
+      }
+      if (!isSimulationMode && currentEffectiveSpeedKmh > 5.0) {
+        _diagnosticStatusMessage =
+            'Diagnostiku lze zapnout pouze u stojícího motocyklu (rychlost ≤ 5 km/h).';
+        notifyListeners();
+        return false;
+      }
+    }
+
+    final active = await bleService.setDiagnosticMode(enable);
+    _isDiagnosticModeActive = active;
+    if (!enable) {
+      _diagnosticStatusMessage = null;
+    } else if (active) {
+      _diagnosticStatusMessage =
+          'Aktivní OBD-II diagnostika zapnuta (jednotka vysílá dotazy na CAN sběrnici).';
+    }
+    notifyListeners();
+    return active;
+  }
+
+  /// Scans stored (Mode 03) and pending (Mode 07) OBD-II Diagnostic Trouble Codes from the ECU.
+  Future<List<DiagnosticTroubleCode>> scanDiagnosticTroubleCodes() async {
+    if (_isScanningDtc) return _diagnosticTroubleCodes;
+
+    if (!isDiagnosticModeActive) {
+      final enabled = await setDiagnosticMode(true);
+      if (!enabled) return const [];
+    }
+
+    _isScanningDtc = true;
+    _diagnosticStatusMessage =
+        'Vyčítám paměť závad řídicí jednotky (OBD-II Mode 03 / Mode 07)...';
+    notifyListeners();
+
+    try {
+      final codes = await bleService.readDiagnosticTroubleCodes();
+      _diagnosticTroubleCodes = codes;
+      _lastDtcScanTime = DateTime.now();
+      _diagnosticStatusMessage = codes.isEmpty
+          ? 'Paměť závad ECU je čistá (0 chyb).'
+          : 'Nalezeno ${codes.length} chybových kódů v řídicí jednotce.';
+      return List.unmodifiable(_diagnosticTroubleCodes);
+    } finally {
+      _isScanningDtc = false;
+      notifyListeners();
+    }
+  }
+
+  /// Clears stored and pending OBD-II Diagnostic Trouble Codes (Mode 04) from the ECU.
+  Future<bool> clearDiagnosticTroubleCodes() async {
+    if (_isClearingDtc) return false;
+
+    if (!isDiagnosticModeActive) {
+      final enabled = await setDiagnosticMode(true);
+      if (!enabled) return false;
+    }
+
+    _isClearingDtc = true;
+    _diagnosticStatusMessage = 'Mažu paměť závad ECU (OBD-II Mode 04)...';
+    notifyListeners();
+
+    try {
+      final ok = await bleService.clearDiagnosticTroubleCodes();
+      if (ok) {
+        _diagnosticTroubleCodes = const [];
+        _lastDtcScanTime = DateTime.now();
+        _diagnosticStatusMessage = 'Paměť závad ECU byla úspěšně vymazána.';
+      } else {
+        _diagnosticStatusMessage = 'Vymazání paměti závad se nezdařilo.';
+      }
+      return ok;
+    } finally {
+      _isClearingDtc = false;
+      notifyListeners();
+    }
+  }
+
   @override
   void dispose() {
+    if (_isDiagnosticModeActive) {
+      bleService.setDiagnosticMode(false);
+    }
     if (gpsService.isMockMode) {
       gpsService.enableMockMode(false);
     }

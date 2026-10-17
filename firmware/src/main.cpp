@@ -276,6 +276,89 @@ static void processBleCommandQueue() {
                 break;
             }
 
+            case CMD_DIAG_SET_MODE: {
+                bool enable = (length >= 1) && (payload[0] != 0);
+                ObdTelemetry obd = g_can_mgr.getTelemetry();
+                if (enable && obd.vehicle_speed_kmh > 5) {
+                    logPrintf("[BLE CMD] Diagnostic mode DENIED (Speed = %u km/h > 5 km/h safety limit).\n",
+                              obd.vehicle_speed_kmh);
+                    enable = false;
+                }
+
+                g_can_mgr.setDiagnosticMode(enable);
+                // Allow Task_CAN to execute the TWAI mode reconfiguration on Core 0
+                vTaskDelay(pdMS_TO_TICKS(60));
+
+                bool active = g_can_mgr.isDiagnosticModeActive();
+                uint8_t resp[2] = { RESP_DIAG_MODE, static_cast<uint8_t>(active ? 1 : 0) };
+                g_ble_mgr.sendCommandResponse(resp, sizeof(resp));
+                logPrintf("[BLE CMD] Diagnostic mode %s (CAN mode: %s)\n",
+                          active ? "ENABLED" : "DISABLED",
+                          active ? "ACTIVE_OBD (TX+RX)" : "LISTEN_ONLY (RX only)");
+                break;
+            }
+
+            case CMD_DIAG_READ_DTC: {
+                ObdTelemetry obd = g_can_mgr.getTelemetry();
+                if (!g_can_mgr.isDiagnosticModeActive()) {
+                    if (obd.vehicle_speed_kmh <= 5) {
+                        g_can_mgr.setDiagnosticMode(true);
+                        vTaskDelay(pdMS_TO_TICKS(60));
+                    } else {
+                        logPrintf("[BLE CMD] DTC read DENIED (Speed = %u km/h > 5 km/h).\n", obd.vehicle_speed_kmh);
+                        uint8_t err_resp[2] = { RESP_DIAG_DTC_LIST, 0x00 };
+                        g_ble_mgr.sendCommandResponse(err_resp, sizeof(err_resp));
+                        break;
+                    }
+                }
+
+                g_can_mgr.requestDtcScan();
+                // Wait up to 250 ms for Task_CAN to transmit Service 0x03 & 0x07 and receive ECU ISO-TP frames
+                vTaskDelay(pdMS_TO_TICKS(250));
+
+                uint8_t dtc_count = 0;
+                char dtc_buf[240] = {};
+                size_t dtc_len = g_can_mgr.getFormattedDtcList(dtc_buf, sizeof(dtc_buf) - 2, dtc_count);
+
+                uint8_t resp[244];
+                resp[0] = RESP_DIAG_DTC_LIST;
+                resp[1] = dtc_count;
+                if (dtc_len > 0) {
+                    memcpy(&resp[2], dtc_buf, dtc_len);
+                }
+                g_ble_mgr.sendCommandResponse(resp, 2 + dtc_len);
+                logPrintf("[BLE CMD] OBD-II DTC scan complete: %u fault(s) (%s)\n",
+                          static_cast<unsigned int>(dtc_count),
+                          dtc_len > 0 ? dtc_buf : "none");
+                break;
+            }
+
+            case CMD_DIAG_CLEAR_DTC: {
+                ObdTelemetry obd = g_can_mgr.getTelemetry();
+                if (!g_can_mgr.isDiagnosticModeActive()) {
+                    if (obd.vehicle_speed_kmh <= 5) {
+                        g_can_mgr.setDiagnosticMode(true);
+                        vTaskDelay(pdMS_TO_TICKS(60));
+                    } else {
+                        logPrintf("[BLE CMD] DTC clear DENIED (Speed = %u km/h > 5 km/h).\n", obd.vehicle_speed_kmh);
+                        uint8_t err_resp[2] = { RESP_DIAG_CLEAR_ACK, 0x00 };
+                        g_ble_mgr.sendCommandResponse(err_resp, sizeof(err_resp));
+                        break;
+                    }
+                }
+
+                bool requested = g_can_mgr.requestClearDtc();
+                if (requested) {
+                    vTaskDelay(pdMS_TO_TICKS(200));
+                }
+
+                uint8_t resp[2] = { RESP_DIAG_CLEAR_ACK, static_cast<uint8_t>(requested ? 1 : 0) };
+                g_ble_mgr.sendCommandResponse(resp, sizeof(resp));
+                logPrintf("[BLE CMD] OBD-II Clear DTC (Service 04) %s.\n",
+                          requested ? "transmitted" : "rejected");
+                break;
+            }
+
             default:
                 logPrintf("[BLE CMD] Unknown command 0x%02X received.\n", ev.command_id);
                 break;
@@ -304,14 +387,12 @@ void setup() {
     Serial.println("  MotoLogger v3.4 + BNO085 + BLE Android/CarPlay");
     Serial.println("==============================================\n");
 
-    // 4. Initialize CAN / TWAI Subsystem (500 kbps; auto-selects Listen-Only if custom profile active, else Active OBD)
+    // 4. Initialize CAN / TWAI Subsystem (500 kbps; ALWAYS boots in Listen-Only passive mode)
     Serial.print("[CAN] Initializing TWAI (500 kbps)... ");
-    if (g_can_mgr.begin(CanManager::OperatingMode::ACTIVE_OBD)) {
-        Serial.printf("OK (%s)\n",
-                      g_can_mgr.isCustomProfileActive() ? "Custom Profile / Listen-Only" : "Standard OBD-II");
+    if (g_can_mgr.begin(CanManager::OperatingMode::LISTEN_ONLY)) {
+        Serial.println("OK (Listen-Only / Passive Safe Mode)");
     } else {
-        Serial.println("FAILED! Retrying in Listen-Only mode...");
-        g_can_mgr.begin(CanManager::OperatingMode::LISTEN_ONLY);
+        Serial.println("FAILED!");
     }
 
     // 5. Initialize BNO085 IMU Subsystem
@@ -444,12 +525,13 @@ void taskBleStreaming(void* pvParameters) {
             pkt.battery_mv         = clampRoundUint16(v_bat, 1000.0f, 65535);
 
             uint8_t flags = 0;
-            if (g_storage_mgr.isReady())     flags |= STATUS_FLAG_SD_READY;
-            if (g_power_mgr.isEngineRunning()) flags |= STATUS_FLAG_ENGINE_RUNNING;
+            if (g_storage_mgr.isReady())           flags |= STATUS_FLAG_SD_READY;
+            if (g_power_mgr.isEngineRunning())     flags |= STATUS_FLAG_ENGINE_RUNNING;
             if (g_power_mgr.getState() == PowerState::COUNTDOWN_TO_SHUTDOWN) {
                 flags |= STATUS_FLAG_SHUTDOWN_COUNTDOWN;
             }
-            if (g_imu_mgr.isReady())         flags |= STATUS_FLAG_IMU_READY;
+            if (g_imu_mgr.isReady())               flags |= STATUS_FLAG_IMU_READY;
+            if (g_can_mgr.isDiagnosticModeActive()) flags |= STATUS_FLAG_DIAG_ACTIVE;
             pkt.status_flags       = flags;
 
             g_ble_mgr.sendTelemetry(pkt);
@@ -587,13 +669,17 @@ void taskSupervisor(void* pvParameters) {
         // 1. Process any queued BLE commands outside the NimBLE host callback
         processBleCommandQueue();
 
-        // 2. Log BLE connection state transitions cleanly
+        // 2. Log BLE connection state transitions cleanly & enforce Diagnostic Mode safety interlock
         bool ble_conn = g_ble_mgr.isConnected();
         if (ble_conn != prev_ble_connected) {
             prev_ble_connected = ble_conn;
             if (ble_conn) {
                 logPrintf("[BLE] Smartphone connected! Telemetry stream ready.\n");
             } else {
+                if (g_can_mgr.isDiagnosticModeActive()) {
+                    g_can_mgr.setDiagnosticMode(false);
+                    logPrintf("[CAN] BLE disconnected -> Diagnostic mode automatically disabled (returned to Listen-Only).\n");
+                }
                 logPrintf("[BLE] Smartphone disconnected. Advertising restarted.\n");
             }
         }

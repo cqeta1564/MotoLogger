@@ -13,6 +13,7 @@ static constexpr size_t OBD_PID_COUNT = sizeof(OBD_PID_LIST) / sizeof(OBD_PID_LI
 
 CanManager::CanManager()
     : mode_(OperatingMode::LISTEN_ONLY),
+      diag_mode_active_(false),
       is_installed_(false),
       is_running_(false),
       is_recovering_(false),
@@ -23,11 +24,17 @@ CanManager::CanManager()
       error_count_(0),
       bus_off_count_(0),
       last_bus_off_time_ms_(0),
+      dtc_count_(0),
+      isotp_pending_service_(0),
       obd_mux_(portMUX_INITIALIZER_UNLOCKED),
       current_pid_index_(0),
-      last_query_time_ms_(0) {
+      last_query_time_ms_(0),
+      dtc_scan_requested_(false),
+      dtc_clear_requested_(false),
+      dtc_clear_acknowledged_(false) {
     memset(&obd_data_, 0, sizeof(obd_data_));
     obd_data_.gear = -1;
+    memset(dtc_list_, 0, sizeof(dtc_list_));
     memset(&custom_profile_, 0, sizeof(custom_profile_));
     custom_profile_.magic = 0x4D4F544F;
 }
@@ -80,26 +87,35 @@ bool CanManager::installAndStartTwai(OperatingMode mode) {
 }
 
 bool CanManager::begin(OperatingMode mode) {
+    (void)mode;
     // 0. Load any custom motorcycle profile saved in NVS
     loadProfileFromNvs();
-    if (custom_profile_.profile_active) {
-        mode = OperatingMode::LISTEN_ONLY;
-        Serial.println("[CAN] Active custom motorcycle profile loaded from NVS (Listen-Only).");
-    }
+
+    // Always boot strictly in passive LISTEN_ONLY mode (zero CAN bus transmission).
+    // Active transmission is only enabled when the user explicitly enters Diagnostic Mode.
+    diag_mode_active_.store(false, std::memory_order_release);
 
     // 1. Configure transceiver slope control / standby pin
     // Setting CAN_RS (GPIO38) to LOW places SN65HVD230 in High-Speed mode
     pinMode(PIN_CAN_RS, OUTPUT);
     digitalWrite(PIN_CAN_RS, LOW);
 
-    // 2. Install and start TWAI driver
-    return installAndStartTwai(mode);
+    // 2. Install and start TWAI driver in LISTEN_ONLY mode
+    return installAndStartTwai(OperatingMode::LISTEN_ONLY);
 }
 
 bool CanManager::reconfigureMode(OperatingMode new_mode) {
     pending_mode_ = new_mode;
     mode_change_pending_.store(true, std::memory_order_release);
     return true;
+}
+
+void CanManager::setDiagnosticMode(bool enable) {
+    diag_mode_active_.store(enable, std::memory_order_release);
+    reconfigureMode(enable ? OperatingMode::ACTIVE_OBD : OperatingMode::LISTEN_ONLY);
+    Serial.printf("[CAN] Diagnostic Mode %s (%s)\n",
+                  enable ? "ENABLED" : "DISABLED",
+                  enable ? "TWAI_MODE_NORMAL / Active OBD-II TX" : "TWAI_MODE_LISTEN_ONLY / Passive RX");
 }
 
 void CanManager::stop() {
@@ -209,8 +225,22 @@ bool CanManager::receiveFrame(CanFrame& frame, uint32_t wait_ms) {
     if (!frame.is_rtr) {
         if (isCustomProfileActive()) {
             decodeCustomFrame(msg);
-        } else if (msg.identifier >= 0x7E8 && msg.identifier <= 0x7EF) {
+        }
+        if (msg.identifier >= 0x7E8 && msg.identifier <= 0x7EF) {
             parseObdResponse(msg);
+        }
+
+        // Automotive Safety Interlock: Automatically exit active diagnostic TX if vehicle moves (> 5 km/h)
+        if (diag_mode_active_.load(std::memory_order_acquire)) {
+            uint8_t current_speed = 0;
+            portENTER_CRITICAL(&obd_mux_);
+            current_speed = obd_data_.vehicle_speed_kmh;
+            portEXIT_CRITICAL(&obd_mux_);
+            if (current_speed > 5) {
+                Serial.printf("[CAN] Safety Interlock: Speed %u km/h > 5 km/h -> Disengaging Diagnostic TX Mode!\n",
+                              static_cast<unsigned int>(current_speed));
+                setDiagnosticMode(false);
+            }
         }
     }
 
@@ -218,9 +248,11 @@ bool CanManager::receiveFrame(CanFrame& frame, uint32_t wait_ms) {
 }
 
 bool CanManager::transmitFrame(const CanFrame& frame, uint32_t timeout_ms, bool single_shot) {
+    // Strictly block any CAN transmission unless explicitly in Diagnostic Mode (ACTIVE_OBD)
     if (!is_running_.load(std::memory_order_acquire) ||
         is_recovering_.load(std::memory_order_acquire) ||
-        mode_ == OperatingMode::LISTEN_ONLY) {
+        !diag_mode_active_.load(std::memory_order_acquire) ||
+        mode_ != OperatingMode::ACTIVE_OBD) {
         return false;
     }
 
@@ -263,16 +295,116 @@ void CanManager::sendObdRequest(uint8_t pid) {
     transmitFrame(req, 5, true);
 }
 
+void CanManager::sendObdServiceRequest(uint8_t service_id) {
+    CanFrame req = {};
+    req.id = 0x7DF;
+    req.is_extended = false;
+    req.is_rtr = false;
+    req.dlc = 8;
+    req.data[0] = 0x01; // 1 byte service request (0x03, 0x04, or 0x07)
+    req.data[1] = service_id;
+    req.data[2] = 0x55;
+    req.data[3] = 0x55;
+    req.data[4] = 0x55;
+    req.data[5] = 0x55;
+    req.data[6] = 0x55;
+    req.data[7] = 0x55;
+
+    transmitFrame(req, 10, true);
+}
+
+void CanManager::sendIsoTpFlowControl(uint32_t response_can_id) {
+    if (response_can_id < 0x7E8 || response_can_id > 0x7EF) return;
+    CanFrame fc = {};
+    fc.id = response_can_id - 8; // Physical ECU request ID (0x7E0..0x7E7)
+    fc.is_extended = false;
+    fc.is_rtr = false;
+    fc.dlc = 8;
+    fc.data[0] = 0x30; // Flow Control: Continue To Send (CTS)
+    fc.data[1] = 0x00; // Block Size = 0 (send all remaining frames)
+    fc.data[2] = 0x05; // Separation Time (STmin) = 5 ms
+    fc.data[3] = 0x55;
+    fc.data[4] = 0x55;
+    fc.data[5] = 0x55;
+    fc.data[6] = 0x55;
+    fc.data[7] = 0x55;
+
+    transmitFrame(fc, 5, true);
+}
+
+void CanManager::requestDtcScan() {
+    portENTER_CRITICAL(&obd_mux_);
+    dtc_count_ = 0;
+    isotp_pending_service_ = 0;
+    memset(dtc_list_, 0, sizeof(dtc_list_));
+    portEXIT_CRITICAL(&obd_mux_);
+    dtc_scan_requested_.store(true, std::memory_order_release);
+}
+
+bool CanManager::requestClearDtc() {
+    portENTER_CRITICAL(&obd_mux_);
+    dtc_count_ = 0;
+    isotp_pending_service_ = 0;
+    memset(dtc_list_, 0, sizeof(dtc_list_));
+    portEXIT_CRITICAL(&obd_mux_);
+    dtc_clear_acknowledged_.store(false, std::memory_order_release);
+    dtc_clear_requested_.store(true, std::memory_order_release);
+    return true;
+}
+
+size_t CanManager::getFormattedDtcList(char* out_buffer, size_t max_len, uint8_t& out_count) const {
+    out_count = 0;
+    if (!out_buffer || max_len == 0) return 0;
+    out_buffer[0] = '\0';
+
+    ObdDtcEntry snapshot[MAX_DTC_ENTRIES];
+    uint8_t count = 0;
+
+    portENTER_CRITICAL(&obd_mux_);
+    count = dtc_count_;
+    if (count > MAX_DTC_ENTRIES) count = MAX_DTC_ENTRIES;
+    memcpy(snapshot, dtc_list_, count * sizeof(ObdDtcEntry));
+    portEXIT_CRITICAL(&obd_mux_);
+
+    size_t pos = 0;
+    for (uint8_t i = 0; i < count; i++) {
+        int written = snprintf(out_buffer + pos, max_len - pos, "%s,%c\n",
+                               snapshot[i].code,
+                               snapshot[i].is_pending ? 'P' : 'S');
+        if (written <= 0 || pos + static_cast<size_t>(written) >= max_len) {
+            break;
+        }
+        pos += static_cast<size_t>(written);
+        out_count++;
+    }
+    return pos;
+}
+
 void CanManager::updateObdQueries() {
-    if (isCustomProfileActive() ||
+    // Strictly never transmit on CAN unless Diagnostic Mode is active
+    if (!diag_mode_active_.load(std::memory_order_acquire) ||
         mode_ != OperatingMode::ACTIVE_OBD ||
         !is_running_.load(std::memory_order_acquire) ||
         is_recovering_.load(std::memory_order_acquire)) {
         return;
     }
 
+    if (dtc_clear_requested_.exchange(false, std::memory_order_acq_rel)) {
+        sendObdServiceRequest(0x04); // Mode 04: Clear DTCs and reset MIL
+        last_query_time_ms_ = millis();
+        return;
+    }
+
+    if (dtc_scan_requested_.exchange(false, std::memory_order_acq_rel)) {
+        sendObdServiceRequest(0x03); // Mode 03: Stored DTCs
+        vTaskDelay(pdMS_TO_TICKS(35));
+        sendObdServiceRequest(0x07); // Mode 07: Pending DTCs
+        last_query_time_ms_ = millis();
+        return;
+    }
+
     uint32_t now = millis();
-    // Query each PID sequentially every 50 ms (20 Hz query cycle across 4 PIDs = 5 Hz per PID)
+    // Query each Mode 01 PID sequentially every 50 ms (20 Hz query cycle across 4 PIDs = 5 Hz per PID)
     if (now - last_query_time_ms_ >= 50) {
         last_query_time_ms_ = now;
         sendObdRequest(OBD_PID_LIST[current_pid_index_]);
@@ -280,12 +412,112 @@ void CanManager::updateObdQueries() {
     }
 }
 
+void CanManager::addDtcEntryLocked(uint8_t b1, uint8_t b2, uint8_t is_pending) {
+    if (b1 == 0 && b2 == 0) return; // 0x0000 padding is not a DTC
+    if (dtc_count_ >= MAX_DTC_ENTRIES) return;
+
+    static const char PREFIXES[4] = { 'P', 'C', 'B', 'U' };
+    static const char HEX_CHARS[16] = {
+        '0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F'
+    };
+
+    char code[6];
+    code[0] = PREFIXES[(b1 >> 6) & 0x03];
+    code[1] = static_cast<char>('0' + ((b1 >> 4) & 0x03));
+    code[2] = HEX_CHARS[b1 & 0x0F];
+    code[3] = HEX_CHARS[(b2 >> 4) & 0x0F];
+    code[4] = HEX_CHARS[b2 & 0x0F];
+    code[5] = '\0';
+
+    // Deduplicate existing DTC code
+    for (uint8_t i = 0; i < dtc_count_; i++) {
+        if (strcmp(dtc_list_[i].code, code) == 0) {
+            if (!is_pending) {
+                dtc_list_[i].is_pending = 0; // Promote to stored if reported by both 03 and 07
+            }
+            return;
+        }
+    }
+
+    memcpy(dtc_list_[dtc_count_].code, code, sizeof(code));
+    dtc_list_[dtc_count_].is_pending = is_pending;
+    dtc_count_++;
+}
+
+void CanManager::parseDtcBytesLocked(const uint8_t* bytes, size_t len, uint8_t is_pending) {
+    for (size_t i = 0; i + 1 < len; i += 2) {
+        addDtcEntryLocked(bytes[i], bytes[i + 1], is_pending);
+    }
+}
+
 void CanManager::parseObdResponse(const twai_message_t& msg) {
-    // Standard ISO 15765-4 single frame response:
-    // data[0] = length
-    // data[1] = 0x41 (Service 01 response)
-    // data[2] = PID
-    if (msg.data_length_code < 3 || msg.data[1] != 0x41) return;
+    if (msg.data_length_code < 2) return;
+
+    uint8_t pci_type = msg.data[0] & 0xF0;
+
+    // 1. ISO-TP First Frame (Multi-Frame DTC response: 0x10)
+    if (pci_type == 0x10 && msg.data_length_code >= 6) {
+        uint8_t service_resp = msg.data[2];
+        if (service_resp == 0x43 || service_resp == 0x47) {
+            uint8_t is_pending = (service_resp == 0x47) ? 1 : 0;
+            portENTER_CRITICAL(&obd_mux_);
+            isotp_pending_service_ = service_resp;
+            // msg.data[3] is DTC count in ISO 15765-4 CAN; bytes 4..7 hold first two DTCs
+            parseDtcBytesLocked(&msg.data[4], msg.data_length_code - 4, is_pending);
+            portEXIT_CRITICAL(&obd_mux_);
+            sendIsoTpFlowControl(msg.identifier);
+        }
+        return;
+    }
+
+    // 2. ISO-TP Consecutive Frame (0x20..0x2F)
+    if (pci_type == 0x20 && msg.data_length_code >= 3) {
+        portENTER_CRITICAL(&obd_mux_);
+        if (isotp_pending_service_ == 0x43 || isotp_pending_service_ == 0x47) {
+            uint8_t is_pending = (isotp_pending_service_ == 0x47) ? 1 : 0;
+            parseDtcBytesLocked(&msg.data[1], msg.data_length_code - 1, is_pending);
+        }
+        portEXIT_CRITICAL(&obd_mux_);
+        return;
+    }
+
+    // 3. ISO-TP Single Frame (0x00)
+    if (pci_type != 0x00) return;
+    uint8_t sf_len = msg.data[0] & 0x0F;
+    if (sf_len == 0 || sf_len + 1 > msg.data_length_code) return;
+
+    uint8_t service_resp = msg.data[1];
+
+    // Service 04 Positive Response (0x44: DTCs cleared)
+    if (service_resp == 0x44) {
+        portENTER_CRITICAL(&obd_mux_);
+        dtc_count_ = 0;
+        memset(dtc_list_, 0, sizeof(dtc_list_));
+        portEXIT_CRITICAL(&obd_mux_);
+        dtc_clear_acknowledged_.store(true, std::memory_order_release);
+        return;
+    }
+
+    // Service 03 (0x43 Stored DTCs) or Service 07 (0x47 Pending DTCs) Single Frame
+    if (service_resp == 0x43 || service_resp == 0x47) {
+        uint8_t is_pending = (service_resp == 0x47) ? 1 : 0;
+        if (sf_len >= 2) {
+            portENTER_CRITICAL(&obd_mux_);
+            // In ISO 15765-4 CAN J1979: data[2] is DTC count, followed by 2-byte DTC pairs (sf_len is even: 2, 4, 6).
+            // In legacy KWP-style frames without count byte: sf_len is odd (3, 5, 7) and pairs start at data[2].
+            size_t payload_offset = ((sf_len % 2) == 0) ? 3 : 2;
+            size_t payload_end = 1 + sf_len;
+            if (payload_end > msg.data_length_code) payload_end = msg.data_length_code;
+            if (payload_end > payload_offset) {
+                parseDtcBytesLocked(&msg.data[payload_offset], payload_end - payload_offset, is_pending);
+            }
+            portEXIT_CRITICAL(&obd_mux_);
+        }
+        return;
+    }
+
+    // Service 01 (0x41 Live Powertrain Telemetry)
+    if (msg.data_length_code < 3 || service_resp != 0x41) return;
 
     uint8_t pid = msg.data[2];
 
@@ -422,7 +654,9 @@ void CanManager::setSignalConfig(uint8_t signal_id, const CanSignalConfig& cfg) 
     portEXIT_CRITICAL(&obd_mux_);
 
     saveProfileToNvs();
-    reconfigureMode(OperatingMode::LISTEN_ONLY);
+    if (!diag_mode_active_.load(std::memory_order_acquire)) {
+        reconfigureMode(OperatingMode::LISTEN_ONLY);
+    }
 
     Serial.printf("[CAN] Signal %u updated (ID: 0x%03lX, Start: %u, Len: %u, BigEnd: %u, Mult: %.4f, Off: %.1f)\n",
                   signal_id, static_cast<unsigned long>(sanitized.can_id), sanitized.start_byte,
@@ -433,7 +667,7 @@ void CanManager::setProfileActive(bool active) {
     portENTER_CRITICAL(&obd_mux_);
     custom_profile_.profile_active = active ? 1 : 0;
     if (!active) {
-        // Clear custom signal active flags when returning to Standard OBD-II mode
+        // Clear custom signal active flags when disabling custom profile
         custom_profile_.rpm.is_active = 0;
         custom_profile_.speed.is_active = 0;
         custom_profile_.throttle.is_active = 0;
@@ -443,8 +677,12 @@ void CanManager::setProfileActive(bool active) {
     portEXIT_CRITICAL(&obd_mux_);
 
     saveProfileToNvs();
-    reconfigureMode(active ? OperatingMode::LISTEN_ONLY : OperatingMode::ACTIVE_OBD);
-    Serial.printf("[CAN] Profile active mode set to: %s\n", active ? "CUSTOM_CAN" : "OBD_STANDARD");
+    // Normal operation always stays LISTEN_ONLY unless Diagnostic Mode is currently active
+    reconfigureMode(diag_mode_active_.load(std::memory_order_acquire)
+                    ? OperatingMode::ACTIVE_OBD
+                    : OperatingMode::LISTEN_ONLY);
+    Serial.printf("[CAN] Profile active mode set to: %s (TWAI remains LISTEN_ONLY outside Diagnostics)\n",
+                  active ? "CUSTOM_CAN" : "PASSIVE_STANDARD");
 }
 
 void CanManager::saveProfileToNvs() {

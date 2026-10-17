@@ -84,6 +84,9 @@ constexpr uint8_t CMD_SYNC_ACK_LEGACY   = 0x07;
 constexpr uint8_t CMD_SYNC_CHECK        = 0x20;
 constexpr uint8_t CMD_SYNC_REQUEST_FILE = 0x21;
 constexpr uint8_t CMD_SYNC_ACK          = 0x22;
+constexpr uint8_t CMD_DIAG_SET_MODE     = 0x30; // 1 = Active OBD-II TX Mode, 0 = Listen-Only RX Mode
+constexpr uint8_t CMD_DIAG_READ_DTC     = 0x31; // Query OBD-II Mode 03 & Mode 07 DTC fault codes
+constexpr uint8_t CMD_DIAG_CLEAR_DTC    = 0x32; // Clear OBD-II Mode 04 DTC fault codes & MIL
 
 // BLE Responses from ESP32 on Command Characteristic
 constexpr uint8_t RESP_SYNC_CHECK        = 0xA0; // 0x20 | 0x80
@@ -92,6 +95,9 @@ constexpr uint8_t RESP_SYNC_CHUNK        = 0xA1; // 0x21 | 0x80
 constexpr uint8_t RESP_SYNC_CHUNK_LEGACY = 0x86; // 0x06 | 0x80
 constexpr uint8_t RESP_SYNC_ACK          = 0xA2; // 0x22 | 0x80
 constexpr uint8_t RESP_SYNC_ACK_LEGACY   = 0x87; // 0x07 | 0x80
+constexpr uint8_t RESP_DIAG_MODE         = 0xB0; // 0x30 | 0x80
+constexpr uint8_t RESP_DIAG_DTC_LIST     = 0xB1; // 0x31 | 0x80
+constexpr uint8_t RESP_DIAG_CLEAR_ACK    = 0xB2; // 0x32 | 0x80
 
 // ==============================================================================
 // 7. FREERTOS TASK CONFIGURATION (Dual-Core Affinity)
