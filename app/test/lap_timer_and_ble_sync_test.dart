@@ -405,6 +405,40 @@ void main() {
       expect(find.text('Nejlepší'), findsOneWidget);
     });
 
+    testWidgets('SessionDetailScreen lap card survives 1.8x accessibility text scaling without overflow', (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final session = RideSession(
+        id: 99,
+        title: 'Brno Circuit Test',
+        startTime: DateTime(2026, 6, 15, 14, 0),
+        endTime: DateTime(2026, 6, 15, 14, 25),
+        maxLeanLeftDeg: -50.0,
+        maxLeanRightDeg: 48.0,
+        topSpeedKmh: 210.0,
+        maxGForce: 1.35,
+        totalDistanceKm: 15.4,
+        sampleCount: 1200,
+      );
+
+      final fakeDb = _FakeLapDbService();
+
+      await tester.pumpWidget(MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(textScaler: const TextScaler.linear(1.8)),
+          child: child!,
+        ),
+        home: SessionDetailScreen(session: session, dbService: fakeDb),
+      ));
+
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.text('ČASY NA KOLO'), findsOneWidget);
+    });
+
     testWidgets('SessionDetailScreen omits lap timer card when no laps detected (A-to-B ride)', (tester) async {
       final session = RideSession(
         id: 100,

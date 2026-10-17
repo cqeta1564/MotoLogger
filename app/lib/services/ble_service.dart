@@ -92,6 +92,7 @@ class BleService {
   Completer<List<String>>? _syncCheckCompleter;
   Completer<String?>? _syncFileCompleter;
   Completer<bool>? _syncAckCompleter;
+  Timer? _chunkWatchdogTimer;
   final BytesBuilder _fileChunkBuffer = BytesBuilder();
   void Function(int bytesRead)? onSyncProgress;
 
@@ -328,10 +329,10 @@ class BleService {
       await _device!.connect(autoConnect: true, timeout: const Duration(seconds: 10));
 
       await _connectionSubscription?.cancel();
-      _connectionSubscription = _device!.connectionState.listen((BluetoothConnectionState s) {
+      _connectionSubscription = _device!.connectionState.listen((BluetoothConnectionState s) async {
         if (s == BluetoothConnectionState.connected) {
+          await _discoverServices();
           _setState(BleConnectionState.connected);
-          _discoverServices();
         } else if (s == BluetoothConnectionState.disconnected) {
           _setState(BleConnectionState.disconnected);
           debugPrint('[BLE] Disconnected. Re-starting auto scan...');
@@ -348,6 +349,11 @@ class BleService {
     if (_device == null) return;
 
     try {
+      // Request 256-byte MTU for 28B telemetry packets and 184B SD sync chunks
+      try {
+        await _device!.requestMtu(256);
+      } catch (_) {}
+
       List<BluetoothService> services = await _device!.discoverServices();
       for (var s in services) {
         if (s.uuid == Guid(BleConstants.serviceUuid)) {
@@ -382,37 +388,66 @@ class BleService {
     }
   }
 
+  void _resetChunkWatchdog() {
+    _chunkWatchdogTimer?.cancel();
+    _chunkWatchdogTimer = Timer(const Duration(seconds: 5), () {
+      debugPrint('[BLE] downloadOfflineLog chunk inactivity timeout (5s without packets).');
+      final c = _syncFileCompleter;
+      _syncFileCompleter = null;
+      if (c != null && !c.isCompleted) {
+        c.complete(null);
+      }
+    });
+  }
+
+  @visibleForTesting
+  void handleCommandResponseForTest(List<int> value) => _handleCommandResponse(value);
+
   void _handleCommandResponse(List<int> value) {
     if (value.isEmpty) return;
     final int opcode = value[0];
 
     if (opcode == BleConstants.respSyncCheck || opcode == BleConstants.respSyncCheckLegacy) {
       final int count = value.length > 1 ? value[1] : 0;
-      if (count == 0 || value.length <= 2) {
-        _syncCheckCompleter?.complete(<String>[]);
-      } else {
-        final payload = utf8.decode(value.sublist(2), allowMalformed: true);
-        final files = payload
-            .split('\n')
-            .map((s) => s.trim())
-            .where((s) => s.isNotEmpty)
-            .toList();
-        _syncCheckCompleter?.complete(files);
-      }
+      final c = _syncCheckCompleter;
       _syncCheckCompleter = null;
+      if (c != null && !c.isCompleted) {
+        if (count == 0 || value.length <= 2) {
+          c.complete(<String>[]);
+        } else {
+          final payload = utf8.decode(value.sublist(2), allowMalformed: true);
+          final files = payload
+              .split('\n')
+              .map((s) => s.trim())
+              .where((s) => s.isNotEmpty)
+              .toList();
+          c.complete(files);
+        }
+      }
     } else if (opcode == BleConstants.respSyncChunk || opcode == BleConstants.respSyncChunkLegacy) {
       if (value.length < 4) {
-        _syncFileCompleter?.complete(null);
+        _chunkWatchdogTimer?.cancel();
+        final c = _syncFileCompleter;
         _syncFileCompleter = null;
+        if (c != null && !c.isCompleted) {
+          c.complete(null);
+        }
         return;
       }
       final int flags = value[3];
       if (flags == 0xFF) {
         // Error or file not found on SD
-        _syncFileCompleter?.complete(null);
+        _chunkWatchdogTimer?.cancel();
+        final c = _syncFileCompleter;
         _syncFileCompleter = null;
+        if (c != null && !c.isCompleted) {
+          c.complete(null);
+        }
         return;
       }
+
+      // Reset inactivity watchdog on every valid chunk received
+      _resetChunkWatchdog();
 
       if (value.length > 4) {
         _fileChunkBuffer.add(value.sublist(4));
@@ -421,13 +456,20 @@ class BleService {
 
       if ((flags & 0x01) != 0) {
         // EOF reached
+        _chunkWatchdogTimer?.cancel();
         final csv = utf8.decode(_fileChunkBuffer.takeBytes(), allowMalformed: true);
-        _syncFileCompleter?.complete(csv);
+        final c = _syncFileCompleter;
         _syncFileCompleter = null;
+        if (c != null && !c.isCompleted) {
+          c.complete(csv);
+        }
       }
     } else if (opcode == BleConstants.respSyncAck || opcode == BleConstants.respSyncAckLegacy) {
-      _syncAckCompleter?.complete(true);
+      final c = _syncAckCompleter;
       _syncAckCompleter = null;
+      if (c != null && !c.isCompleted) {
+        c.complete(true);
+      }
     }
   }
 
@@ -667,7 +709,9 @@ class BleService {
 
     final completer = Completer<List<String>>();
     try {
-      _syncCheckCompleter?.complete([]);
+      if (_syncCheckCompleter != null && !_syncCheckCompleter!.isCompleted) {
+        _syncCheckCompleter!.complete([]);
+      }
       _syncCheckCompleter = completer;
 
       final cmd = [BleConstants.cmdSyncCheck];
@@ -691,11 +735,13 @@ class BleService {
     }
   }
 
-  /// Downloads an offline session log by filename/id
+  /// Downloads an offline session log by filename/id using a per-chunk inactivity watchdog
   Future<String?> downloadOfflineLog(String logId, {void Function(int bytesRead)? onProgress}) async {
     if (_mockMode) {
       if (_mockOfflineLogQueue.isNotEmpty) {
-        return _mockOfflineLogQueue.first;
+        final content = _mockOfflineLogQueue.first;
+        onProgress?.call(content.length);
+        return content;
       }
       return null;
     }
@@ -704,26 +750,24 @@ class BleService {
 
     final completer = Completer<String?>();
     try {
-      _syncFileCompleter?.complete(null);
+      if (_syncFileCompleter != null && !_syncFileCompleter!.isCompleted) {
+        _syncFileCompleter!.complete(null);
+      }
       _fileChunkBuffer.clear();
       _syncFileCompleter = completer;
       onSyncProgress = onProgress;
+      _resetChunkWatchdog();
 
       final bytes = [BleConstants.cmdSyncRequestFile, ...utf8.encode(logId)];
       await _commandChar!.write(bytes, withoutResponse: false);
       debugPrint('[BLE] Requested log file download: $logId');
 
-      return await completer.future.timeout(
-        const Duration(seconds: 30),
-        onTimeout: () {
-          debugPrint('[BLE] downloadOfflineLog timed out.');
-          return null;
-        },
-      );
+      return await completer.future;
     } catch (e) {
       debugPrint('[BLE] downloadOfflineLog error: $e');
       return null;
     } finally {
+      _chunkWatchdogTimer?.cancel();
       onSyncProgress = null;
       if (_syncFileCompleter == completer) {
         _syncFileCompleter = null;
@@ -745,7 +789,9 @@ class BleService {
 
     final completer = Completer<bool>();
     try {
-      _syncAckCompleter?.complete(false);
+      if (_syncAckCompleter != null && !_syncAckCompleter!.isCompleted) {
+        _syncAckCompleter!.complete(false);
+      }
       _syncAckCompleter = completer;
 
       final bytes = [BleConstants.cmdSyncAck, ...utf8.encode(logId)];
@@ -769,6 +815,7 @@ class BleService {
   void disconnect() {
     _mockTimer?.cancel();
     _scanTimeoutTimer?.cancel();
+    _chunkWatchdogTimer?.cancel();
     for (final t in _mockScanTimers) {
       t.cancel();
     }
@@ -778,11 +825,17 @@ class BleService {
     _notifySubscription?.cancel();
     _commandSubscription?.cancel();
     _connectionSubscription?.cancel();
-    _syncCheckCompleter?.complete([]);
+    if (_syncCheckCompleter != null && !_syncCheckCompleter!.isCompleted) {
+      _syncCheckCompleter!.complete([]);
+    }
     _syncCheckCompleter = null;
-    _syncFileCompleter?.complete(null);
+    if (_syncFileCompleter != null && !_syncFileCompleter!.isCompleted) {
+      _syncFileCompleter!.complete(null);
+    }
     _syncFileCompleter = null;
-    _syncAckCompleter?.complete(false);
+    if (_syncAckCompleter != null && !_syncAckCompleter!.isCompleted) {
+      _syncAckCompleter!.complete(false);
+    }
     _syncAckCompleter = null;
     _fileChunkBuffer.clear();
     _device?.disconnect();

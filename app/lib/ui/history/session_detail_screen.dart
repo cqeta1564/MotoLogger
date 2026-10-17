@@ -204,7 +204,11 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 4,
             children: [
               Text(
                 'Kolo ${lap.lapNumber}',
@@ -214,7 +218,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
                   color: AppTheme.textMuted,
                 ),
               ),
-              const Spacer(),
               if (lap.isBestLap)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -243,9 +246,11 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
             ],
           ),
           const SizedBox(height: 4),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 4,
             children: [
               Text(
                 lap.formattedLapTime,
@@ -256,7 +261,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
                   fontFeatures: const [FontFeature.tabularFigures()],
                 ),
               ),
-              const Spacer(),
               Text(
                 '${lap.topSpeedKmh.toStringAsFixed(0)} km/h · ${lap.maxLeanRightDeg.toStringAsFixed(0)}° / ${lap.maxLeanLeftDeg.abs().toStringAsFixed(0)}°',
                 style: const TextStyle(

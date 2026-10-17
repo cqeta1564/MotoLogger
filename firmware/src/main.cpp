@@ -234,6 +234,13 @@ static void processBleCommandQueue() {
                     total_streamed += bytes_read;
                     seq++;
 
+                    // Keep supervisor power monitor and LED patterns alive during long file transfers
+                    if ((seq % 3) == 0) {
+                        ObdTelemetry obd = g_can_mgr.getTelemetry();
+                        g_power_mgr.update(g_ble_mgr.isConnected(), obd.engine_rpm);
+                        g_led_indicator.update();
+                    }
+
                     // 15 ms delay yields CPU to FreeRTOS (BLE task, CAN task, Supervisor)
                     vTaskDelay(pdMS_TO_TICKS(15));
                 }

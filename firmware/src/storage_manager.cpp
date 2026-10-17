@@ -394,8 +394,6 @@ void StorageManager::markSessionSynced(const char* log_name) {
         }
         if (sd_mutex_) xSemaphoreGiveRecursive(sd_mutex_);
     }
-
-    acknowledgeSessionSynced(clean_name);
 }
 
 size_t StorageManager::getUnsyncedSessionFiles(char* out_buffer, size_t max_len, uint8_t& out_count) {
@@ -412,11 +410,17 @@ size_t StorageManager::getUnsyncedSessionFiles(char* out_buffer, size_t max_len,
         return 0;
     }
 
-    // Read synced file markers from /synced.txt if present
+    // Read synced file markers from /synced.txt (tail up to 2047 bytes if file grows large)
     char synced_cache[2048] = {};
+    bool has_synced_file = false;
     if (SD.exists("/synced.txt")) {
         File sf = SD.open("/synced.txt", FILE_READ);
         if (sf) {
+            has_synced_file = true;
+            size_t fsize = sf.size();
+            if (fsize >= sizeof(synced_cache)) {
+                sf.seek(fsize - (sizeof(synced_cache) - 1));
+            }
             size_t bytes = sf.read(reinterpret_cast<uint8_t*>(synced_cache), sizeof(synced_cache) - 1);
             synced_cache[bytes] = '\0';
             sf.close();
@@ -448,13 +452,15 @@ size_t StorageManager::getUnsyncedSessionFiles(char* out_buffer, size_t max_len,
                 if (strcasecmp(name, active_name) != 0) {
                     bool already_synced = (strstr(synced_cache, name) != nullptr);
 
-                    // Check session index
-                    const char* p = name;
-                    while (*p && (*p < '0' || *p > '9')) p++;
-                    if (*p) {
-                        uint32_t idx = static_cast<uint32_t>(strtoul(p, nullptr, 10));
-                        if (idx > 0 && idx <= last_nvs_sync) {
-                            already_synced = true;
+                    // Fallback to NVS index only if /synced.txt has never been created
+                    if (!already_synced && !has_synced_file && last_nvs_sync > 0) {
+                        const char* p = name;
+                        while (*p && (*p < '0' || *p > '9')) p++;
+                        if (*p) {
+                            uint32_t idx = static_cast<uint32_t>(strtoul(p, nullptr, 10));
+                            if (idx > 0 && idx <= last_nvs_sync) {
+                                already_synced = true;
+                            }
                         }
                     }
 

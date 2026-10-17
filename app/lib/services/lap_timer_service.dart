@@ -233,12 +233,16 @@ class LapTimerService {
 
     final List<LapSplit> rawLaps = [];
     int bestLapMs = 999999999;
+    const int maxCircuitLapDurationMs = 720000; // 12 minutes max for a closed-circuit lap
 
     for (int i = 1; i < crossings.length; i++) {
       final startCrossing = crossings[i - 1];
       final endCrossing = crossings[i];
 
       final lapTimeMs = endCrossing.timestampMs - startCrossing.timestampMs;
+      if (lapTimeMs <= 0 || lapTimeMs > maxCircuitLapDurationMs) {
+        continue;
+      }
       if (lapTimeMs < bestLapMs) {
         bestLapMs = lapTimeMs;
       }
@@ -264,7 +268,7 @@ class LapTimerService {
       }
 
       rawLaps.add(LapSplit(
-        lapNumber: i,
+        lapNumber: rawLaps.length + 1,
         lapTime: Duration(milliseconds: lapTimeMs),
         lapTimeMs: lapTimeMs,
         startTimestampMs: startCrossing.timestampMs,
