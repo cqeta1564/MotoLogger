@@ -52,6 +52,7 @@ private:
     static float clampPitch90(float pitch_deg);
     void quaternionToEuler(float qr, float qi, float qj, float qk, 
                            float& roll_deg, float& pitch_deg, float& yaw_deg);
+    bool waitForIntLowMs(uint32_t timeout_ms) const;
     bool initSensorHardware();
     bool enableReports();
     bool tryReconnect();
