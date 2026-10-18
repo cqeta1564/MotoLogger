@@ -18,19 +18,22 @@ constexpr uint32_t   CAN_DEFAULT_BAUDRATE = 500000;      // 500 kbps
 constexpr uint32_t   CAN_RX_QUEUE_SIZE    = 256;         // Ring buffer size for CAN messages
 
 // ==============================================================================
-// 2. IMU SUBSYSTEM (CEVA / Hillcrest BNO085 via Native I2C)
+// 2. IMU SUBSYSTEM (CEVA / Hillcrest BNO085 via Dedicated HSPI Bus)
 // ==============================================================================
-constexpr gpio_num_t PIN_IMU_SDA          = GPIO_NUM_1;
-constexpr gpio_num_t PIN_IMU_SCL          = GPIO_NUM_2;
-constexpr gpio_num_t PIN_IMU_INT          = GPIO_NUM_12; // H_INTN interrupt
-constexpr gpio_num_t PIN_IMU_RST          = GPIO_NUM_48; // Active low reset
-constexpr uint8_t    BNO085_I2C_ADDR      = 0x4A;        // SA0 tied to GND (default)
-constexpr uint8_t    BNO085_I2C_ADDR_ALT  = 0x4B;        // SA0 tied to VCC (fallback)
-constexpr uint32_t   I2C_FREQUENCY_HZ     = 400000;      // 400 kHz Fast-Mode
-constexpr uint32_t   I2C_TIMEOUT_MS       = 20;          // Hardware bus timeout to prevent lockups
+constexpr gpio_num_t PIN_IMU_MISO         = GPIO_NUM_1;  // GY-BNO08X SDA/MISO/TX
+constexpr gpio_num_t PIN_IMU_SCK          = GPIO_NUM_2;  // GY-BNO08X SCL/SCK/RX
+constexpr gpio_num_t PIN_IMU_MOSI         = GPIO_NUM_4;  // GY-BNO08X ADO / ADDR/MOSI
+constexpr gpio_num_t PIN_IMU_CS           = GPIO_NUM_5;  // GY-BNO08X CS (Active LOW)
+constexpr gpio_num_t PIN_IMU_INT          = GPIO_NUM_12; // GY-BNO08X INT / H_INTN interrupt (Active LOW)
+constexpr gpio_num_t PIN_IMU_RST          = GPIO_NUM_48; // GY-BNO08X RST (Active LOW)
+constexpr uint32_t   IMU_SPI_SPEED_HZ     = 3000000;     // 3 MHz SPI clock for BNO085
 constexpr uint32_t   IMU_SAMPLE_RATE_HZ   = 100;         // 100 Hz update rate
 constexpr uint32_t   IMU_REPORT_MICROS    = 10000;       // 10,000 us (10 ms interval)
 constexpr uint32_t   IMU_STALE_TIMEOUT_MS = 500;         // Mark IMU offline if no report for 500 ms
+
+// Backward-compatibility aliases
+constexpr gpio_num_t PIN_IMU_SDA          = PIN_IMU_MISO;
+constexpr gpio_num_t PIN_IMU_SCL          = PIN_IMU_SCK;
 
 // ==============================================================================
 // 3. MICROSD CARD INTERFACE (SPI Mode)

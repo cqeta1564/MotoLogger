@@ -396,7 +396,7 @@ void setup() {
     }
 
     // 5. Initialize BNO085 IMU Subsystem
-    Serial.print("[IMU] Initializing BNO085 (I2C 400 kHz, 100 Hz GRV)... ");
+    Serial.print("[IMU] Initializing BNO085 (SPI 3 MHz, 100 Hz GRV)... ");
     if (g_imu_mgr.begin()) {
         Serial.println("OK");
     } else {
@@ -586,7 +586,7 @@ void taskImu(void* pvParameters) {
 
         g_telemetry_queue.push(record);
 
-        // Resynchronize wake timer if an I2C reconnect attempt exceeded one 10 ms period
+        // Resynchronize wake timer if an SPI reconnect attempt exceeded one 10 ms period
         TickType_t now_ticks = xTaskGetTickCount();
         if (now_ticks - last_wake_time >= period_ticks) {
             last_wake_time = now_ticks;

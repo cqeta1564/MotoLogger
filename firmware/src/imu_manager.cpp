@@ -6,10 +6,11 @@ static constexpr float RAD_TO_DEG_CONST = 57.29577951308232f;
 static constexpr float GRAVITY_CONST    = 9.80665f;
 
 ImuManager::ImuManager()
-    : bno_(PIN_IMU_RST),
+    : spi_imu_(HSPI),
+      spi_bus_initialized_(false),
+      bno_(PIN_IMU_RST),
       is_initialized_(false),
       sample_count_(0),
-      active_i2c_addr_(BNO085_I2C_ADDR),
       raw_roll_deg_(0.0f),
       raw_pitch_deg_(0.0f),
       roll_offset_deg_(0.0f),
@@ -36,17 +37,9 @@ float ImuManager::clampPitch90(float pitch_deg) {
 }
 
 bool ImuManager::initSensorHardware() {
-    // Try primary address (0x4A) first, then fallback address (0x4B)
-    const uint8_t candidate_addrs[2] = { BNO085_I2C_ADDR, BNO085_I2C_ADDR_ALT };
-    for (uint8_t addr : candidate_addrs) {
-        Wire.beginTransmission(addr);
-        if (Wire.endTransmission() == 0) {
-            if (bno_.begin_I2C(addr, &Wire, PIN_IMU_INT)) {
-                if (enableReports()) {
-                    active_i2c_addr_ = addr;
-                    return true;
-                }
-            }
+    if (bno_.begin_SPI(PIN_IMU_CS, PIN_IMU_INT, &spi_imu_)) {
+        if (enableReports()) {
+            return true;
         }
     }
     return false;
@@ -58,22 +51,27 @@ bool ImuManager::begin() {
     // 1. Always load saved calibration offsets from NVS first
     loadCalibrationFromNvs();
 
-    // 2. Hardware Reset sequence
+    // 2. Hardware CS pin setup (inactive HIGH)
+    pinMode(PIN_IMU_CS, OUTPUT);
+    digitalWrite(PIN_IMU_CS, HIGH);
+
+    // 3. Configure H_INTN interrupt pin (active LOW)
+    pinMode(PIN_IMU_INT, INPUT_PULLUP);
+
+    // 4. Initialize dedicated HSPI bus for IMU
+    if (!spi_bus_initialized_) {
+        spi_imu_.begin(PIN_IMU_SCK, PIN_IMU_MISO, PIN_IMU_MOSI, PIN_IMU_CS);
+        spi_bus_initialized_ = true;
+    }
+
+    // 5. Hardware Reset sequence
     pinMode(PIN_IMU_RST, OUTPUT);
     digitalWrite(PIN_IMU_RST, LOW);
     delay(10);
     digitalWrite(PIN_IMU_RST, HIGH);
     delay(50);
 
-    // 3. Configure H_INTN interrupt pin (active LOW)
-    pinMode(PIN_IMU_INT, INPUT_PULLUP);
-
-    // 4. Initialize I2C Bus on ESP32-S3 pins with strict bus timeout
-    Wire.begin(PIN_IMU_SDA, PIN_IMU_SCL, I2C_FREQUENCY_HZ);
-    Wire.setTimeOut(I2C_TIMEOUT_MS);
-    delay(20);
-
-    // 5. Initialize BNO085 communication and enable high-rate reports
+    // 6. Initialize BNO085 SPI communication and enable high-rate reports
     if (!initSensorHardware()) {
         is_initialized_.store(false, std::memory_order_release);
         return false;
@@ -87,31 +85,20 @@ bool ImuManager::begin() {
 bool ImuManager::tryReconnect() {
     last_reconnect_attempt_ms_ = millis();
 
-    // Fast, non-blocking I2C probe on both possible BNO085 addresses
-    bool ack = false;
-    const uint8_t candidate_addrs[2] = { active_i2c_addr_,
-        (active_i2c_addr_ == BNO085_I2C_ADDR) ? BNO085_I2C_ADDR_ALT : BNO085_I2C_ADDR };
+    // Re-assert CS inactive HIGH
+    pinMode(PIN_IMU_CS, OUTPUT);
+    digitalWrite(PIN_IMU_CS, HIGH);
 
-    for (uint8_t addr : candidate_addrs) {
-        Wire.beginTransmission(addr);
-        if (Wire.endTransmission() == 0) {
-            ack = true;
-            break;
-        }
-    }
-
-    if (!ack) {
-        // Pulse hardware reset briefly in case BNO085 SHTP state machine locked up
-        digitalWrite(PIN_IMU_RST, LOW);
-        delay(5);
-        digitalWrite(PIN_IMU_RST, HIGH);
-        return false;
-    }
+    // Pulse hardware reset briefly
+    digitalWrite(PIN_IMU_RST, LOW);
+    delay(10);
+    digitalWrite(PIN_IMU_RST, HIGH);
+    delay(40);
 
     if (initSensorHardware()) {
         last_event_ms_ = millis();
         is_initialized_.store(true, std::memory_order_release);
-        Serial.printf("\n[IMU] BNO085 recovered on I2C 0x%02X! Sensor running at 100 Hz.\n", active_i2c_addr_);
+        Serial.println("\n[IMU] BNO085 recovered via HSPI! Sensor running at 100 Hz.");
         return true;
     }
 
@@ -212,7 +199,7 @@ ImuSample ImuManager::getLatestSample() {
 
 void ImuManager::quaternionToEuler(float qr, float qi, float qj, float qk, 
                                    float& roll_deg, float& pitch_deg, float& yaw_deg) {
-    // Normalize quaternion to guard against I2C bit-corruption or NaN propagation
+    // Normalize quaternion to guard against SPI bit-corruption or NaN propagation
     float norm_sq = qr * qr + qi * qi + qj * qj + qk * qk;
     if (!isfinite(norm_sq) || norm_sq < 1e-6f) {
         roll_deg  = 0.0f;

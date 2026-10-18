@@ -1,7 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
-#include <Wire.h>
+#include <SPI.h>
 #include <Adafruit_BNO08x.h>
 #include <atomic>
 #include "config.h"
@@ -9,7 +9,7 @@
 
 /**
  * @file imu_manager.h
- * @brief Manages CEVA/Hillcrest BNO085 9-DoF IMU via I2C, extracting
+ * @brief Manages CEVA/Hillcrest BNO085 9-DoF IMU via Dedicated HSPI, extracting
  *        100 Hz Game Rotation Vectors, Lean Angle (Roll), and G-forces.
  */
 class ImuManager {
@@ -28,11 +28,12 @@ public:
     uint32_t getSampleCount() const { return sample_count_.load(std::memory_order_relaxed); }
 
 private:
+    SPIClass spi_imu_;
+    bool spi_bus_initialized_;
     Adafruit_BNO08x bno_;
     sh2_SensorValue_t sensor_value_;
     std::atomic<bool> is_initialized_;
     std::atomic<uint32_t> sample_count_;
-    uint8_t active_i2c_addr_;
 
     // Uncalibrated raw orientation and zero-calibration offsets
     float raw_roll_deg_;

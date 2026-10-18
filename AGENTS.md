@@ -90,9 +90,11 @@ Always verify pin assignments against this table before modifying firmware:
 | **CAN TX** | `GPIO14` | SN65HVD230 Transceiver TX |
 | **CAN RX** | `GPIO13` | SN65HVD230 Transceiver RX |
 | **CAN RS** | `GPIO38` | Mode Control (LOW = 500 kbps Active, HIGH = Standby) |
-| **IMU SDA** | `GPIO1` | BNO085 I2C Data (400 kHz) |
-| **IMU SCL** | `GPIO2` | BNO085 I2C Clock |
-| **IMU INT** | `GPIO12` | BNO085 Data-Ready Interrupt (Active LOW) |
+| **IMU MISO** | `GPIO1` | BNO085 SPI MISO (GY-BNO08X `SDA/MISO/TX`) |
+| **IMU SCK** | `GPIO2` | BNO085 SPI Clock (3 MHz) (GY-BNO08X `SCL/SCK/RX`) |
+| **IMU MOSI** | `GPIO4` | BNO085 SPI MOSI (GY-BNO08X `ADDR/MOSI`) |
+| **IMU CS** | `GPIO5` | BNO085 SPI Chip Select (Active LOW) |
+| **IMU INT** | `GPIO12` | BNO085 SHTP Interrupt / Data-Ready (Active LOW) |
 | **IMU RST** | `GPIO48` | BNO085 Hardware Reset (Active LOW) |
 | **3V3 Switch** | `GPIO21` | MT9700 Load Switch (power rail for IMU & peripherals) |
 | **MicroSD CS** | `GPIO45` | SPI Chip Select |
