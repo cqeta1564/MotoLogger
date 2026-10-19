@@ -515,7 +515,7 @@ class BleService {
         c.complete(ok);
       }
     } else if (opcode == BleConstants.respCanRawFrame) {
-      if (value.length >= 6) {
+      if (value.length >= 6 && !_rawCanFrameController.isClosed) {
         final byteData = ByteData.sublistView(Uint8List.fromList(value));
         final canId = byteData.getUint32(1, Endian.little);
         final dlc = value[5].clamp(0, 8);

@@ -189,6 +189,7 @@ class TelemetryManager extends ChangeNotifier {
         autoSyncOfflineSessions();
       } else {
         _isDiagnosticModeActive = false;
+        _sendCarTelemetry(_latestPacket, 0.0, force: true);
       }
       notifyListeners();
     });
@@ -314,7 +315,8 @@ class TelemetryManager extends ChangeNotifier {
                   ? 0
                   : lapTimeMs -
                       _liveLaps.map((l) => l.lapTimeMs).reduce(min);
-              _lastLapDeltaSeconds = deltaMs / 1000.0;
+              _lastLapDeltaSeconds =
+                  _liveLaps.isEmpty ? null : deltaMs / 1000.0;
 
               _liveLaps.add(LapSplit(
                 lapNumber: _currentLapNumber,
@@ -431,7 +433,18 @@ class TelemetryManager extends ChangeNotifier {
   void markCustomFinishLineHere() {
     final pos = _latestPosition;
     if (pos == null) return;
-    final heading = pos.heading != 0.0 ? pos.heading : 0.0;
+    double heading = pos.heading;
+    if (heading == 0.0 && _lastFusedSample != null) {
+      final b = Geolocator.bearingBetween(
+        _lastFusedSample!.latitude,
+        _lastFusedSample!.longitude,
+        pos.latitude,
+        pos.longitude,
+      );
+      if (!b.isNaN) {
+        heading = (b + 360.0) % 360.0;
+      }
+    }
     _activeCircuit = LapTimerService.createCustomCircuitFromPosition(
       lat: pos.latitude,
       lon: pos.longitude,
@@ -440,15 +453,18 @@ class TelemetryManager extends ChangeNotifier {
     );
     _currentLapNumber = 1;
     _currentLapStartTime = DateTime.now();
-    _lastCrossingMs = DateTime.now().millisecondsSinceEpoch;
+    // Use packet monotonic timestamp domain to match FusedSample.timestampMs
+    _lastCrossingMs =
+        _latestPacket.timestampMs > 0 ? _latestPacket.timestampMs : 0;
     _liveLaps.clear();
     _lastLapDeltaSeconds = null;
     notifyListeners();
   }
 
-  void _sendCarTelemetry(TelemetryPacket packet, double speedKmh) {
+  void _sendCarTelemetry(TelemetryPacket packet, double speedKmh,
+      {bool force = false}) {
     final now = DateTime.now().millisecondsSinceEpoch;
-    if (now - _lastCarUpdateTime < 200) return; // 5 Hz throttle
+    if (!force && now - _lastCarUpdateTime < 200) return; // 5 Hz throttle
     _lastCarUpdateTime = now;
 
     final data = <String, dynamic>{

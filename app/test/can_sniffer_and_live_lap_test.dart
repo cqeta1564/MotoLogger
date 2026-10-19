@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:motologger/core/constants/ble_constants.dart';
 import 'package:motologger/models/fused_sample.dart';
 import 'package:motologger/models/telemetry_packet.dart';
@@ -20,13 +22,69 @@ class MockTestDatabaseService extends DatabaseService {
   Future<void> updateSession(dynamic session) async {}
 
   @override
-  Future<int> insertSamples(List<FusedSample> samples) async => samples.length;
+  Future<void> insertSampleBatch(List<FusedSample> samples) async {}
 
   @override
   Future<String?> getSetting(String key) async => null;
 
   @override
   Future<void> saveSetting(String key, String value) async {}
+}
+
+class ControlledBleService extends BleService {
+  final _telemetryCtrl = StreamController<TelemetryPacket>.broadcast();
+
+  @override
+  Stream<TelemetryPacket> get telemetryStream => _telemetryCtrl.stream;
+
+  void emitPacket(TelemetryPacket packet) {
+    _telemetryCtrl.add(packet);
+  }
+
+  @override
+  void dispose() {
+    _telemetryCtrl.close();
+    super.dispose();
+  }
+}
+
+class ControlledGpsService extends GpsService {
+  final _posCtrl = StreamController<Position>.broadcast();
+  Position? _pos;
+
+  @override
+  Stream<Position> get positionStream => _posCtrl.stream;
+
+  @override
+  Position? get lastPosition => _pos;
+
+  void emitPosition({
+    required double lat,
+    required double lon,
+    required double heading,
+    double speedMps = 40.0,
+  }) {
+    final p = Position(
+      latitude: lat,
+      longitude: lon,
+      timestamp: DateTime.now(),
+      accuracy: 1.0,
+      altitude: 380.0,
+      altitudeAccuracy: 1.0,
+      heading: heading,
+      headingAccuracy: 1.0,
+      speed: speedMps,
+      speedAccuracy: 0.5,
+    );
+    _pos = p;
+    _posCtrl.add(p);
+  }
+
+  @override
+  void dispose() {
+    _posCtrl.close();
+    super.dispose();
+  }
 }
 
 void main() {
@@ -36,6 +94,32 @@ void main() {
     test('BleConstants contains sniffer command and response codes', () {
       expect(BleConstants.cmdCanSnifferMode, equals(0x40));
       expect(BleConstants.respCanRawFrame, equals(0xC0));
+    });
+
+    test('BleService decodes 14-byte 0xC0 respCanRawFrame binary notification', () async {
+      final bleService = BleService();
+      final received = <CapturedCanFrame>[];
+      final sub = bleService.rawCanFrameStream.listen(received.add);
+
+      final bd = ByteData(14);
+      bd.setUint8(0, BleConstants.respCanRawFrame); // 0xC0
+      bd.setUint32(1, 0x00000244, Endian.little);   // CAN ID 0x244
+      bd.setUint8(5, 8);                            // DLC = 8
+      final payload = [0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88];
+      for (int i = 0; i < 8; i++) {
+        bd.setUint8(6 + i, payload[i]);
+      }
+
+      bleService.handleCommandResponseForTest(bd.buffer.asUint8List());
+      await Future.delayed(const Duration(milliseconds: 10));
+
+      expect(received.length, equals(1));
+      expect(received.first.canId, equals(0x244));
+      expect(received.first.data.length, equals(8));
+      expect(received.first.data, equals(payload));
+
+      await sub.cancel();
+      bleService.dispose();
     });
 
     test('BleService mock mode supports setCanSnifferMode and raw CAN frames', () async {
@@ -243,11 +327,10 @@ void main() {
   });
 
   group('TelemetryManager Live Lap State', () {
-    test('markCustomFinishLineHere sets activeCircuit and resets counters', () async {
-      final ble = BleService();
-      final gps = GpsService();
+    test('markCustomFinishLineHere sets activeCircuit and triggers live laps with delta', () async {
+      final ble = ControlledBleService();
+      final gps = ControlledGpsService();
       final db = MockTestDatabaseService();
-      ble.enableMockMode(true);
 
       final manager = TelemetryManager(
         bleService: ble,
@@ -255,17 +338,45 @@ void main() {
         dbService: db,
       );
 
-      gps.enableMockMode(true);
-      await Future.delayed(const Duration(milliseconds: 50));
+      await manager.startRecording('Track Session');
 
-      expect(manager.activeCircuit, isNull);
-      expect(manager.currentLapNumber, equals(1));
-      expect(manager.liveLaps, isEmpty);
+      // Initial position at gate center (49.203875, 16.444250), heading West (268°)
+      gps.emitPosition(lat: 49.203875, lon: 16.444250, heading: 268.0);
+      ble.emitPacket(TelemetryPacket.initial().copyWith(timestampMs: 1000, vehicleSpeedKmh: 160));
+      await Future.delayed(const Duration(milliseconds: 10));
 
       manager.markCustomFinishLineHere();
       expect(manager.activeCircuit, isNotNull);
       expect(manager.activeCircuit!.name, equals('Vlastní cíl'));
       expect(manager.currentLapNumber, equals(1));
+      expect(manager.liveLaps, isEmpty);
+
+      // Complete Lap 1 (~60 seconds later: cross from East 16.444350 to West 16.444150)
+      gps.emitPosition(lat: 49.203875, lon: 16.444350, heading: 268.0);
+      ble.emitPacket(TelemetryPacket.initial().copyWith(timestampMs: 60800, vehicleSpeedKmh: 175));
+      await Future.delayed(const Duration(milliseconds: 10));
+
+      gps.emitPosition(lat: 49.203875, lon: 16.444150, heading: 268.0);
+      ble.emitPacket(TelemetryPacket.initial().copyWith(timestampMs: 61200, vehicleSpeedKmh: 180));
+      await Future.delayed(const Duration(milliseconds: 10));
+
+      expect(manager.currentLapNumber, equals(2));
+      expect(manager.liveLaps.length, equals(1));
+      expect(manager.lastLapDeltaSeconds, isNull);
+
+      // Complete Lap 2 (~59 seconds later - faster lap! Should produce negative deltaSeconds)
+      gps.emitPosition(lat: 49.203875, lon: 16.444350, heading: 268.0);
+      ble.emitPacket(TelemetryPacket.initial().copyWith(timestampMs: 119800, vehicleSpeedKmh: 185));
+      await Future.delayed(const Duration(milliseconds: 10));
+
+      gps.emitPosition(lat: 49.203875, lon: 16.444150, heading: 268.0);
+      ble.emitPacket(TelemetryPacket.initial().copyWith(timestampMs: 120200, vehicleSpeedKmh: 190));
+      await Future.delayed(const Duration(milliseconds: 10));
+
+      expect(manager.currentLapNumber, equals(3));
+      expect(manager.liveLaps.length, equals(2));
+      expect(manager.lastLapDeltaSeconds, isNotNull);
+      expect(manager.lastLapDeltaSeconds!, lessThan(0.0));
 
       manager.dispose();
       ble.dispose();
@@ -273,3 +384,4 @@ void main() {
     });
   });
 }
+

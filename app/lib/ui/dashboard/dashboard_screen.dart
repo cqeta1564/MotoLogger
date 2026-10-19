@@ -465,7 +465,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               IconButton(
                 icon: const Icon(CupertinoIcons.flag, size: 18),
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
                 tooltip: 'Označit cíl (Lap)',
                 onPressed: () {
                   manager.markCustomFinishLineHere();

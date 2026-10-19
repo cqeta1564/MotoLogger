@@ -37,6 +37,7 @@ CanManager::CanManager()
     memset(dtc_list_, 0, sizeof(dtc_list_));
     memset(&custom_profile_, 0, sizeof(custom_profile_));
     custom_profile_.magic = 0x4D4F544F;
+    custom_profile_.baudrate_kbps = 500;
 }
 
 bool CanManager::installAndStartTwai(OperatingMode mode) {
@@ -140,14 +141,13 @@ void CanManager::stop() {
 }
 
 void CanManager::handleBusRecovery() {
-    // Process any pending mode switch requested from BLE task safely on Task_CAN
+    // Process any pending mode or baudrate switch requested from BLE task safely on Task_CAN
     if (mode_change_pending_.exchange(false, std::memory_order_acq_rel)) {
         OperatingMode target = pending_mode_;
-        if (target != mode_ || !is_running_.load(std::memory_order_acquire)) {
-            if (installAndStartTwai(target)) {
-                Serial.printf("[CAN] Reconfigured TWAI mode to %s\n",
-                              (target == OperatingMode::LISTEN_ONLY) ? "LISTEN_ONLY" : "ACTIVE_OBD");
-            }
+        if (installAndStartTwai(target)) {
+            Serial.printf("[CAN] Reconfigured TWAI mode to %s (%u kbps)\n",
+                          (target == OperatingMode::LISTEN_ONLY) ? "LISTEN_ONLY" : "ACTIVE_OBD",
+                          custom_profile_.baudrate_kbps);
         }
     }
 

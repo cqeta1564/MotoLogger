@@ -1,5 +1,9 @@
 package com.motologger.app.car
 
+import android.os.Handler
+import android.os.Looper
+import java.util.concurrent.CopyOnWriteArrayList
+
 object CarTelemetryRepository {
     data class CarTelemetry(
         val leanAngleDeg: Double? = null,
@@ -18,19 +22,29 @@ object CarTelemetryRepository {
         val deltaSeconds: Double? = null
     )
 
+    @Volatile
     var currentTelemetry = CarTelemetry()
         private set
 
-    private val listeners = mutableListOf<() -> Unit>()
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val listeners = CopyOnWriteArrayList<() -> Unit>()
     var onTareZeroRequested: (() -> Unit)? = null
 
     fun update(telemetry: CarTelemetry) {
         currentTelemetry = telemetry
-        listeners.forEach { it.invoke() }
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            listeners.forEach { it.invoke() }
+        } else {
+            mainHandler.post {
+                listeners.forEach { it.invoke() }
+            }
+        }
     }
 
     fun addListener(listener: () -> Unit) {
-        listeners.add(listener)
+        if (!listeners.contains(listener)) {
+            listeners.add(listener)
+        }
     }
 
     fun removeListener(listener: () -> Unit) {
@@ -38,6 +52,13 @@ object CarTelemetryRepository {
     }
 
     fun requestTareZero() {
-        onTareZeroRequested?.invoke()
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            onTareZeroRequested?.invoke()
+        } else {
+            mainHandler.post {
+                onTareZeroRequested?.invoke()
+            }
+        }
     }
 }
+

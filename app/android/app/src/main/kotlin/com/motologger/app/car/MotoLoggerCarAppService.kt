@@ -5,6 +5,8 @@ import androidx.car.app.Screen
 import androidx.car.app.Session
 import androidx.car.app.model.*
 import androidx.car.app.validation.HostValidator
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
 import android.content.Intent
 
 /**
@@ -35,6 +37,11 @@ class MotoLoggerDashboardScreen(carContext: androidx.car.app.CarContext) : Scree
 
     init {
         CarTelemetryRepository.addListener(listener)
+        lifecycle.addObserver(object : DefaultLifecycleObserver {
+            override fun onDestroy(owner: LifecycleOwner) {
+                CarTelemetryRepository.removeListener(listener)
+            }
+        })
     }
 
     private fun formatLapTime(ms: Long): String {
@@ -80,7 +87,7 @@ class MotoLoggerDashboardScreen(carContext: androidx.car.app.CarContext) : Scree
         } else {
             "—"
         }
-        val speedStr = if (t.speedKmh != null) {
+        val speedStr = if (t.speedKmh != null && (t.isConnected || t.speedKmh > 0)) {
             "${t.speedKmh} km/h"
         } else {
             "—"
