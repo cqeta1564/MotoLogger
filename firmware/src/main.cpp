@@ -11,6 +11,7 @@
 #include "storage_manager.h"
 #include "ble_manager.h"
 #include "led_indicator.h"
+#include "ota_manager.h"
 
 // ==============================================================================
 // Global Subsystem Instances
@@ -21,7 +22,19 @@ static ImuManager     g_imu_mgr;
 static StorageManager g_storage_mgr;
 static BleManager     g_ble_mgr;
 static LedIndicator   g_led_indicator;
+static OtaManager     g_ota_mgr;
 static SemaphoreHandle_t g_serial_mutex = nullptr;
+
+static void handleOtaStatus(OtaState state, IPAddress ip) {
+    uint8_t resp[6];
+    resp[0] = RESP_OTA_STATUS;
+    resp[1] = static_cast<uint8_t>(state);
+    resp[2] = ip[0];
+    resp[3] = ip[1];
+    resp[4] = ip[2];
+    resp[5] = ip[3];
+    g_ble_mgr.sendCommandResponse(resp, sizeof(resp));
+}
 
 // Lock-free queues for inter-task telemetry streaming & BLE command offloading
 static RingBuffer<TelemetryRecord, 512> g_telemetry_queue;
@@ -376,6 +389,29 @@ static void processBleCommandQueue() {
                 break;
             }
 
+            case CMD_OTA_SET_MODE: {
+                bool enable = (length >= 1) && (payload[0] != 0);
+                ObdTelemetry obd = g_can_mgr.getTelemetry();
+                if (enable && obd.vehicle_speed_kmh > 5) {
+                    logPrintf("[BLE CMD] OTA mode DENIED (Speed = %u km/h > 5 km/h safety limit).\n",
+                              obd.vehicle_speed_kmh);
+                    uint8_t rej_pkt[6] = {
+                        RESP_OTA_STATUS,
+                        static_cast<uint8_t>(OtaState::ERROR_REJECTED),
+                        0, 0, 0, 0
+                    };
+                    g_ble_mgr.sendCommandResponse(rej_pkt, sizeof(rej_pkt));
+                    break;
+                }
+
+                if (enable) {
+                    g_ota_mgr.startOtaAp();
+                } else {
+                    g_ota_mgr.stopOtaAp();
+                }
+                break;
+            }
+
             default:
                 logPrintf("[BLE CMD] Unknown command 0x%02X received.\n", ev.command_id);
                 break;
@@ -442,7 +478,10 @@ void setup() {
         Serial.println("FAILED!");
     }
 
-    // 8. Launch FreeRTOS Tasks with Dual-Core Affinity
+    // 8. Initialize OTA Manager
+    g_ota_mgr.begin(handleOtaStatus);
+
+    // 9. Launch FreeRTOS Tasks with Dual-Core Affinity
     Serial.println("[RTOS] Spawning multi-core worker tasks...");
 
     // Core 0: CAN Bus Worker (High priority)
@@ -585,6 +624,17 @@ void taskBleStreaming(void* pvParameters) {
             if (g_can_sniffer_active.load(std::memory_order_acquire)) {
                 g_can_sniffer_active.store(false, std::memory_order_release);
                 g_sniffer_queue.reset();
+            }
+        }
+
+        // Handle OTA maintenance web server if active (with vehicle speed safety interlock)
+        if (g_ota_mgr.isOtaActive()) {
+            ObdTelemetry obd = g_can_mgr.getTelemetry();
+            if (obd.vehicle_speed_kmh > 5) {
+                logPrintf("[OTA] Safety shutdown: vehicle moving (> 5 km/h)!\n");
+                g_ota_mgr.stopOtaAp();
+            } else {
+                g_ota_mgr.handleClient();
             }
         }
 

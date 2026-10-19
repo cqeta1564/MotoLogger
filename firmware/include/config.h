@@ -22,8 +22,15 @@ constexpr uint32_t   CAN_RX_QUEUE_SIZE    = 256;         // Ring buffer size for
 // ==============================================================================
 constexpr gpio_num_t PIN_IMU_MISO         = GPIO_NUM_1;  // GY-BNO08X SDA/MISO/TX
 constexpr gpio_num_t PIN_IMU_SCK          = GPIO_NUM_2;  // GY-BNO08X SCL/SCK/RX
+#ifdef MOTOLOGGER_PCB_BREAKOUT_PADS
+// Custom RejsaCAN v3.4 PCB breakout pads (GPIO4 & GPIO5 not broken out to dedicated pads)
+constexpr gpio_num_t PIN_IMU_MOSI         = GPIO_NUM_6;  // Bottom-side solder pad GPIO6
+constexpr gpio_num_t PIN_IMU_CS           = GPIO_NUM_47; // Top-side solder pad GPIO47
+#else
+// Standard ESP32-S3-DevKitC-1 default pinout
 constexpr gpio_num_t PIN_IMU_MOSI         = GPIO_NUM_4;  // GY-BNO08X ADO / ADDR/MOSI
 constexpr gpio_num_t PIN_IMU_CS           = GPIO_NUM_5;  // GY-BNO08X CS (Active LOW)
+#endif
 constexpr gpio_num_t PIN_IMU_INT          = GPIO_NUM_12; // GY-BNO08X INT / H_INTN interrupt (Active LOW)
 constexpr gpio_num_t PIN_IMU_RST          = GPIO_NUM_48; // GY-BNO08X RST (Active LOW)
 constexpr uint32_t   IMU_SPI_SPEED_HZ     = 3000000;     // 3 MHz SPI clock for BNO085
@@ -91,6 +98,7 @@ constexpr uint8_t CMD_DIAG_SET_MODE     = 0x30; // 1 = Active OBD-II TX Mode, 0 
 constexpr uint8_t CMD_DIAG_READ_DTC     = 0x31; // Query OBD-II Mode 03 & Mode 07 DTC fault codes
 constexpr uint8_t CMD_DIAG_CLEAR_DTC    = 0x32; // Clear OBD-II Mode 04 DTC fault codes & MIL
 constexpr uint8_t CMD_CAN_SNIFFER_MODE  = 0x40; // 1 = Enable raw CAN sniffer streaming, 0 = Disable
+constexpr uint8_t CMD_OTA_SET_MODE      = 0x50; // 1 = Enable OTA Wi-Fi AP, 0 = Disable
 
 // BLE Responses from ESP32 on Command Characteristic
 constexpr uint8_t RESP_SYNC_CHECK        = 0xA0; // 0x20 | 0x80
@@ -103,6 +111,7 @@ constexpr uint8_t RESP_DIAG_MODE         = 0xB0; // 0x30 | 0x80
 constexpr uint8_t RESP_DIAG_DTC_LIST     = 0xB1; // 0x31 | 0x80
 constexpr uint8_t RESP_DIAG_CLEAR_ACK    = 0xB2; // 0x32 | 0x80
 constexpr uint8_t RESP_CAN_RAW_FRAME     = 0xC0; // 0x40 | 0x80 -> [0xC0, id_le(4), dlc(1), data(8)]
+constexpr uint8_t RESP_OTA_STATUS        = 0xD0; // 0x50 | 0x80 -> [0xD0, state(1), ip0(1), ip1(1), ip2(1), ip3(1)]
 
 // ==============================================================================
 // 7. FREERTOS TASK CONFIGURATION (Dual-Core Affinity)

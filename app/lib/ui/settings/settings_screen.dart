@@ -10,6 +10,7 @@ import 'bike_learning_screen.dart';
 import 'bike_profiles_screen.dart';
 import 'esp_pairing_screen.dart';
 import 'diagnostics_screen.dart';
+import 'firmware_update_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key, required this.telemetryManager});
@@ -271,6 +272,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                       : 'Pasivní poslech (Listen-Only)'))
                               : '—',
                           navigates: false),
+                      _divider(),
+                      SettingsRow(
+                          icon: CupertinoIcons.arrow_clockwise_circle,
+                          title: 'Aktualizace firmwaru (OTA)',
+                          subtitle: available
+                              ? (ble.isOtaModeActive
+                                  ? 'Wi-Fi AP aktivní'
+                                  : 'Bezdrátový flash firmwaru')
+                              : '—',
+                          onTap: available
+                              ? () => _open(FirmwareUpdateScreen(
+                                  telemetryManager: manager))
+                              : null),
                     ])),
                     _section('Stav a úložiště'),
                     ContentGroup(

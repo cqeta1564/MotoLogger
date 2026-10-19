@@ -176,3 +176,15 @@ struct BleCommandEvent {
     uint8_t payload[32];
 };
 
+// ==============================================================================
+// Wireless OTA Update State (Reported via RESP_OTA_STATUS 0xD0)
+// ==============================================================================
+enum class OtaState : uint8_t {
+    OFF               = 0,
+    READY_WAITING     = 1,
+    UPDATING          = 2,
+    SUCCESS_REBOOTING = 3,
+    ERROR_REJECTED    = 4
+};
+
+

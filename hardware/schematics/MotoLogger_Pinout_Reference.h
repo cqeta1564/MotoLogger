@@ -1,4 +1,4 @@
-// MotoLogger Pinout
+// MotoLogger Pinout Reference (ESP32-S3 + BNO085 HSPI + MicroSD FSPI + CAN TWAI)
 
 #define FORCE_ON    17
 #define SENSE_V_DIG 8
@@ -9,49 +9,49 @@
 
 #define CAN_RX      13
 #define CAN_TX      14
-#define CAN_RS      38    // Standby and/or faster rise times
+#define CAN_RS      38    // Mode Control (LOW = 500 kbps Active, HIGH = Standby)
 
-#define HI_DRIVER   21    // 3V3 high driver power output
+#define HI_DRIVER   21    // Switched 3V3 high driver power output (MT9700 load switch)
 
-#define SDA         1     // I2C 
-#define SCL         2     // I2C
+// Dedicated HSPI Bus for CEVA / Hillcrest BNO085 9-DoF IMU (3 MHz)
+#define IMU_MISO    1     // GY-BNO08X SDA/MISO/TX (GPIO1)
+#define IMU_SCK     2     // GY-BNO08X SCL/SCK/RX (GPIO2)
+#define IMU_MOSI    4     // GY-BNO08X ADO / ADDR/MOSI (GPIO4 default; or pad GPIO6 if MOTOLOGGER_PCB_BREAKOUT_PADS)
+#define IMU_CS      5     // GY-BNO08X CS (GPIO5 default; or pad GPIO47 if MOTOLOGGER_PCB_BREAKOUT_PADS)
+#define IMU_INT     12    // GY-BNO08X H_INTN / Data-Ready Interrupt (GPIO12, Active LOW)
+#define IMU_RST     48    // GY-BNO08X Hardware Reset (GPIO48, Active LOW)
 
-#define MISO        41    // SPI
-#define MOSI        40    // SPI
-#define CLK         39    // SPI
-#define SD_CARD     45    // SPI CS for SD card reader
+// Dedicated FSPI Bus for MicroSD Card Reader (25 MHz)
+#define SD_MISO     41    // SPI MISO (GPIO41)
+#define SD_MOSI     40    // SPI MOSI (GPIO40)
+#define SD_SCK      39    // SPI CLK (GPIO39)
+#define SD_CS       45    // SPI CS for SD card reader (GPIO45)
 
 /*
+Available solderable breakout pads on the custom RejsaCAN v3.4 PCB:
 
-Total list of available solderable breakout pads are:
+Top-side breakout pads:
+  GPIO01  -> IMU_MISO (BNO085)
+  GPIO02  -> IMU_SCK (BNO085)
+  GPIO12  -> IMU_INT (BNO085 H_INTN)
+  GPIO48  -> IMU_RST (BNO085 RST)
+  GPIO47  -> Alternative IMU_CS pad (used when MOTOLOGGER_PCB_BREAKOUT_PADS defined)
+  GPIO21  -> 3V3 Switched power rail output
+  GPIO39  -> SD_SCK
+  GPIO40  -> SD_MOSI
+  GPIO41  -> SD_MISO
 
-GPIO01  or I2C SDA
-GPIO02  or I2C SCL
-GPIO39  or SPI CLK
-GPIO40  or SPI MOSI
-GPIO41  or SPI MISO
+Rear-side breakout pads:
+  GPIO06  -> Alternative IMU_MOSI pad (used when MOTOLOGGER_PCB_BREAKOUT_PADS defined)
+  GPIO07  -> Extra GPIO
+  GPIO15  -> Extra GPIO
+  GPIO16  -> Extra GPIO
+  RXD     -> Second UART RX
+  TXD     -> Second UART TX
 
-GPIO12  General GPIO, no default use
-GPIO48  General GPIO, no default use
-GPIO47  General GPIO, no default use
-GPIO21  Power output driver, not actual GPIO pin
-
-GPIO10  LED only, no pad!
-GPIO11  LED only, no pad!
-
-Only available as pads on the rear side of the board:
-  
-GPIO06  extra
-GPIO07  extra
-GPIO15  extra
-GPIO16  extra
-
-RXD     second UART
-TXD     second UART
-
-GPIO0   and PROGR mode strapping pin
-GPIO03  and JTAG_ENABLE strapping pin
-GPIO42  or JTAG MTMS
-
+Note for DevKitC-1 vs Custom PCB:
+- On ESP32-S3-DevKitC-1 development kits, GPIO4 (MOSI) and GPIO5 (CS) are easily accessible on pin headers.
+- On the custom RejsaCAN v3.4 PCB, compile with -D MOTOLOGGER_PCB_BREAKOUT_PADS to route MOSI to GPIO6 and CS to GPIO47 pads.
 */
+
 

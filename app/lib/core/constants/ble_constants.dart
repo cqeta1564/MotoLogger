@@ -29,6 +29,9 @@ class BleConstants {
   // CAN Sniffer Mode (Passive Listen-Only Stream)
   static const int cmdCanSnifferMode = 0x40; // Payload: [1 = Enable sniffer stream, 0 = Disable]
 
+  // OTA Firmware Update Mode (SoftAP at 192.168.4.1)
+  static const int cmdOtaSetMode = 0x50; // Payload: [1 = Enable Wi-Fi AP, 0 = Disable]
+
   // ESP32 -> Mobile Command Responses
   static const int respSyncCheck = 0xA0; // 0x20 | 0x80
   static const int respSyncCheckLegacy = 0x85; // 0x05 | 0x80
@@ -40,6 +43,7 @@ class BleConstants {
   static const int respDiagDtcList = 0xB1; // 0x31 | 0x80 -> [0xB1, count, "P0122:S;C0035:P"...]
   static const int respDiagClearAck = 0xB2; // 0x32 | 0x80 -> [0xB2, status(0/1)]
   static const int respCanRawFrame = 0xC0; // 0x40 | 0x80 -> [0xC0, can_id(4 LE), dlc(1), data(8)]
+  static const int respOtaStatus = 0xD0; // 0x50 | 0x80 -> [0xD0, state(1), ip(4)]
 
   // CAN Signal Indices matching ESP32 firmware CanSignalType enum
   static const int canSignalRpm = 0;

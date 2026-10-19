@@ -116,13 +116,15 @@ MotoLogger/
 | :--- | :--- | :--- |
 | **CAN TX** | `GPIO14` | SN65HVD230 Transceiver TX |
 | **CAN RX** | `GPIO13` | SN65HVD230 Transceiver RX |
-| **CAN RS** | `GPIO38` | Transceiver Mode (LOW = High Speed 500k, HIGH = Standby) |
-| **IMU SDA** | `GPIO1` | BNO085 Native I2C Data (400 kHz) |
-| **IMU SCL** | `GPIO2` | BNO085 Native I2C Clock |
-| **IMU INT (H_INTN)**| `GPIO12` | BNO085 Data-Ready Interrupt (Active LOW) |
+| **CAN RS** | `GPIO38` | Transceiver Mode (LOW = Active 500k/250k/1M, HIGH = Standby) |
+| **IMU MISO** | `GPIO1` | BNO085 HSPI MISO (GY-BNO08X `SDA/MISO/TX`) |
+| **IMU SCK** | `GPIO2` | BNO085 HSPI Clock (3 MHz) (GY-BNO08X `SCL/SCK/RX`) |
+| **IMU MOSI** | `GPIO4` | BNO085 HSPI MOSI (GY-BNO08X `ADDR/MOSI`, or pad `GPIO6` on custom PCB) |
+| **IMU CS** | `GPIO5` | BNO085 HSPI Chip Select (GY-BNO08X `CS`, or pad `GPIO47` on custom PCB) |
+| **IMU INT (H_INTN)**| `GPIO12` | BNO085 SHTP Interrupt / Data-Ready (Active LOW) |
 | **IMU RST** | `GPIO48` | BNO085 Hardware Reset (Active LOW) |
 | **3V3 Switch Rail** | `GPIO21` | Switched 3.3V power rail (MT9700 load switch) |
-| **MicroSD CS** | `GPIO45` | SPI Chip Select |
+| **MicroSD CS** | `GPIO45` | SPI Chip Select (Dedicated FSPI bus) |
 | **MicroSD SCK** | `GPIO39` | SPI Clock (25 MHz) |
 | **MicroSD MOSI** | `GPIO40` | SPI Master Out Slave In |
 | **MicroSD MISO** | `GPIO41` | SPI Master In Slave Out |

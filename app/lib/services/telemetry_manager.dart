@@ -240,6 +240,9 @@ class TelemetryManager extends ChangeNotifier {
       } else {
         _isDiagnosticModeActive = adjustedPacket.isDiagnosticModeActive;
       }
+      if (bleService.isOtaModeActive && movingAboveSafetyLimit) {
+        bleService.setOtaMode(false);
+      }
 
       final currentG = sqrt(adjustedPacket.accelXG * adjustedPacket.accelXG +
           adjustedPacket.accelYG * adjustedPacket.accelYG);
@@ -426,6 +429,7 @@ class TelemetryManager extends ChangeNotifier {
       }
     }
 
+    _carChannel.invokeMethod('startRecordingService').catchError((_) {});
     notifyListeners();
   }
 
@@ -540,6 +544,7 @@ class TelemetryManager extends ChangeNotifier {
     _recordingError = null;
     _isPaused = false;
     _currentSessionId = null;
+    _carChannel.invokeMethod('stopRecordingService').catchError((_) {});
     notifyListeners();
   }
 
@@ -804,10 +809,30 @@ class TelemetryManager extends ChangeNotifier {
     }
   }
 
+  /// Enables or disables wireless Wi-Fi OTA firmware update mode on the ESP32-S3.
+  Future<bool> setOtaMode(bool enable) async {
+    if (enable) {
+      if (_isRecording) {
+        notifyListeners();
+        return false;
+      }
+      if (currentEffectiveSpeedKmh > 5.0) {
+        notifyListeners();
+        return false;
+      }
+    }
+    final active = await bleService.setOtaMode(enable);
+    notifyListeners();
+    return active;
+  }
+
   @override
   void dispose() {
     if (_isDiagnosticModeActive) {
       bleService.setDiagnosticMode(false);
+    }
+    if (bleService.isOtaModeActive) {
+      bleService.setOtaMode(false);
     }
     if (gpsService.isMockMode) {
       gpsService.enableMockMode(false);
@@ -817,6 +842,7 @@ class TelemetryManager extends ChangeNotifier {
     _bleSub?.cancel();
     _bleStateSub?.cancel();
     _gpsSub?.cancel();
+    _carChannel.invokeMethod('stopRecordingService').catchError((_) {});
     super.dispose();
   }
 }

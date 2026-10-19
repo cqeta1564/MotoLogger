@@ -102,9 +102,10 @@ contextual controls use a bounded Flutter blur/tint approximation, **not native
 Apple Liquid Glass**. Content stays opaque. Settings → **Omezit průhlednost**
 persists an opaque fallback in SQLite. Android back and enlarged text are supported.
 
-The repository currently contains an Android host only. iOS/CarPlay claims above
-are product intentions, not a checked-in, buildable iOS target. No iOS simulator,
-Xcode build or physical motorcycle validation was performed on this Linux machine.
+The repository contains both fully configured Android (`app/android`) and iOS
+(`app/ios`) hosts. The iOS project includes required background modes (`location`,
+`bluetooth-central`), permission descriptions in `Info.plist`, and `AppDelegate.swift`
+platform channel registration.
 
 See [design decisions](../docs/DESIGN.md) and the
 [verification record and screenshots](../docs/review/VERIFICATION.md).

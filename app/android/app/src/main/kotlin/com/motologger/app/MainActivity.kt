@@ -1,5 +1,7 @@
 package com.motologger.app
 
+import android.content.Intent
+import android.os.Build
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -54,6 +56,32 @@ class MainActivity : FlutterActivity() {
                         result.success(true)
                     } else {
                         result.error("INVALID_ARGS", "Expected telemetry map", null)
+                    }
+                }
+                "startRecordingService" -> {
+                    try {
+                        val serviceIntent = Intent(this, MotoLoggerRecordingService::class.java).apply {
+                            action = MotoLoggerRecordingService.ACTION_START
+                        }
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            startForegroundService(serviceIntent)
+                        } else {
+                            startService(serviceIntent)
+                        }
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.success(false)
+                    }
+                }
+                "stopRecordingService" -> {
+                    try {
+                        val serviceIntent = Intent(this, MotoLoggerRecordingService::class.java).apply {
+                            action = MotoLoggerRecordingService.ACTION_STOP
+                        }
+                        startService(serviceIntent)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.success(false)
                     }
                 }
                 else -> result.notImplemented()

@@ -93,6 +93,7 @@ class BleService {
   Timer? _mockTimer;
   bool _mockMode = false;
   bool get isMockMode => _mockMode;
+  bool mockStationary = false;
 
   final List<Timer> _mockScanTimers = [];
 
@@ -113,6 +114,15 @@ class BleService {
     const DiagnosticTroubleCode(code: 'P0122', isPending: false),
     const DiagnosticTroubleCode(code: 'C0035', isPending: true),
   ];
+
+  // OTA Update state
+  bool _isOtaModeActive = false;
+  bool get isOtaModeActive => _isOtaModeActive;
+  int _otaStateCode = 0; // 0=OFF, 1=READY_WAITING, 2=UPDATING, 3=SUCCESS_REBOOTING, 4=ERROR_REJECTED
+  int get otaStateCode => _otaStateCode;
+  String _otaIpAddress = '192.168.4.1';
+  String get otaIpAddress => _otaIpAddress;
+  Completer<bool>? _otaModeCompleter;
 
   void _setState(BleConnectionState newState) {
     _state = newState;
@@ -530,6 +540,19 @@ class BleService {
         );
         _rawCanFrameController.add(frame);
       }
+    } else if (opcode == BleConstants.respOtaStatus) {
+      if (value.length > 1) {
+        _otaStateCode = value[1];
+        _isOtaModeActive = (_otaStateCode == 1 || _otaStateCode == 2);
+      }
+      if (value.length >= 6) {
+        _otaIpAddress = '${value[2]}.${value[3]}.${value[4]}.${value[5]}';
+      }
+      final c = _otaModeCompleter;
+      _otaModeCompleter = null;
+      if (c != null && !c.isCompleted) {
+        c.complete(_otaStateCode != 4);
+      }
     }
   }
 
@@ -668,6 +691,43 @@ class BleService {
     }
   }
 
+  /// Enables or disables wireless Wi-Fi OTA firmware update mode on the ESP32-S3.
+  /// When active, ESP32 launches SoftAP "MotoLogger-OTA" at http://192.168.4.1.
+  Future<bool> setOtaMode(bool enable) async {
+    if (_mockMode) {
+      _isOtaModeActive = enable;
+      _otaStateCode = enable ? 1 : 0;
+      _otaIpAddress = '192.168.4.1';
+      debugPrint('[BLE MOCK] Set OTA mode to: $enable');
+      return true;
+    }
+    if (_commandChar == null) return false;
+
+    final completer = Completer<bool>();
+    try {
+      _otaModeCompleter = completer;
+
+      final bytes = [BleConstants.cmdOtaSetMode, enable ? 1 : 0];
+      await _commandChar!.write(bytes, withoutResponse: false);
+      debugPrint('[BLE] Sent OTA mode command: $enable');
+
+      return await completer.future.timeout(
+        const Duration(seconds: 4),
+        onTimeout: () {
+          _isOtaModeActive = enable;
+          return enable;
+        },
+      );
+    } catch (e) {
+      debugPrint('[BLE] setOtaMode error: $e');
+      return false;
+    } finally {
+      if (_otaModeCompleter == completer) {
+        _otaModeCompleter = null;
+      }
+    }
+  }
+
   Future<bool> uploadBikeProfile(BikeProfile profile) async {
     if (profile.id == 'standard_obd2') {
       return await sendCanProfileMode(isCustomActive: false);
@@ -717,9 +777,9 @@ class BleService {
 
       _mockTimer = Timer.periodic(const Duration(milliseconds: 40), (timer) {
         time += 0.04;
-        if (_mockDiagModeActive) {
-          // Stationary workshop diagnostic simulation (engine idling on stand)
-          final diagPacket = TelemetryPacket(
+        if (mockStationary || _mockDiagModeActive || _isOtaModeActive) {
+          // Stationary workshop simulation (engine idling or off, bike on stand)
+          final stationaryPacket = TelemetryPacket(
             timestampMs: (time * 1000).toInt(),
             leanAngleDeg: 0.2 * sin(time * 1.5),
             pitchDeg: 0.1 * cos(time * 1.5),
@@ -729,15 +789,15 @@ class BleService {
             gyroXDps: 0.0,
             gyroYDps: 0.0,
             gyroZDps: 0.0,
-            engineRpm: 1250 + (35 * sin(time * 3.0)).round(),
+            engineRpm: _isOtaModeActive ? 0 : (1250 + (35 * sin(time * 3.0)).round()),
             vehicleSpeedKmh: 0,
             throttlePosPct: 0,
             coolantTempC: 88,
             gear: 0,
             batteryVoltage: 14.1,
-            statusFlags: 0x1F, // SD OK, Engine Run, IMU OK, Diagnostic TX Active
+            statusFlags: 0x1F, // SD OK, Engine Run, IMU OK
           );
-          _telemetryController.add(diagPacket);
+          _telemetryController.add(stationaryPacket);
           return;
         }
 
@@ -1103,6 +1163,12 @@ class BleService {
       _diagClearAckCompleter!.complete(false);
     }
     _diagClearAckCompleter = null;
+    _isOtaModeActive = false;
+    _otaStateCode = 0;
+    if (_otaModeCompleter != null && !_otaModeCompleter!.isCompleted) {
+      _otaModeCompleter!.complete(false);
+    }
+    _otaModeCompleter = null;
     _fileChunkBuffer.clear();
     _device?.disconnect();
     _setState(BleConnectionState.disconnected);
