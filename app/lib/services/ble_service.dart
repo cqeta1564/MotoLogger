@@ -123,6 +123,7 @@ class BleService {
   String _otaIpAddress = '192.168.4.1';
   String get otaIpAddress => _otaIpAddress;
   Completer<bool>? _otaModeCompleter;
+  VoidCallback? onOtaStatusChanged;
 
   void _setState(BleConnectionState newState) {
     _state = newState;
@@ -553,6 +554,7 @@ class BleService {
       if (c != null && !c.isCompleted) {
         c.complete(_otaStateCode != 4);
       }
+      onOtaStatusChanged?.call();
     }
   }
 

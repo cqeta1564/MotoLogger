@@ -4,6 +4,7 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include <Update.h>
+#include <atomic>
 #include <functional>
 #include "types.h"
 
@@ -22,7 +23,7 @@ public:
     void stopOtaAp();
     void handleClient();
 
-    bool isOtaActive() const { return is_active_; }
+    bool isOtaActive() const { return is_active_.load(std::memory_order_acquire); }
     OtaState getState() const { return state_; }
     IPAddress getIp() const { return ap_ip_; }
 
@@ -32,9 +33,11 @@ private:
     void notifyStatus(OtaState state);
     void setupRoutes();
 
-    bool is_active_;
+    std::atomic<bool> is_active_;
+    bool routes_configured_;
     OtaState state_;
     IPAddress ap_ip_;
     WebServer server_;
     OtaStatusCallback status_cb_;
 };
+

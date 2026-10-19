@@ -110,6 +110,7 @@ static const char OTA_INDEX_HTML[] PROGMEM = R"rawhtml(
 
 OtaManager::OtaManager()
     : is_active_(false),
+      routes_configured_(false),
       state_(OtaState::OFF),
       ap_ip_(0, 0, 0, 0),
       server_(80),
@@ -119,7 +120,8 @@ void OtaManager::begin(OtaStatusCallback status_cb) {
     status_cb_ = status_cb;
     WiFi.mode(WIFI_OFF);
     state_ = OtaState::OFF;
-    is_active_ = false;
+    is_active_.store(false, std::memory_order_release);
+    setupRoutes();
 }
 
 void OtaManager::notifyStatus(OtaState state) {
@@ -130,6 +132,9 @@ void OtaManager::notifyStatus(OtaState state) {
 }
 
 void OtaManager::setupRoutes() {
+    if (routes_configured_) return;
+    routes_configured_ = true;
+
     server_.on("/", HTTP_GET, [this]() {
         server_.send_P(200, "text/html", OTA_INDEX_HTML);
     });
@@ -175,7 +180,7 @@ void OtaManager::setupRoutes() {
 }
 
 bool OtaManager::startOtaAp() {
-    if (is_active_) return true;
+    if (is_active_.load(std::memory_order_acquire)) return true;
 
     Serial.println("[OTA] Starting SoftAP (SSID: MotoLogger-OTA)...");
     WiFi.mode(WIFI_AP);
@@ -191,25 +196,26 @@ bool OtaManager::startOtaAp() {
 
     setupRoutes();
     server_.begin();
-    is_active_ = true;
+    is_active_.store(true, std::memory_order_release);
     notifyStatus(OtaState::READY_WAITING);
     return true;
 }
 
 void OtaManager::stopOtaAp() {
-    if (!is_active_) return;
+    if (!is_active_.load(std::memory_order_acquire)) return;
 
     Serial.println("[OTA] Stopping SoftAP and WebServer...");
+    is_active_.store(false, std::memory_order_release);
     server_.stop();
     WiFi.softAPdisconnect(true);
     WiFi.mode(WIFI_OFF);
-    is_active_ = false;
     ap_ip_ = IPAddress(0, 0, 0, 0);
     notifyStatus(OtaState::OFF);
 }
 
 void OtaManager::handleClient() {
-    if (is_active_) {
+    if (is_active_.load(std::memory_order_acquire)) {
         server_.handleClient();
     }
 }
+

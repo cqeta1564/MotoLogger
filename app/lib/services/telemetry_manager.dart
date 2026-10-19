@@ -177,6 +177,7 @@ class TelemetryManager extends ChangeNotifier {
   }
 
   void _initListeners() {
+    bleService.onOtaStatusChanged = notifyListeners;
     _bleStateSub = bleService.stateStream.listen((state) {
       if (state == BleConnectionState.connected) {
         if (_mountingRollOffsetDeg != 0.0) {

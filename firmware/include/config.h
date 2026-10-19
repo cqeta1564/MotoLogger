@@ -120,9 +120,10 @@ constexpr BaseType_t CORE_CAN_POWER       = 0;           // Core 0: CAN bus, Pow
 constexpr BaseType_t CORE_IMU_STORAGE     = 1;           // Core 1: IMU fusion math & SD file I/O
 
 constexpr uint32_t   STACK_CAN_TASK       = 4096;
-constexpr uint32_t   STACK_POWER_TASK     = 4096;
+constexpr uint32_t   STACK_POWER_TASK     = 8192;
 constexpr uint32_t   STACK_IMU_TASK       = 6144;
 constexpr uint32_t   STACK_STORAGE_TASK   = 8192;
-constexpr uint32_t   STACK_BLE_TASK       = 4096;
+constexpr uint32_t   STACK_BLE_TASK       = 6144;
+
 
 

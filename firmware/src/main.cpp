@@ -627,17 +627,6 @@ void taskBleStreaming(void* pvParameters) {
             }
         }
 
-        // Handle OTA maintenance web server if active (with vehicle speed safety interlock)
-        if (g_ota_mgr.isOtaActive()) {
-            ObdTelemetry obd = g_can_mgr.getTelemetry();
-            if (obd.vehicle_speed_kmh > 5) {
-                logPrintf("[OTA] Safety shutdown: vehicle moving (> 5 km/h)!\n");
-                g_ota_mgr.stopOtaAp();
-            } else {
-                g_ota_mgr.handleClient();
-            }
-        }
-
         TickType_t now_ticks = xTaskGetTickCount();
         if (now_ticks - last_wake_time >= interval_ticks) {
             last_wake_time = now_ticks;
@@ -785,13 +774,23 @@ void taskSupervisor(void* pvParameters) {
             }
         }
 
-        // 3. Feed power state machine with live connectivity and CAN RPM data
+        // 3. Service OTA maintenance web server if active (with vehicle speed safety interlock)
         ObdTelemetry obd = g_can_mgr.getTelemetry();
-        g_power_mgr.update(ble_conn, obd.engine_rpm);
+        if (g_ota_mgr.isOtaActive()) {
+            if (obd.vehicle_speed_kmh > 5) {
+                logPrintf("[OTA] Safety shutdown: vehicle moving (> 5 km/h)!\n");
+                g_ota_mgr.stopOtaAp();
+            } else {
+                g_ota_mgr.handleClient();
+            }
+        }
+
+        // 4. Feed power state machine (keep 12V latch active while BLE is connected OR OTA AP is active)
+        g_power_mgr.update(ble_conn || g_ota_mgr.isOtaActive(), obd.engine_rpm);
 
         PowerState pwr_state = g_power_mgr.getState();
 
-        // 4. Update LED diagnostic patterns
+        // 5. Update LED diagnostic patterns
         if (!g_storage_mgr.isReady() || !g_imu_mgr.isReady()) {
             g_led_indicator.setBluePattern(LedIndicator::Pattern::ERROR_BLINK);
         } else if (pwr_state == PowerState::COUNTDOWN_TO_SHUTDOWN) {
@@ -808,7 +807,7 @@ void taskSupervisor(void* pvParameters) {
 
         g_led_indicator.update();
 
-        // 5. Periodic Serial Diagnostic Telemetry (1 Hz)
+        // 6. Periodic Serial Diagnostic Telemetry (1 Hz)
         uint32_t now = millis();
         if (now - last_report_ms >= 1000) {
             last_report_ms = now;
@@ -848,7 +847,8 @@ void taskSupervisor(void* pvParameters) {
             }
         }
 
-        vTaskDelay(pdMS_TO_TICKS(50));
+        // Poll at 2 ms during active OTA upload for high-speed HTTP transfer, 50 ms otherwise
+        vTaskDelay(pdMS_TO_TICKS(g_ota_mgr.isOtaActive() ? 2 : 50));
     }
 
     vTaskDelete(nullptr);
