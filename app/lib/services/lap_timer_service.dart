@@ -3,6 +3,8 @@ import 'package:geolocator/geolocator.dart';
 import '../models/fused_sample.dart';
 import '../models/lap_split.dart';
 
+typedef TrackCircuit = CircuitGate;
+
 class CircuitGate {
   final String name;
   final double centerLat;
@@ -131,6 +133,32 @@ class LapTimerService {
   }
 
   /// Calculates a perpendicular gate across track heading
+  static CircuitGate createCustomCircuitFromPosition({
+    required double lat,
+    required double lon,
+    required double headingDeg,
+    String name = 'Vlastní okruh',
+    double halfWidthMeters = 30.0,
+  }) {
+    final perpHeadingRad = (headingDeg + 90.0) * (pi / 180.0);
+    // 1 deg latitude ~ 111,320 meters
+    final dLat = (halfWidthMeters * cos(perpHeadingRad)) / 111320.0;
+    final dLon = (halfWidthMeters * sin(perpHeadingRad)) /
+        (111320.0 * cos(lat * (pi / 180.0)));
+
+    return CircuitGate(
+      name: name,
+      centerLat: lat,
+      centerLon: lon,
+      p1Lat: lat + dLat,
+      p1Lon: lon + dLon,
+      p2Lat: lat - dLat,
+      p2Lon: lon - dLon,
+      expectedHeadingDeg: headingDeg,
+    );
+  }
+
+  /// Calculates a perpendicular gate across track heading (instance helper)
   CircuitGate _createPerpendicularGate({
     required String name,
     required double centerLat,
@@ -138,26 +166,79 @@ class LapTimerService {
     required double headingDeg,
     required double halfWidthMeters,
   }) {
-    final perpHeadingRad = (headingDeg + 90.0) * (pi / 180.0);
-    // 1 deg latitude ~ 111,320 meters
-    final dLat = (halfWidthMeters * cos(perpHeadingRad)) / 111320.0;
-    final dLon = (halfWidthMeters * sin(perpHeadingRad)) /
-        (111320.0 * cos(centerLat * (pi / 180.0)));
-
-    return CircuitGate(
+    return createCustomCircuitFromPosition(
       name: name,
-      centerLat: centerLat,
-      centerLon: centerLon,
-      p1Lat: centerLat + dLat,
-      p1Lon: centerLon + dLon,
-      p2Lat: centerLat - dLat,
-      p2Lon: centerLon - dLon,
-      expectedHeadingDeg: headingDeg,
+      lat: centerLat,
+      lon: centerLon,
+      headingDeg: headingDeg,
+      halfWidthMeters: halfWidthMeters,
     );
   }
 
+  /// Inkrementální kontrola průjezdu cílovou čárou mezi dvěma sousedními vzorky
+  static GateCrossing? checkSingleSegmentCrossing(
+    FusedSample prev,
+    FusedSample curr,
+    CircuitGate gate, {
+    int lastCrossMs = -999999,
+    int cooldownMs = 15000,
+    int sampleIndex = 0,
+  }) {
+    if (curr.latitude == 0.0 && curr.longitude == 0.0) return null;
+    if (prev.latitude == 0.0 && prev.longitude == 0.0) return null;
+
+    final x1 = prev.longitude;
+    final y1 = prev.latitude;
+    final x2 = curr.longitude;
+    final y2 = curr.latitude;
+
+    final gx1 = gate.p1Lon;
+    final gy1 = gate.p1Lat;
+    final gx2 = gate.p2Lon;
+    final gy2 = gate.p2Lat;
+
+    // 2D Line Segment Intersection Algorithm
+    final det = (x2 - x1) * (gy2 - gy1) - (y2 - y1) * (gx2 - gx1);
+    if (det.abs() < 1e-12) return null; // Parallel segments
+
+    final u = ((gx1 - x1) * (gy2 - gy1) - (gy1 - y1) * (gx2 - gx1)) / det;
+    final v = ((gx1 - x1) * (y2 - y1) - (gy1 - y1) * (x2 - x1)) / det;
+
+    if (u >= 0.0 && u <= 1.0 && v >= 0.0 && v <= 1.0) {
+      // Segments intersect! Verify direction of travel
+      double segHeading = Geolocator.bearingBetween(y1, x1, y2, x2);
+      if (segHeading < 0) segHeading += 360.0;
+
+      double segDiff =
+          (segHeading - gate.expectedHeadingDeg + 180.0) % 360.0 - 180.0;
+      if (segDiff < -180.0) segDiff += 360.0;
+
+      double heading = curr.bearing != 0.0 ? curr.bearing : segHeading;
+      double diff =
+          (heading - gate.expectedHeadingDeg + 180.0) % 360.0 - 180.0;
+      if (diff < -180.0) diff += 360.0;
+
+      // Must travel forward within +/- 90 degrees of track direction
+      if (segDiff.abs() <= 90.0 && diff.abs() <= 90.0) {
+        final t1 = prev.timestampMs;
+        final t2 = curr.timestampMs;
+        final crossTimeMs = t1 + (u * (t2 - t1)).round();
+
+        if (crossTimeMs - lastCrossMs >= cooldownMs) {
+          return GateCrossing(
+            timestampMs: crossTimeMs,
+            sampleIndex: sampleIndex,
+            u: u,
+          );
+        }
+      }
+    }
+    return null;
+  }
+
   /// Finds all finish line crossing events in the sample stream
-  List<GateCrossing> detectCrossings(List<FusedSample> samples, {CircuitGate? gate}) {
+  List<GateCrossing> detectCrossings(List<FusedSample> samples,
+      {CircuitGate? gate}) {
     if (samples.length < 2) return [];
     final activeGate = gate ?? resolveCircuit(samples);
     if (activeGate == null) return [];
@@ -166,60 +247,22 @@ class LapTimerService {
     int lastCrossMs = -999999;
     const int cooldownMs = 15000; // Minimum 15 seconds cooldown between lap triggers
 
-    final gx1 = activeGate.p1Lon;
-    final gy1 = activeGate.p1Lat;
-    final gx2 = activeGate.p2Lon;
-    final gy2 = activeGate.p2Lat;
-
     for (int i = 1; i < samples.length; i++) {
       final prev = samples[i - 1];
       final curr = samples[i];
 
-      if (curr.latitude == 0.0 && curr.longitude == 0.0) continue;
-      if (prev.latitude == 0.0 && prev.longitude == 0.0) continue;
+      final crossing = checkSingleSegmentCrossing(
+        prev,
+        curr,
+        activeGate,
+        lastCrossMs: lastCrossMs,
+        cooldownMs: cooldownMs,
+        sampleIndex: i,
+      );
 
-      final x1 = prev.longitude;
-      final y1 = prev.latitude;
-      final x2 = curr.longitude;
-      final y2 = curr.latitude;
-
-      // 2D Line Segment Intersection Algorithm
-      // Segment 1: (x1, y1) -> (x2, y2)
-      // Segment 2: (gx1, gy1) -> (gx2, gy2)
-      final det = (x2 - x1) * (gy2 - gy1) - (y2 - y1) * (gx2 - gx1);
-      if (det.abs() < 1e-12) continue; // Parallel segments
-
-      final u = ((gx1 - x1) * (gy2 - gy1) - (gy1 - y1) * (gx2 - gx1)) / det;
-      final v = ((gx1 - x1) * (y2 - y1) - (gy1 - y1) * (x2 - x1)) / det;
-
-      if (u >= 0.0 && u <= 1.0 && v >= 0.0 && v <= 1.0) {
-        // Segments intersect! Verify direction of travel
-        // Motion vector between previous and current sample must travel in track direction
-        double segHeading = Geolocator.bearingBetween(y1, x1, y2, x2);
-        if (segHeading < 0) segHeading += 360.0;
-
-        double segDiff = (segHeading - activeGate.expectedHeadingDeg + 180.0) % 360.0 - 180.0;
-        if (segDiff < -180.0) segDiff += 360.0;
-
-        double heading = curr.bearing != 0.0 ? curr.bearing : segHeading;
-        double diff = (heading - activeGate.expectedHeadingDeg + 180.0) % 360.0 - 180.0;
-        if (diff < -180.0) diff += 360.0;
-
-        // Must travel forward within +/- 90 degrees of track direction
-        if (segDiff.abs() <= 90.0 && diff.abs() <= 90.0) {
-          final t1 = prev.timestampMs;
-          final t2 = curr.timestampMs;
-          final crossTimeMs = t1 + (u * (t2 - t1)).round();
-
-          if (crossTimeMs - lastCrossMs >= cooldownMs) {
-            crossings.add(GateCrossing(
-              timestampMs: crossTimeMs,
-              sampleIndex: i,
-              u: u,
-            ));
-            lastCrossMs = crossTimeMs;
-          }
-        }
+      if (crossing != null) {
+        crossings.add(crossing);
+        lastCrossMs = crossing.timestampMs;
       }
     }
 

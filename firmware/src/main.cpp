@@ -26,10 +26,12 @@ static SemaphoreHandle_t g_serial_mutex = nullptr;
 // Lock-free queues for inter-task telemetry streaming & BLE command offloading
 static RingBuffer<TelemetryRecord, 512> g_telemetry_queue;
 static RingBuffer<CanFrame, 256>        g_raw_can_queue;
+static RingBuffer<CanFrame, 32>         g_sniffer_queue;
 static RingBuffer<BleCommandEvent, 16>  g_ble_cmd_queue;
 
 // Synchronization flags
 static std::atomic<bool> g_system_shutdown_ready{false};
+static std::atomic<bool> g_can_sniffer_active{false};
 
 // ==============================================================================
 // FreeRTOS Task Prototypes
@@ -154,11 +156,16 @@ static void processBleCommandQueue() {
                 }
                 break;
 
-            case 0x04: // Set CAN profile active mode (1 = Custom profile, 0 = Standard OBD)
+            case 0x04: // Set CAN profile active mode (1 = Custom profile, 0 = Standard OBD) and optional baudrate
                 if (length >= 1) {
                     bool active = (payload[0] != 0);
-                    g_can_mgr.setProfileActive(active);
-                    logPrintf("[BLE CMD] CAN profile active mode: %s (saved to NVS)\n", active ? "CUSTOM" : "OBD");
+                    uint16_t baud = 500;
+                    if (length >= 3) {
+                        baud = static_cast<uint16_t>(payload[1]) | (static_cast<uint16_t>(payload[2]) << 8);
+                    }
+                    g_can_mgr.setProfileActive(active, baud);
+                    logPrintf("[BLE CMD] CAN profile active mode: %s (Baudrate: %u kbps, saved to NVS)\n",
+                              active ? "CUSTOM" : "OBD", baud);
                 } else {
                     logPrintf("[BLE CMD] Invalid payload length for CAN Profile Mode: %u\n", static_cast<unsigned int>(length));
                 }
@@ -359,6 +366,16 @@ static void processBleCommandQueue() {
                 break;
             }
 
+            case CMD_CAN_SNIFFER_MODE: {
+                bool enable = (length >= 1) && (payload[0] != 0);
+                g_can_sniffer_active.store(enable, std::memory_order_release);
+                if (!enable) {
+                    g_sniffer_queue.reset();
+                }
+                logPrintf("[BLE CMD] CAN Sniffer Mode %s\n", enable ? "ENABLED" : "DISABLED");
+                break;
+            }
+
             default:
                 logPrintf("[BLE CMD] Unknown command 0x%02X received.\n", ev.command_id);
                 break;
@@ -472,11 +489,17 @@ void taskCanBus(void* pvParameters) {
         if (g_can_mgr.receiveFrame(frame, 5)) {
             g_led_indicator.triggerCanActivity();
             g_raw_can_queue.push(frame);
+            if (g_can_sniffer_active.load(std::memory_order_relaxed)) {
+                g_sniffer_queue.push(frame);
+            }
 
             // Drain up to 31 additional queued frames non-blockingly
             uint8_t burst_count = 1;
             while (burst_count < 32 && g_can_mgr.receiveFrame(frame, 0)) {
                 g_raw_can_queue.push(frame);
+                if (g_can_sniffer_active.load(std::memory_order_relaxed)) {
+                    g_sniffer_queue.push(frame);
+                }
                 burst_count++;
             }
 
@@ -500,6 +523,7 @@ void taskBleStreaming(void* pvParameters) {
     (void)pvParameters;
     const TickType_t interval_ticks = pdMS_TO_TICKS(BLE_STREAM_INTERVAL_MS);
     TickType_t last_wake_time = xTaskGetTickCount();
+    uint32_t last_sniffer_tx_ms = 0;
 
     while (!g_system_shutdown_ready.load(std::memory_order_acquire)) {
         if (g_ble_mgr.isConnected()) {
@@ -535,6 +559,33 @@ void taskBleStreaming(void* pvParameters) {
             pkt.status_flags       = flags;
 
             g_ble_mgr.sendTelemetry(pkt);
+
+            // Stream sampled raw CAN frames if Sniffer mode is active (throttled to ~14 frames/sec)
+            if (g_can_sniffer_active.load(std::memory_order_acquire)) {
+                uint32_t now = millis();
+                if (now - last_sniffer_tx_ms >= 70) {
+                    CanFrame sniffer_frame;
+                    if (g_sniffer_queue.pop(sniffer_frame)) {
+                        last_sniffer_tx_ms = now;
+                        uint8_t sniffer_pkt[14];
+                        sniffer_pkt[0] = RESP_CAN_RAW_FRAME;
+                        sniffer_pkt[1] = static_cast<uint8_t>(sniffer_frame.id & 0xFF);
+                        sniffer_pkt[2] = static_cast<uint8_t>((sniffer_frame.id >> 8) & 0xFF);
+                        sniffer_pkt[3] = static_cast<uint8_t>((sniffer_frame.id >> 16) & 0xFF);
+                        sniffer_pkt[4] = static_cast<uint8_t>((sniffer_frame.id >> 24) & 0xFF);
+                        sniffer_pkt[5] = (sniffer_frame.dlc > 8) ? 8 : sniffer_frame.dlc;
+                        memset(&sniffer_pkt[6], 0, 8);
+                        memcpy(&sniffer_pkt[6], sniffer_frame.data, sniffer_pkt[5]);
+                        g_ble_mgr.sendCommandResponse(sniffer_pkt, sizeof(sniffer_pkt));
+                    }
+                }
+            }
+        } else {
+            // Automatically deactivate sniffer if BLE client disconnects
+            if (g_can_sniffer_active.load(std::memory_order_acquire)) {
+                g_can_sniffer_active.store(false, std::memory_order_release);
+                g_sniffer_queue.reset();
+            }
         }
 
         TickType_t now_ticks = xTaskGetTickCount();

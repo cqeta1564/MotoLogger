@@ -28,43 +28,116 @@ class MotoLoggerCarSession : Session() {
 }
 
 class MotoLoggerDashboardScreen(carContext: androidx.car.app.CarContext) : Screen(carContext) {
+
+    private val listener: () -> Unit = {
+        invalidate()
+    }
+
+    init {
+        CarTelemetryRepository.addListener(listener)
+    }
+
+    private fun formatLapTime(ms: Long): String {
+        if (ms <= 0) return "0:00.0"
+        val totalSec = ms / 1000
+        val min = totalSec / 60
+        val sec = totalSec % 60
+        val tenths = (ms % 1000) / 100
+        return String.format("%d:%02d.%d", min, sec, tenths)
+    }
+
     override fun onGetTemplate(): Template {
-        // High-contrast motorcycle telemetry layout for Android Auto displays
+        val t = CarTelemetryRepository.currentTelemetry
         val paneBuilder = Pane.Builder()
 
-        paneBuilder.addRow(
-            Row.Builder()
-                .setTitle("LEAN ANGLE")
-                .addText("Current: 0.0° | Peak Left: -44.2° | Peak Right: +46.8°")
-                .build()
-        )
+        // 1. Lean Angle row
+        val leanCurrent = if (t.isConnected && t.leanAngleDeg != null) {
+            String.format("%.1f°", t.leanAngleDeg)
+        } else {
+            "—"
+        }
+        val peakLeft = if (t.maxLeanLeft != null && t.maxLeanLeft < 0.0) {
+            String.format("%.1f°", t.maxLeanLeft)
+        } else {
+            "—"
+        }
+        val peakRight = if (t.maxLeanRight != null && t.maxLeanRight > 0.0) {
+            String.format("+%.1f°", t.maxLeanRight)
+        } else {
+            "—"
+        }
 
         paneBuilder.addRow(
             Row.Builder()
-                .setTitle("POWERTRAIN & GEAR")
-                .addText("Gear: 4 | Speed: 92 km/h | RPM: 8,450")
+                .setTitle("NÁKLON (LEAN ANGLE)")
+                .addText("Aktuální: $leanCurrent | Max vlevo: $peakLeft | Max vpravo: $peakRight")
                 .build()
         )
 
+        // 2. Powertrain & Gear row
+        val gearStr = if (t.isConnected && t.gear != null) {
+            if (t.gear == 0) "N" else t.gear.toString()
+        } else {
+            "—"
+        }
+        val speedStr = if (t.speedKmh != null) {
+            "${t.speedKmh} km/h"
+        } else {
+            "—"
+        }
+        val rpmStr = if (t.isConnected && t.engineRpm != null && t.engineRpm > 0) {
+            String.format("%,d ot/min", t.engineRpm)
+        } else {
+            "—"
+        }
+
         paneBuilder.addRow(
             Row.Builder()
-                .setTitle("BATTERY & SENSORS")
-                .addText("14.2V (Alternator Active) | IMU 100Hz Active")
+                .setTitle("RYCHLOST & POHON")
+                .addText("Rychlost: $speedStr | Převod: $gearStr | Otáčky: $rpmStr")
+                .build()
+        )
+
+        // 3. Status & Lap timer row
+        val statusText = if (t.isRecording) {
+            val lapTimeStr = formatLapTime(t.lapElapsedMs)
+            val deltaStr = if (t.deltaSeconds != null) {
+                val d = t.deltaSeconds
+                val sign = if (d > 0) "+" else ""
+                String.format(" | Delta: %s%.2fs", sign, d)
+            } else {
+                ""
+            }
+            "Záznam běží · Kolo ${t.currentLap} ($lapTimeStr$deltaStr)"
+        } else {
+            val connStr = if (t.isConnected) "Jednotka připojena" else "Jednotka odpojena"
+            val tempStr = if (t.isConnected && t.coolantTempC != null && t.coolantTempC > 0) {
+                " | Teplota vody: ${t.coolantTempC}°C"
+            } else {
+                ""
+            }
+            "$connStr$tempStr"
+        }
+
+        paneBuilder.addRow(
+            Row.Builder()
+                .setTitle("STAV JÍZDY")
+                .addText(statusText)
                 .build()
         )
 
         paneBuilder.addAction(
             Action.Builder()
-                .setTitle("TARE ZERO")
+                .setTitle("VYNULOVAT NÁKLON (TARE)")
                 .setOnClickListener {
-                    // Send Tare command
+                    CarTelemetryRepository.requestTareZero()
                 }
                 .build()
         )
 
         return PaneTemplate.Builder(paneBuilder.build())
             .setHeaderAction(Action.APP_ICON)
-            .setTitle("MotoLogger Telemetry")
+            .setTitle("MotoLogger Telemetrie")
             .build()
     }
 }

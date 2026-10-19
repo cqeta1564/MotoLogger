@@ -8,6 +8,7 @@ import '../core/constants/ble_constants.dart';
 import '../models/telemetry_packet.dart';
 import '../models/can_profile.dart';
 import '../models/dtc_code.dart';
+import '../models/captured_can_frame.dart';
 
 import 'database_service.dart';
 
@@ -76,6 +77,12 @@ class BleService {
   final _discoveredDevicesController = StreamController<List<DiscoveredBleDevice>>.broadcast();
   Stream<List<DiscoveredBleDevice>> get discoveredDevicesStream => _discoveredDevicesController.stream;
   List<DiscoveredBleDevice> get discoveredDevices => List.unmodifiable(_discoveredDevices);
+
+  // CAN Sniffer stream
+  final _rawCanFrameController = StreamController<CapturedCanFrame>.broadcast();
+  Stream<CapturedCanFrame> get rawCanFrameStream => _rawCanFrameController.stream;
+  bool _isCanSnifferActive = false;
+  bool get isCanSnifferActive => _isCanSnifferActive;
 
   StreamSubscription? _scanSubscription;
   StreamSubscription? _discoveryScanSubscription;
@@ -507,6 +514,22 @@ class BleService {
       if (c != null && !c.isCompleted) {
         c.complete(ok);
       }
+    } else if (opcode == BleConstants.respCanRawFrame) {
+      if (value.length >= 6) {
+        final byteData = ByteData.sublistView(Uint8List.fromList(value));
+        final canId = byteData.getUint32(1, Endian.little);
+        final dlc = value[5].clamp(0, 8);
+        final data = <int>[];
+        for (int i = 6; i < min(value.length, 6 + dlc); i++) {
+          data.add(value[i]);
+        }
+        final frame = CapturedCanFrame(
+          timestampMs: DateTime.now().millisecondsSinceEpoch,
+          canId: canId,
+          data: data,
+        );
+        _rawCanFrameController.add(frame);
+      }
     }
   }
 
@@ -603,20 +626,44 @@ class BleService {
     }
   }
 
-  Future<bool> sendCanProfileMode({required bool isCustomActive}) async {
+  Future<bool> sendCanProfileMode({required bool isCustomActive, int baudrateKbps = 500}) async {
     if (_mockMode) {
-      debugPrint('[BLE MOCK] Set CAN profile mode to: $isCustomActive');
+      debugPrint('[BLE MOCK] Set CAN profile mode to: $isCustomActive (Baud: $baudrateKbps kbps)');
       return true;
     }
     if (_commandChar == null) return false;
 
     try {
-      final bytes = [BleConstants.cmdSetCanProfileMode, isCustomActive ? 1 : 0];
+      final bytes = [
+        BleConstants.cmdSetCanProfileMode,
+        isCustomActive ? 1 : 0,
+        baudrateKbps & 0xFF,
+        (baudrateKbps >> 8) & 0xFF,
+      ];
       await _commandChar!.write(bytes, withoutResponse: true);
-      debugPrint('[BLE] Sent CAN profile mode command: $isCustomActive');
+      debugPrint('[BLE] Sent CAN profile mode command: $isCustomActive ($baudrateKbps kbps)');
       return true;
     } catch (e) {
       debugPrint('[BLE] Failed to send CAN profile mode command: $e');
+      return false;
+    }
+  }
+
+  Future<bool> setCanSnifferMode(bool enable) async {
+    _isCanSnifferActive = enable;
+    if (_mockMode) {
+      debugPrint('[BLE MOCK] Set CAN sniffer mode to: $enable');
+      return true;
+    }
+    if (_commandChar == null) return false;
+
+    try {
+      final bytes = [BleConstants.cmdCanSnifferMode, enable ? 1 : 0];
+      await _commandChar!.write(bytes, withoutResponse: true);
+      debugPrint('[BLE] Sent CAN Sniffer Mode command: $enable');
+      return true;
+    } catch (e) {
+      debugPrint('[BLE] Failed to send CAN Sniffer Mode command: $e');
       return false;
     }
   }
@@ -655,7 +702,8 @@ class BleService {
       mapping: profile.coolantSignal ?? disabledSlot,
     );
 
-    success &= await sendCanProfileMode(isCustomActive: true);
+    final baudKbps = (profile.canBaudrate ~/ 1000).clamp(250, 1000);
+    success &= await sendCanProfileMode(isCustomActive: true, baudrateKbps: baudKbps);
     return success;
   }
 
@@ -1065,5 +1113,6 @@ class BleService {
     _stateController.close();
     _telemetryController.close();
     _discoveredDevicesController.close();
+    _rawCanFrameController.close();
   }
 }

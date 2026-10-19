@@ -40,7 +40,8 @@ public:
 
     // Motorcycle Custom CAN Profile (NVS Persistence & Real-Time TWAI decoding)
     void setSignalConfig(uint8_t signal_id, const CanSignalConfig& cfg);
-    void setProfileActive(bool active);
+    void setProfileActive(bool active, uint16_t baudrate_kbps = 500);
+    uint16_t getBaudrateKbps() const { return custom_profile_.baudrate_kbps; }
     void saveProfileToNvs();
     void loadProfileFromNvs();
     bool isCustomProfileActive() const;

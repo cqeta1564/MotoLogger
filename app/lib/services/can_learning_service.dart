@@ -7,22 +7,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'ble_service.dart';
 import 'gps_service.dart';
-
-/// Represents a single recorded CAN frame during the learning session.
-class CapturedCanFrame {
-  final int timestampMs;
-  final int canId;
-  final List<int> data;
-
-  const CapturedCanFrame({
-    required this.timestampMs,
-    required this.canId,
-    required this.data,
-  });
-
-  String get hexId => '0x${canId.toRadixString(16).toUpperCase().padLeft(3, '0')}';
-  String get hexData => data.map((b) => b.toRadixString(16).toUpperCase().padLeft(2, '0')).join(' ');
-}
+import '../models/captured_can_frame.dart';
+export '../models/captured_can_frame.dart';
 
 /// Synchronized ground-truth state point.
 class LearningStatePoint {
@@ -60,6 +46,7 @@ class CanLearningService extends ChangeNotifier {
 
   StreamSubscription? _bleSub;
   StreamSubscription? _gpsSub;
+  StreamSubscription? _rawCanSub;
 
   double _currentGpsSpeed = 0.0;
   double _currentAccelX = 0.0;
@@ -105,6 +92,12 @@ class CanLearningService extends ChangeNotifier {
       _recordStatePoint();
       notifyListeners();
     });
+
+    _rawCanSub = bleService.rawCanFrameStream.listen((frame) {
+      ingestCanFrame(frame.canId, frame.data);
+      notifyListeners();
+    });
+    bleService.setCanSnifferMode(true);
 
     // If mock mode is active, simulate realistic motorcycle CAN bus traffic
     if (bleService.isMockMode) {
@@ -257,6 +250,9 @@ class CanLearningService extends ChangeNotifier {
     _bleSub = null;
     _gpsSub?.cancel();
     _gpsSub = null;
+    _rawCanSub?.cancel();
+    _rawCanSub = null;
+    bleService.setCanSnifferMode(false);
 
     notifyListeners();
   }
@@ -470,6 +466,9 @@ Required JSON Output Schema:
     _simulationTimer?.cancel();
     _bleSub?.cancel();
     _gpsSub?.cancel();
+    _rawCanSub?.cancel();
+    _rawCanSub = null;
+    bleService.setCanSnifferMode(false);
     super.dispose();
   }
 }

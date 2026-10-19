@@ -176,6 +176,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     manager.resetPeaks();
                   },
                   child: const Text('Vynulovat maxima')),
+              if (manager.isRecording)
+                CupertinoActionSheetAction(
+                  onPressed: () {
+                    Navigator.pop(sheetContext);
+                    manager.markCustomFinishLineHere();
+                    HapticFeedback.mediumImpact();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Cílová čára byla označena na aktuální pozici.'),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  },
+                  child: const Text('Označit cíl (Lap)')),
             ],
             cancelButton: CupertinoActionSheetAction(
                 onPressed: () => Navigator.pop(sheetContext),
@@ -229,6 +243,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 children: [
                                   _cockpitHeader(),
                                   SizedBox(height: isCompact ? 6 : 10),
+                                  if (manager.activeCircuit != null || manager.isRecording) ...[
+                                    _lapTimingHud(isCompact),
+                                    SizedBox(height: isCompact ? 6 : 10),
+                                  ],
                                   _speedSection(pkt, hasData, isCompact),
                                   SizedBox(height: isCompact ? 10 : 16),
                                   _leanAndGgSection(pkt, hasData, isCompact),
@@ -339,6 +357,130 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  /// Compact Apple HIG Lap Timing HUD
+  Widget _lapTimingHud(bool isCompact) {
+    final circuit = manager.activeCircuit;
+    final elapsed = manager.currentLapElapsed ?? Duration.zero;
+    final minutes = elapsed.inMinutes;
+    final seconds = (elapsed.inSeconds % 60);
+    final tenths = ((elapsed.inMilliseconds % 1000) / 100).floor();
+    final timeStr =
+        '${minutes > 0 ? '$minutes:' : ''}${seconds.toString().padLeft(2, '0')}.$tenths';
+    final delta = manager.lastLapDeltaSeconds;
+    final isFaster = delta != null && delta <= 0;
+
+    return Semantics(
+      label: 'Měření kola ${manager.currentLapNumber}, čas $timeStr',
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: isCompact ? 8 : 10,
+        ),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFE5E5EA), width: 1),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1C1C1E),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                'KOLO ${manager.currentLapNumber}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    circuit?.name ?? 'Měření na okruhu',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppTheme.textMuted,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    timeStr,
+                    style: TextStyle(
+                      fontSize: isCompact ? 18 : 20,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.5,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (delta != null) ...[
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isFaster
+                      ? const Color(0xFF34C759).withValues(alpha: 0.12)
+                      : const Color(0xFFFF3B30).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: isFaster
+                        ? const Color(0xFF34C759)
+                        : const Color(0xFFFF3B30),
+                    width: 1,
+                  ),
+                ),
+                child: Text(
+                  '${isFaster ? '' : '+'}${delta.toStringAsFixed(2)}s',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: isFaster
+                        ? const Color(0xFF34C759)
+                        : const Color(0xFFFF3B30),
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+            ],
+            if (!_isLocked)
+              IconButton(
+                icon: const Icon(CupertinoIcons.flag, size: 18),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                tooltip: 'Označit cíl (Lap)',
+                onPressed: () {
+                  manager.markCustomFinishLineHere();
+                  HapticFeedback.mediumImpact();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content:
+                          Text('Cílová čára byla označena na aktuální pozici.'),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                },
+              ),
+          ],
+        ),
       ),
     );
   }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../core/theme/app_theme.dart';
 import '../widgets/glass_surface.dart';
+import '../../services/ble_service.dart';
 import '../../services/can_learning_service.dart';
 import '../../services/telemetry_manager.dart';
 import 'import_bike_profile_screen.dart';
@@ -111,6 +112,97 @@ class _BikeLearningScreenState extends State<BikeLearningScreen> {
           backgroundColor: AppTheme.appleRed,
         ),
       );
+    }
+  }
+
+  bool _isImportingSd = false;
+
+  Future<void> _importFromMicroSd() async {
+    if (_isImportingSd) return;
+    final ble = widget.telemetryManager.bleService;
+    if (!ble.isMockMode && ble.state != BleConnectionState.connected) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Připojte jednotku ESP32-S3 pro stažení logů z karty.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isImportingSd = true);
+    HapticFeedback.lightImpact();
+
+    try {
+      final logs = await ble.checkOfflineLogs();
+      if (!mounted) return;
+
+      if (logs.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Na MicroSD kartě nebyly nalezeny žádné logy.'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+
+      final logId = logs.last;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Stahuji soubor $logId z MicroSD karty...'),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+
+      final content = await ble.downloadOfflineLog(logId);
+      if (!mounted) return;
+
+      if (content == null || content.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Log se nepodařilo stáhnout z MicroSD karty.'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+
+      final count = await _learningService.importFromSdCsv(content);
+      if (!mounted) return;
+
+      if (count > 0) {
+        setState(() {
+          _currentStep = 2;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Úspěšně importováno $count CAN rámců ze souboru $logId.'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Soubor neobsahuje žádné platné #CAN řádky.'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Chyba při importu z MicroSD: $e'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isImportingSd = false);
+      }
     }
   }
 
@@ -287,6 +379,98 @@ class _BikeLearningScreenState extends State<BikeLearningScreen> {
           subtitle:
               'Rozjeďte se, zařaďte 1., 2. a 3. stupeň, chvíli jeďte plynule a poté bezpečně zastavte.',
           icon: Icons.two_wheeler_rounded,
+        ),
+
+        const SizedBox(height: 20),
+
+        const Padding(
+          padding: EdgeInsets.only(left: 8, bottom: 8),
+          child: Text(
+            'OFFLINE LOGY Z JEDNOTKY',
+            style: TextStyle(
+              color: AppTheme.appleMutedGray,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.6,
+            ),
+          ),
+        ),
+
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFE5E5EA), width: 1),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF34C759).withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.sd_storage_rounded,
+                        color: Color(0xFF34C759), size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Načíst z MicroSD karty',
+                          style: TextStyle(
+                            color: AppTheme.appleBlack,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        SizedBox(height: 2),
+                        Text(
+                          'Importujte dřívější surový log (#CAN) z paměťové karty',
+                          style: TextStyle(
+                            color: AppTheme.appleMutedGray,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _isImportingSd ? null : _importFromMicroSd,
+                  icon: _isImportingSd
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.download_rounded, size: 18),
+                  label: Text(_isImportingSd
+                      ? 'Stahuji log z MicroSD...'
+                      : 'Importovat z MicroSD karty'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.appleBlue,
+                    side: const BorderSide(color: Color(0xFFE5E5EA)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
 
         const SizedBox(height: 20),

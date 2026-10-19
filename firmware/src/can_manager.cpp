@@ -69,7 +69,15 @@ bool CanManager::installAndStartTwai(OperatingMode mode) {
                               TWAI_ALERT_RECOVERY_IN_PROGRESS |
                               TWAI_ALERT_RX_QUEUE_FULL;
 
-    twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
+    twai_timing_config_t t_config;
+    uint16_t baud = custom_profile_.baudrate_kbps;
+    if (baud == 250) {
+        t_config = TWAI_TIMING_CONFIG_250KBITS();
+    } else if (baud == 1000) {
+        t_config = TWAI_TIMING_CONFIG_1MBITS();
+    } else {
+        t_config = TWAI_TIMING_CONFIG_500KBITS();
+    }
     twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
 
     if (twai_driver_install(&g_config, &t_config, &f_config) != ESP_OK) {
@@ -663,9 +671,14 @@ void CanManager::setSignalConfig(uint8_t signal_id, const CanSignalConfig& cfg) 
                   sanitized.length_bytes, sanitized.is_big_endian, sanitized.multiplier, sanitized.offset);
 }
 
-void CanManager::setProfileActive(bool active) {
+void CanManager::setProfileActive(bool active, uint16_t baudrate_kbps) {
     portENTER_CRITICAL(&obd_mux_);
     custom_profile_.profile_active = active ? 1 : 0;
+    if (baudrate_kbps == 250 || baudrate_kbps == 500 || baudrate_kbps == 1000) {
+        custom_profile_.baudrate_kbps = baudrate_kbps;
+    } else if (custom_profile_.baudrate_kbps == 0) {
+        custom_profile_.baudrate_kbps = 500;
+    }
     if (!active) {
         // Clear custom signal active flags when disabling custom profile
         custom_profile_.rpm.is_active = 0;
@@ -681,8 +694,8 @@ void CanManager::setProfileActive(bool active) {
     reconfigureMode(diag_mode_active_.load(std::memory_order_acquire)
                     ? OperatingMode::ACTIVE_OBD
                     : OperatingMode::LISTEN_ONLY);
-    Serial.printf("[CAN] Profile active mode set to: %s (TWAI remains LISTEN_ONLY outside Diagnostics)\n",
-                  active ? "CUSTOM_CAN" : "PASSIVE_STANDARD");
+    Serial.printf("[CAN] Profile active mode set to: %s (Baudrate: %u kbps, TWAI remains LISTEN_ONLY outside Diagnostics)\n",
+                  active ? "CUSTOM_CAN" : "PASSIVE_STANDARD", custom_profile_.baudrate_kbps);
 }
 
 void CanManager::saveProfileToNvs() {
@@ -710,12 +723,17 @@ void CanManager::loadProfileFromNvs() {
 
         portENTER_CRITICAL(&obd_mux_);
         if (read_bytes == sizeof(loaded) && loaded.magic == 0x4D4F544F) {
+            if (loaded.baudrate_kbps != 250 && loaded.baudrate_kbps != 500 && loaded.baudrate_kbps != 1000) {
+                loaded.baudrate_kbps = 500;
+            }
             custom_profile_ = loaded;
             portEXIT_CRITICAL(&obd_mux_);
-            Serial.printf("[CAN] Loaded profile from NVS (active: %u)\n", loaded.profile_active);
+            Serial.printf("[CAN] Loaded profile from NVS (active: %u, baudrate: %u kbps)\n",
+                          loaded.profile_active, loaded.baudrate_kbps);
         } else {
             memset(&custom_profile_, 0, sizeof(custom_profile_));
             custom_profile_.magic = 0x4D4F544F;
+            custom_profile_.baudrate_kbps = 500;
             portEXIT_CRITICAL(&obd_mux_);
         }
     }

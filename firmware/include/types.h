@@ -53,7 +53,8 @@ struct __attribute__((packed)) CanSignalConfig {
 struct __attribute__((packed)) EspBikeCanProfile {
     uint32_t magic;          // 0x4D4F544F ('MOTO')
     uint8_t  profile_active; // 1 = Custom mapping active, 0 = Standard OBD
-    uint8_t  reserved[3];
+    uint8_t  reserved;
+    uint16_t baudrate_kbps;  // 250, 500 (default), or 1000 kbps
     CanSignalConfig rpm;
     CanSignalConfig speed;
     CanSignalConfig throttle;

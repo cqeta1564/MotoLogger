@@ -1,15 +1,18 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import '../models/telemetry_packet.dart';
 import '../models/fused_sample.dart';
 import '../models/session.dart';
 import '../models/dtc_code.dart';
+import '../models/lap_split.dart';
 import 'ble_service.dart';
 import 'gps_service.dart';
 import 'database_service.dart';
 import 'can_profile_service.dart';
+import 'lap_timer_service.dart';
 
 class TelemetryManager extends ChangeNotifier {
   final BleService bleService;
@@ -17,8 +20,28 @@ class TelemetryManager extends ChangeNotifier {
   final DatabaseService dbService;
   final CanProfileService canProfileService;
 
+  static const MethodChannel _carChannel =
+      MethodChannel('com.motologger.app/car_projection');
+  int _lastCarUpdateTime = 0;
+
   TelemetryPacket _latestPacket = TelemetryPacket.initial();
   Position? _latestPosition;
+
+  // Live Lap Timing & Custom Circuit
+  TrackCircuit? _activeCircuit;
+  final List<LapSplit> _liveLaps = [];
+  int _currentLapNumber = 1;
+  Duration? _currentLapElapsed;
+  double? _lastLapDeltaSeconds;
+  DateTime? _currentLapStartTime;
+  int _lastCrossingMs = -999999;
+  FusedSample? _lastFusedSample;
+
+  TrackCircuit? get activeCircuit => _activeCircuit;
+  List<LapSplit> get liveLaps => List.unmodifiable(_liveLaps);
+  int get currentLapNumber => _currentLapNumber;
+  Duration? get currentLapElapsed => _currentLapElapsed;
+  double? get lastLapDeltaSeconds => _lastLapDeltaSeconds;
 
   bool _isRecording = false;
   Future<void>? _starting;
@@ -131,6 +154,11 @@ class TelemetryManager extends ChangeNotifier {
     _initListeners();
     _loadSavedMountingOffset();
     _initPairedDevice();
+    _carChannel.setMethodCallHandler((call) async {
+      if (call.method == 'tareZero') {
+        await tareZero();
+      }
+    });
   }
 
   Future<void> _initPairedDevice() async {
@@ -196,6 +224,9 @@ class TelemetryManager extends ChangeNotifier {
         _topSpeed = effectiveSpeedKmh;
       }
 
+      // Stream updates to Android Auto head unit (~5 Hz throttle)
+      _sendCarTelemetry(adjustedPacket, effectiveSpeedKmh);
+
       // Safety interlock: if Diagnostic Mode is active and motorcycle starts moving (> 5 km/h),
       // immediately disable active CAN transmission and return to Listen-Only passive mode.
       final bool movingAboveSafetyLimit = adjustedPacket.vehicleSpeedKmh > 5 ||
@@ -243,6 +274,71 @@ class TelemetryManager extends ChangeNotifier {
         );
 
         _sampleBuffer.add(sample);
+
+        if (_currentLapStartTime != null) {
+          _currentLapElapsed = DateTime.now().difference(_currentLapStartTime!);
+        }
+
+        // Auto-detect circuit if not set and rider is near known circuit
+        if (_activeCircuit == null && _latestPosition != null) {
+          for (final circuit in LapTimerService.knownCircuits) {
+            final dist = Geolocator.distanceBetween(
+              _latestPosition!.latitude,
+              _latestPosition!.longitude,
+              circuit.centerLat,
+              circuit.centerLon,
+            );
+            if (dist <= 500.0) {
+              _activeCircuit = circuit;
+              _currentLapStartTime ??= DateTime.now();
+              break;
+            }
+          }
+        }
+
+        // Live lap crossing detection
+        if (_activeCircuit != null && _lastFusedSample != null) {
+          final crossing = LapTimerService.checkSingleSegmentCrossing(
+            _lastFusedSample!,
+            sample,
+            _activeCircuit!,
+            lastCrossMs: _lastCrossingMs,
+          );
+          if (crossing != null) {
+            if (_lastCrossingMs > 0) {
+              final lapTimeMs = crossing.timestampMs - _lastCrossingMs;
+              final isBest = _liveLaps.isEmpty ||
+                  lapTimeMs <
+                      _liveLaps.map((l) => l.lapTimeMs).reduce(min);
+              final deltaMs = _liveLaps.isEmpty
+                  ? 0
+                  : lapTimeMs -
+                      _liveLaps.map((l) => l.lapTimeMs).reduce(min);
+              _lastLapDeltaSeconds = deltaMs / 1000.0;
+
+              _liveLaps.add(LapSplit(
+                lapNumber: _currentLapNumber,
+                lapTime: Duration(milliseconds: lapTimeMs),
+                lapTimeMs: lapTimeMs,
+                startTimestampMs: _lastCrossingMs,
+                endTimestampMs: crossing.timestampMs,
+                startSampleIndex: 0,
+                endSampleIndex: _sampleCount,
+                topSpeedKmh: sample.gpsSpeedKmh,
+                maxLeanLeftDeg: _maxLeanLeft,
+                maxLeanRightDeg: _maxLeanRight,
+                maxGForce: _maxG,
+                deltaToBest: Duration(milliseconds: deltaMs.abs()),
+                deltaMs: deltaMs,
+                isBestLap: isBest,
+              ));
+              _currentLapNumber++;
+            }
+            _lastCrossingMs = crossing.timestampMs;
+            _currentLapStartTime = DateTime.now();
+          }
+        }
+        _lastFusedSample = sample;
 
         // Flush buffer if 50 samples accumulated (~2 seconds of data)
         if (_sampleBuffer.length >= 50) {
@@ -305,7 +401,74 @@ class TelemetryManager extends ChangeNotifier {
 
     _currentSessionId = await dbService.startSession(_sessionTitle);
     _isRecording = true;
+    _liveLaps.clear();
+    _currentLapNumber = 1;
+    _lastLapDeltaSeconds = null;
+    _currentLapStartTime = DateTime.now();
+    _lastCrossingMs = -999999;
+    _lastFusedSample = null;
+    _currentLapElapsed = null;
+
+    if (_latestPosition != null) {
+      for (final circuit in LapTimerService.knownCircuits) {
+        final dist = Geolocator.distanceBetween(
+          _latestPosition!.latitude,
+          _latestPosition!.longitude,
+          circuit.centerLat,
+          circuit.centerLon,
+        );
+        if (dist <= 500.0) {
+          _activeCircuit = circuit;
+          break;
+        }
+      }
+    }
+
     notifyListeners();
+  }
+
+  /// Sets a custom finish line gate at the current GPS position and heading
+  void markCustomFinishLineHere() {
+    final pos = _latestPosition;
+    if (pos == null) return;
+    final heading = pos.heading != 0.0 ? pos.heading : 0.0;
+    _activeCircuit = LapTimerService.createCustomCircuitFromPosition(
+      lat: pos.latitude,
+      lon: pos.longitude,
+      headingDeg: heading,
+      name: 'Vlastní cíl',
+    );
+    _currentLapNumber = 1;
+    _currentLapStartTime = DateTime.now();
+    _lastCrossingMs = DateTime.now().millisecondsSinceEpoch;
+    _liveLaps.clear();
+    _lastLapDeltaSeconds = null;
+    notifyListeners();
+  }
+
+  void _sendCarTelemetry(TelemetryPacket packet, double speedKmh) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (now - _lastCarUpdateTime < 200) return; // 5 Hz throttle
+    _lastCarUpdateTime = now;
+
+    final data = <String, dynamic>{
+      'leanAngleDeg': packet.leanAngleDeg,
+      'speedKmh': speedKmh.round(),
+      'engineRpm': packet.engineRpm,
+      'gear': packet.gear,
+      'coolantTempC': packet.coolantTempC,
+      'accelXG': packet.accelXG,
+      'accelYG': packet.accelYG,
+      'maxLeanLeft': _maxLeanLeft,
+      'maxLeanRight': _maxLeanRight,
+      'isConnected':
+          bleService.state == BleConnectionState.connected || bleService.isMockMode,
+      'isRecording': _isRecording,
+      'currentLap': _currentLapNumber,
+      'lapElapsedMs': _currentLapElapsed?.inMilliseconds ?? 0,
+      'deltaSeconds': _lastLapDeltaSeconds,
+    };
+    _carChannel.invokeMethod('updateTelemetry', data).catchError((_) {});
   }
 
   void pauseRecording() {
