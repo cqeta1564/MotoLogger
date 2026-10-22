@@ -13,7 +13,7 @@ The official companion mobile application for the **MotoLogger (ESP32-S3)** tele
 
 - **25 Hz Real-Time BLE Stream:**
   - Auto-discovers and connects to `MotoLogger-ESP32` in the background.
-  - Zero-copy binary deserialization (28-byte packet) with minimal CPU and battery usage.
+  - Zero-copy binary deserialization (29-byte packet) with minimal CPU and battery usage.
 - **Vibration-Resistant Lean Angle Gauge (CustomPainter):**
   - Continuous roll angle arc (-60° to +60°) with dynamic horizon needle.
   - Color-coded safety zones (Cyan = Cruising, Amber = Aggressive, Red = Track Knee-Down).

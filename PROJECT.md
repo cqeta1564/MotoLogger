@@ -49,7 +49,7 @@ The system is composed of three interconnected tiers:
     |                                   | Blackbox CSV Logging (LOG_XXXX.CSV) |                |
     |                                   +-------------------------------------+                |
     |                                                      |                                   |
-    |                                                      v 25 Hz Binary BLE Stream (28 bytes)|
+    |                                                      v 25 Hz Binary BLE Stream (29 bytes)|
     +------------------------------------------------------+-----------------------------------+
                                                            |
                                                            v
@@ -93,8 +93,8 @@ The system is composed of three interconnected tiers:
 | **CAN Mode Control** | `GPIO38` | `CAN_RS` | Transceiver Mode (LOW = 500k Active, HIGH = Standby) |
 | **IMU SPI MISO** | `GPIO1` | `MISO` | BNO085 SPI MISO (GY-BNO08X `SDA/MISO/TX`) |
 | **IMU SPI SCK** | `GPIO2` | `SCK` | BNO085 SPI Clock (3 MHz) (GY-BNO08X `SCL/SCK/RX`) |
-| **IMU SPI MOSI** | `GPIO4` | `MOSI` | BNO085 SPI MOSI (GY-BNO08X `ADDR/MOSI`) |
-| **IMU SPI CS** | `GPIO5` | `CS` | BNO085 SPI Chip Select (Active LOW) |
+| **IMU SPI MOSI** | `GPIO4` | `MOSI` | BNO085 SPI MOSI (GY-BNO08X `ADDR/MOSI`; or `GPIO6` on custom PCB breakout pad) |
+| **IMU SPI CS** | `GPIO5` | `CS` | BNO085 SPI Chip Select (Active LOW; or `GPIO47` on custom PCB breakout pad) |
 | **IMU Interrupt** | `GPIO12` | `H_INTN` | BNO085 Data-Ready Interrupt (Active LOW) |
 | **IMU Reset** | `GPIO48` | `RST` | BNO085 Hardware Reset (Active LOW) |
 | **Switched 3.3V Rail** | `GPIO21` | `HI_DRIVER` / `3V3_SWITCH` | MT9700 High-side load switch powering IMU & peripherals |
@@ -134,7 +134,7 @@ To prevent sensor fusion jitter and avoid dropping CAN frames, tasks are strictl
 | Task Name | Core | Priority | Stack Size | Purpose |
 | :--- | :--- | :--- | :--- | :--- |
 | `Task_CAN` | **Core 0** | 5 (High) | 4 KB | Non-blocking TWAI receiver; parses broadcast CAN & OBD PIDs |
-| `Task_BLE` | **Core 0** | 3 (Normal) | 4 KB | Broadcasts 28-byte telemetry packet at 25 Hz to smartphone |
+| `Task_BLE` | **Core 0** | 3 (Normal) | 4 KB | Broadcasts 29-byte telemetry packet at 25 Hz to smartphone |
 | `Task_Supervisor`| **Core 0** | 2 (Low) | 3 KB | Battery voltage monitor, shutdown countdown, LED patterns |
 | `Task_IMU` | **Core 1** | 4 (High) | 4 KB | Reads BNO085 at 100 Hz, applies roll offset, calculates lean/pitch |
 | `Task_Storage` | **Core 1** | 3 (Normal) | 6 KB | Reads from telemetry ring buffer, writes 32 KB blocks to MicroSD |
@@ -157,7 +157,7 @@ The BLE server uses **NimBLE** with high transmit power (+9 dBm) to guarantee a 
 
 - **BLE Device Name:** `MotoLogger-ESP32`
 - **Telemetry Service UUID:** `180D` (or custom 128-bit)
-- **Telemetry Characteristic (Notify, Read):** 28-byte packed binary struct (`BleTelemetryPacket`):
+- **Telemetry Characteristic (Notify, Read):** 29-byte packed binary struct (`BleTelemetryPacket`):
 
 ```cpp
 struct __attribute__((packed)) BleTelemetryPacket {
@@ -179,7 +179,7 @@ struct __attribute__((packed)) BleTelemetryPacket {
     uint8_t  status_flags;       // Bit 0: SD active, Bit 1: Engine run, Bit 2: Countdown, Bit 3: IMU ok
 };
 ```
-*Advantage:* Zero JSON overhead, zero string parsing, exactly 28 bytes unpacked directly via Dart `ByteData` in microseconds.
+*Advantage:* Zero JSON overhead, zero string parsing, exactly 29 bytes unpacked directly via Dart `ByteData` in microseconds.
 
 - **Command Characteristic (Write, WriteNR):**
   - `0x01`: Instant Zero-Tare (taring current roll & pitch position to 0.0° and persisting in NVS).

@@ -6,9 +6,9 @@ Flutter companion app: **Jízda → Historie → Nastavení**. Ride detail retai
 route, forces, charts and export. Settings leads to pairing, tank/upright
 calibration, motorcycle profiles, profile import and learning. Bluetooth,
 GPS, SQLite, file imports/exports and Android Auto remain the existing services.
-Android is the only checked-in host; minimum SDK 24. Flutter 3.44.0 / Dart 3.12
-matches the existing dependency lock. There is no iOS host or Xcode in this
-Linux environment. No deployment target is raised.
+Both Android (min API 24) and iOS (iOS 15.0+, tested on iOS 26.3 simulator / Xcode 26.3)
+hosts are fully configured and verified. Dependencies are managed via Swift Package
+Manager (SPM) on iOS and Gradle on Android. Flutter 3.47+ / Dart 3.13+.
 
 The product explicitly specifies light-only appearance in PROJECT.md §5.3.
 Keep light appearance even when the OS is dark. Use the system font available

@@ -37,12 +37,14 @@ If mounting directly into a vehicle OBD-II diagnostic port:
 
 ---
 
-## 4. IMU Breakout Module Attachment (BNO085)
+## 4. IMU Breakout Module Attachment (BNO085 via Dedicated HSPI Bus)
 
-The CEVA / Hillcrest BNO085 9-DoF IMU module connects to the designated header pads on the main board:
-- **SDA:** `GPIO1`
-- **SCL:** `GPIO2`
-- **INT (H_INTN):** `GPIO12`
-- **RST:** `GPIO48`
+The CEVA / Hillcrest BNO085 9-DoF IMU module connects to the designated header pads on the main board in high-speed 4-wire SPI mode (3 MHz clock):
+- **MISO / SDA:** `GPIO1` (GY-BNO08X `SDA/MISO/TX`)
+- **SCK / SCL:** `GPIO2` (GY-BNO08X `SCL/SCK/RX`)
+- **MOSI:** `GPIO4` default (DevKitC-1) or solder pad `GPIO6` (custom RejsaCAN v3.4 PCB)
+- **CS:** `GPIO5` default (DevKitC-1) or solder pad `GPIO47` (custom RejsaCAN v3.4 PCB)
+- **INT (H_INTN):** `GPIO12` (Active LOW interrupt)
+- **RST:** `GPIO48` (Active LOW hardware reset)
 - **3V3:** Connected to switched 3.3V power rail (`PIN_3V3_SWITCH` / `GPIO21`)
 - **GND:** Ground plane

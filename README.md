@@ -44,7 +44,7 @@ An end-to-end, high-performance motorcycle telemetry and data acquisition system
    |   [MicroSD Slot]     <--->  32 KB Buffered Lossless Blackbox Logging (LOG_XXXX.CSV)           |
    +-----------------------------------------------+-----------------------------------------------+
                                                    |
-                                                   | 25 Hz Real-Time BLE Stream (28-byte packet)
+                                                   | 25 Hz Real-Time BLE Stream (29-byte packet)
                                                    | (Coexists with wireless CarPlay / Android Auto)
                                                    v
    +-----------------------------------------------------------------------------------------------+

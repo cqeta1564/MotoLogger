@@ -43,8 +43,35 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
       backgroundColor: const Color(0xFFF2F2F7),
       appBar: AppBar(
         leading: const GlassBackButton(),
-        title: Text(widget.session.title,
-            maxLines: 1, overflow: TextOverflow.ellipsis),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(widget.session.title,
+                  maxLines: 1, overflow: TextOverflow.ellipsis),
+            ),
+            if (widget.session.isDemo) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE5E5EA),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Text(
+                  'Demo',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textMuted,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.share_outlined, size: 22),

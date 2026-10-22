@@ -92,8 +92,8 @@ Always verify pin assignments against this table before modifying firmware:
 | **CAN RS** | `GPIO38` | Mode Control (LOW = 500 kbps Active, HIGH = Standby) |
 | **IMU MISO** | `GPIO1` | BNO085 SPI MISO (GY-BNO08X `SDA/MISO/TX`) |
 | **IMU SCK** | `GPIO2` | BNO085 SPI Clock (3 MHz) (GY-BNO08X `SCL/SCK/RX`) |
-| **IMU MOSI** | `GPIO4` | BNO085 SPI MOSI (GY-BNO08X `ADDR/MOSI`) |
-| **IMU CS** | `GPIO5` | BNO085 SPI Chip Select (Active LOW) |
+| **IMU MOSI** | `GPIO4` | BNO085 SPI MOSI (GY-BNO08X `ADDR/MOSI`; or `GPIO6` on custom PCB breakout pad) |
+| **IMU CS** | `GPIO5` | BNO085 SPI Chip Select (Active LOW; or `GPIO47` on custom PCB breakout pad) |
 | **IMU INT** | `GPIO12` | BNO085 SHTP Interrupt / Data-Ready (Active LOW) |
 | **IMU RST** | `GPIO48` | BNO085 Hardware Reset (Active LOW) |
 | **3V3 Switch** | `GPIO21` | MT9700 Load Switch (power rail for IMU & peripherals) |
@@ -107,6 +107,8 @@ Always verify pin assignments against this table before modifying firmware:
 | **Blue LED** | `GPIO10` | IMU / MicroSD status / Shutdown countdown |
 | **Yellow LED** | `GPIO11` | Power rail status / CAN frame burst |
 
+> *Note on DevKit vs Custom PCB:* DevKitC-1 boards use GPIO4 (MOSI) and GPIO5 (CS). When compiling for the custom RejsaCAN v3.4 PCB with breakout pads, define `-D MOTOLOGGER_PCB_BREAKOUT_PADS` to route MOSI to `GPIO6` and CS to `GPIO47`.
+
 ---
 
 ## 5. Firmware Engineering Standards (`firmware/`)
@@ -116,7 +118,7 @@ Always verify pin assignments against this table before modifying firmware:
    - **Core 0:** `Task_CAN` (TWAI engine), `Task_BLE` (25 Hz NimBLE stream), `Task_Supervisor` (Power management & shutdown).
    - **Core 1:** `Task_IMU` (BNO085 100 Hz Game Rotation Vector fusion), `Task_Storage` (MicroSD buffered block writer).
 3. **BLE Telemetry & Control Protocol:**
-   - Telemetry Stream: Packed binary struct `BleTelemetryPacket` (28 bytes little-endian, zero serialization overhead).
+   - Telemetry Stream: Packed binary struct `BleTelemetryPacket` (29 bytes little-endian: 28 bytes telemetry + 1 byte `status_flags`, zero serialization overhead).
    - Control Commands:
      - `0x01`: Instant Zero-Tare (lean & pitch).
      - `0x02`: Tare Mounting Roll Offset (payload: `int16_t offset_x10`, stored permanently in ESP32 NVS `Preferences`).
@@ -169,8 +171,8 @@ Always verify pin assignments against this table before modifying firmware:
 ## 7. Workflow & Repository Hygiene
 
 - **Single Monorepo Source of Truth:**
-  - Root directory: `C:\Users\cqeta\MotoLogger`
-  - Subfolders: `/app`, `/firmware`, `/hardware`.
+  - Root directory: Monorepo root (e.g. `/Users/pocitac/Documents/MotoLogger` or `C:\Users\cqeta\MotoLogger`)
+  - Subfolders: `/app`, `/firmware`, `/hardware`, `/docs`.
   - Never split the repository into detached standalone copies.
 - **Git Branching:**
   - Direct work on `main` branch with clean, informative commits.

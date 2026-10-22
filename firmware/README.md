@@ -10,37 +10,27 @@ High-performance, modular C++ firmware and hardware package for motorcycle telem
 
 ---
 
-## Repository Structure
+## Repository & Firmware Structure
 
 ```
-MotoLogger-Firmware/
-├── hardware/                                # Complete PCB fabrication & assembly files
-│   ├── gerbers/                             # Production-ready Gerber ZIP archives
-│   │   ├── MotoLogger_Clean_Gerber.zip      # Main board gerbers (neutral silkscreen)
-│   │   └── MotoLogger_OBD2_Plug_Gerber.zip  # OBD-II sandwich connector gerbers
-│   ├── assembly/                            # SMT / PCBA manufacturing data
-│   │   ├── MotoLogger_BOM.csv               # Bill of Materials with LCSC part numbers
-│   │   ├── MotoLogger_BOM.xlsx              # Formatted Excel BOM
-│   │   ├── MotoLogger_Part_Placements.zip   # Top and bottom SMT placement files
-│   │   └── Ordering_Specs_JLCPCB_PCBWay.md  # Detailed fabrication and assembly specs
-│   └── schematics/                          # Circuit schematics and reference
-│       ├── MotoLogger_Schematic.png         # High-resolution circuit schematic diagram
-│       ├── MotoLogger_Schematic.json        # Full circuit schematic source
-│       └── MotoLogger_Pinout_Reference.h    # Header pad mapping reference
+firmware/
+├── platformio.ini                           # PlatformIO build configuration & ESP32-S3 flags
 ├── include/
 │   ├── config.h                             # Hardware pinout, BLE UUIDs, thresholds
-│   ├── types.h                              # Telemetry data models & BleTelemetryPacket
+│   ├── types.h                              # Telemetry data models & BleTelemetryPacket (29 bytes)
 │   └── ring_buffer.h                        # Lock-free SPSC circular buffer
-└── src/
-    ├── main.cpp                             # FreeRTOS scheduler & task coordination
-    ├── ble_manager.h/.cpp                   # 25 Hz NimBLE GATT Server (Android/CarPlay)
-    ├── can_manager.h/.cpp                   # 500 kbps TWAI CAN driver (Listen-Only + OBD)
-    ├── imu_manager.h/.cpp                   # BNO085 100 Hz Game Rotation Vector fusion (HSPI 3 MHz)
-    ├── ota_manager.h/.cpp                   # On-demand Wi-Fi SoftAP Web OTA firmware flasher
-    ├── power_manager.h/.cpp                 # 12V latch, switched 3.3V rail & auto-shutdown
-    ├── storage_manager.h/.cpp               # 32 KB buffered MicroSD logging (FSPI 25 MHz)
-    └── led_indicator.h/.cpp                 # Diagnostic LED patterns (Yellow/Blue)
-```
+├── src/
+│   ├── main.cpp                             # FreeRTOS scheduler & task coordination
+│   ├── ble_manager.h/.cpp                   # 25 Hz NimBLE GATT Server (Android/CarPlay)
+│   ├── can_manager.h/.cpp                   # 500 kbps TWAI CAN driver (Listen-Only + OBD)
+│   ├── imu_manager.h/.cpp                   # BNO085 100 Hz Game Rotation Vector fusion (HSPI 3 MHz)
+│   ├── ota_manager.h/.cpp                   # On-demand Wi-Fi SoftAP Web OTA firmware flasher
+│   ├── power_manager.h/.cpp                 # 12V latch, switched 3.3V rail & auto-shutdown
+│   ├── storage_manager.h/.cpp               # 32 KB buffered MicroSD logging (FSPI 25 MHz)
+│   └── led_indicator.h/.cpp                 # Diagnostic LED patterns (Yellow/Blue)
+└── README.md
+
+(Hardware schematics, gerbers, BOM and 3D print models reside in the root `/hardware` directory.)
 
 ---
 

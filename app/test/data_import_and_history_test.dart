@@ -8,6 +8,7 @@ import 'package:motologger/services/database_service.dart';
 import 'package:motologger/services/gps_service.dart';
 import 'package:motologger/services/telemetry_manager.dart';
 import 'package:motologger/ui/history/history_screen.dart';
+import 'package:motologger/ui/history/session_detail_screen.dart';
 import 'package:motologger/ui/widgets/season_summary_card.dart';
 
 class FakeDatabaseService extends DatabaseService {
@@ -61,6 +62,9 @@ class FakeDatabaseService extends DatabaseService {
 
   @override
   Future<void> insertSampleBatch(List<FusedSample> samples) async {}
+
+  @override
+  Future<List<FusedSample>> getSamplesForSession(int sessionId) async => [];
 
   @override
   Future<void> saveSetting(String key, String value) async {
@@ -453,6 +457,66 @@ timestamp_ms,recorded_at,latitude,longitude,altitude_m,gps_speed_kmh,bearing_deg
 
       telemetryMgr.dispose();
       ble.dispose();
+    });
+
+    testWidgets('HistoryScreen and SessionDetailScreen render Demo badge for demo sessions and omit it for real sessions', (tester) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final realSession = RideSession(
+        id: 1,
+        title: 'Morning Ride',
+        startTime: DateTime.utc(2026, 7, 10, 10, 0),
+        totalDistanceKm: 25.0,
+        topSpeedKmh: 110.0,
+        maxLeanLeftDeg: 35.0,
+        maxLeanRightDeg: 36.0,
+        isDemo: false,
+      );
+      final demoSession = RideSession(
+        id: 2,
+        title: 'Demo Simulation Ride',
+        startTime: DateTime.utc(2026, 7, 11, 14, 0),
+        totalDistanceKm: 15.0,
+        topSpeedKmh: 95.0,
+        maxLeanLeftDeg: 28.0,
+        maxLeanRightDeg: 30.0,
+        isDemo: true,
+      );
+
+      final fakeDb = FakeDatabaseService(initialSessions: [realSession, demoSession]);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: HistoryScreen(dbService: fakeDb),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // In HistoryScreen, expect exactly one 'Demo' badge (for demoSession, not realSession)
+      expect(find.text('Morning Ride'), findsOneWidget);
+      expect(find.text('Demo Simulation Ride'), findsOneWidget);
+      expect(find.text('Demo'), findsOneWidget);
+
+      // Now open SessionDetailScreen for demoSession
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SessionDetailScreen(session: demoSession, dbService: fakeDb),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Demo'), findsOneWidget);
+
+      // Now open SessionDetailScreen for realSession
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SessionDetailScreen(session: realSession, dbService: fakeDb),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Demo'), findsNothing);
     });
   });
 }

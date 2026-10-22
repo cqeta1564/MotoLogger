@@ -17,10 +17,11 @@ import UIKit
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     
     // Register method channels for CarPlay / platform telemetry projection
+    let messenger = engineBridge.applicationRegistrar.messenger()
     let channelNames = ["com.motologger.app/car_projection", "com.motologger.app/car_telemetry"]
     for name in channelNames {
-      let channel = FlutterMethodChannel(name: name, binaryMessenger: engineBridge.binaryMessenger)
-      channel.setMethodCallHandler { [weak self] (call, result) in
+      let channel = FlutterMethodChannel(name: name, binaryMessenger: messenger)
+      channel.setMethodCallHandler { [weak self] (call: FlutterMethodCall, result: @escaping FlutterResult) in
         switch call.method {
         case "updateTelemetry":
           if let args = call.arguments as? [String: Any] {

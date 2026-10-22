@@ -247,3 +247,28 @@ Source and NAS SHA-256 match:
 `c39338813e0dbd3d2b253440f0e468357d6c9066702ce45aaefe4fdc5bdc8aa3`.
 Installed the regular release APK over the emulator integration build and launched
 with `adb shell am start -n com.motologger.app/.MainActivity --ez enable-impeller false`.
+
+---
+
+## Apple iOS Host Verification & Build — 22 October 2026
+
+### Environment & Toolchain
+- **Host OS:** macOS Sequoia (Darwin 24.6.0 x86_64, Intel Xeon W-2123)
+- **Xcode:** 26.3 (Build 17C529)
+- **Swift:** 6.2.4 (swiftlang-6.2.4.1.4, clang-1700.6.4.2)
+- **Flutter SDK:** 3.47.7 (Channel stable, revision `abaf9c5237`), Dart 3.13.5
+- **Package Manager:** Swift Package Manager (SPM) for all iOS plugins (`FlutterGeneratedPluginSwiftPackage`)
+- **Simulator Runtime:** iOS 26.3 (`iPhone 17 Pro`, `68FCEFE9-ACFA-44E2-B25B-B2C182C212C2`)
+
+### Resolved Issues & Fixes
+- Fixed `AppDelegate.swift` for Swift 6 / modern Flutter engine:
+  - Resolved `FlutterImplicitEngineBridge` binary messenger retrieval via `engineBridge.applicationRegistrar.messenger()`.
+  - Added explicit type annotations to `FlutterMethodCallHandler` closure parameters `(call: FlutterMethodCall, result: @escaping FlutterResult)`.
+- Fully resolved native dependencies via SPM: `flutter_blue_plus_darwin`, `geolocator_apple`, `sqflite_darwin`, `file_picker`, `sensors_plus`, `share_plus`, `integration_test`.
+
+### Verification Results
+1. **Static Analysis (`flutter analyze`):** 0 errors, 0 warnings.
+2. **Unit & Widget Tests (`flutter test`):** 96 of 96 tests passed (100% pass rate).
+3. **iOS Simulator Build (`flutter build ios --simulator --no-codesign`):** Built `build/ios/iphonesimulator/Runner.app` successfully.
+4. **Simulator Run & Validation:** Installed and launched on `iPhone 17 Pro` simulator. Verified permissions, Apple HIG light UI, liquid glass sliding capsule, and truthful telemetry. Evidence screenshot captured at `docs/review/ios-sim-launch.png`.
+5. **End-to-End Integration Test (`flutter test integration_test/ride_flow_test.dart -d "iPhone 17 Pro"`):** All integration assertions passed on the booted iOS simulator (real SQLite persistence, demo recording, navigation).
