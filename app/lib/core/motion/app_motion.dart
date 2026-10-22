@@ -9,5 +9,7 @@ abstract final class AppMotion {
         : Duration(milliseconds: milliseconds);
   }
 
-  static const curve = Curves.easeOutCubic;
+  /// Apple-style responsive physics spring curve (matches iOS interactive spring: response 0.35s, damping 0.86).
+  static const springCurve = Cubic(0.16, 1.0, 0.3, 1.0);
+  static const curve = springCurve;
 }

@@ -28,8 +28,8 @@ class GlassSurface extends StatelessWidget {
         color: opaque ? Colors.white : const Color(0xDCF9FAFC),
         borderRadius: borderRadius,
         border: Border.all(
-            color: opaque ? AppTheme.surfaceBorder : const Color(0xF0FFFFFF),
-            width: 1),
+            color: opaque ? AppTheme.surfaceBorder : const Color(0xE0FFFFFF),
+            width: 0.5),
       ),
       child: Padding(padding: padding, child: child),
     );
@@ -39,7 +39,8 @@ class GlassSurface extends StatelessWidget {
         boxShadow: const [
           BoxShadow(
               color: Color(0x120C2340), blurRadius: 24, offset: Offset(0, 8)),
-          BoxShadow(color: Color(0x090C2340), blurRadius: 2, spreadRadius: 1),
+          BoxShadow(
+              color: Color(0x060C2340), blurRadius: 4, offset: Offset(0, 1)),
         ],
       ),
       child: ClipRRect(

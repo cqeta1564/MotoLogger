@@ -815,6 +815,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
             style: const TextStyle(fontSize: 12, color: AppTheme.textMuted)),
         const SizedBox(height: 4),
         Text(value,
-            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+            style: const TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w600,
+                fontFeatures: [FontFeature.tabularFigures()])),
       ]);
 }

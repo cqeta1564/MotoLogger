@@ -61,7 +61,7 @@ class _SlideToUnlockState extends State<SlideToUnlock>
   void _onHorizontalDragEnd(DragEndDetails details, double maxDrag) {
     if (_dragPosition >= maxDrag * 0.70) {
       // Completed unlock!
-      HapticFeedback.heavyImpact();
+      HapticFeedback.mediumImpact();
       widget.onUnlocked();
       // Reset position after brief delay so it's ready when re-locked
       Future.delayed(const Duration(milliseconds: 300), () {

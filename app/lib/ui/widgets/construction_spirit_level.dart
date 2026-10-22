@@ -130,7 +130,12 @@ class _ConstructionSpiritLevelWidgetState
       if (newlyStable != _isStable) {
         _isStable = newlyStable;
         if (_isStable) {
-          HapticFeedback.selectionClick();
+          final absRoll = _filteredRollDeg.abs();
+          if (absRoll <= 1.5) {
+            HapticFeedback.lightImpact();
+          } else {
+            HapticFeedback.selectionClick();
+          }
         }
         widget.onStabilityChanged?.call(_isStable);
       }

@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/services.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/motion/app_motion.dart';
 import 'glass_surface.dart';
@@ -57,7 +58,12 @@ class AppleTabBar extends StatelessWidget {
           child: CupertinoButton(
         key: ValueKey('tab-$index'),
         padding: EdgeInsets.zero,
-        onPressed: () => onTabSelected(index),
+        onPressed: () {
+          if (currentIndex != index) {
+            HapticFeedback.selectionClick();
+          }
+          onTabSelected(index);
+        },
         child: Container(
           constraints: const BoxConstraints(minHeight: 62),
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),

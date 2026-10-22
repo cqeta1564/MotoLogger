@@ -268,6 +268,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
                     color: AppTheme.textMuted,
+                    fontFeatures: [FontFeature.tabularFigures()],
                   ),
                 ),
             ],
@@ -294,6 +295,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
                   color: AppTheme.textMuted,
+                  fontFeatures: [FontFeature.tabularFigures()],
                 ),
               ),
             ],
@@ -349,7 +351,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
                         const SizedBox(height: 6),
                         Text(metric.$2,
                             style: const TextStyle(
-                                fontSize: 24, fontWeight: FontWeight.w600)),
+                                fontSize: 24,
+                                fontWeight: FontWeight.w600,
+                                fontFeatures: [FontFeature.tabularFigures()])),
                       ])),
           ]);
         }));

@@ -202,6 +202,7 @@ class GgFrictionCard extends StatelessWidget {
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
                     letterSpacing: -0.3,
+                    fontFeatures: [FontFeature.tabularFigures()],
                   ),
                 ),
               ],

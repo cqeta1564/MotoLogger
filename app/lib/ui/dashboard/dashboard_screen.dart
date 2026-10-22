@@ -37,6 +37,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _busy = false;
   String? _error;
   Timer? _autoLockTimer;
+  int _lastLeanBand = 0;
 
   TelemetryManager get manager => widget.telemetryManager;
   bool get _available =>
@@ -59,6 +60,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _setLocked(bool value) {
     if (!mounted || _isLocked == value) return;
     setState(() => _isLocked = value);
+    HapticFeedback.mediumImpact();
     widget.onLockChanged?.call(value);
   }
 
@@ -70,6 +72,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _onTelemetryUpdate() {
     final speed = _effectiveSpeedKmh(manager.latestPacket);
+    final absLean = manager.latestPacket.leanAngleDeg.abs();
+    final currentBand = absLean >= 30.0 ? 2 : (absLean >= 15.0 ? 1 : 0);
+    if (_available && currentBand != _lastLeanBand) {
+      if (currentBand > _lastLeanBand) {
+        HapticFeedback.lightImpact();
+      }
+      _lastLeanBand = currentBand;
+    }
+
     if (!_available || speed <= 5) {
       _wasStopped = true;
       _autoLockTimer?.cancel();
@@ -128,12 +139,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
             '${now.day}.${now.month}. ${now.hour}:${now.minute.toString().padLeft(2, '0')}';
         await manager.startRecording(
             '${manager.isSimulationMode ? 'Demo · Brno' : 'Jízda'} · $date');
-        if (mounted) HapticFeedback.selectionClick();
+        if (mounted) HapticFeedback.mediumImpact();
       }, 'Záznam se nepodařilo zahájit. Zkontrolujte volné místo a zkuste to znovu.');
 
   Future<void> _saveRide() => _runAction(() async {
         await manager.stopRecording();
         if (!mounted) return;
+        HapticFeedback.mediumImpact();
         _setLocked(false);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           persist: false,
@@ -859,6 +871,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               height: 1,
                               fontWeight: FontWeight.w600,
                               letterSpacing: -2,
+                              fontFeatures: [FontFeature.tabularFigures()],
                             ),
                           ),
                           const SizedBox(width: 4),
@@ -894,6 +907,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               style: TextStyle(
                                 fontSize: 20,
                                 fontWeight: FontWeight.w700,
+                                fontFeatures: const [FontFeature.tabularFigures()],
                                 color: !hasData || gear < 0
                                     ? AppTheme.textPrimary
                                     : gear == 0
@@ -933,6 +947,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       style: const TextStyle(
                         fontSize: 12,
                         color: AppTheme.textMuted,
+                        fontFeatures: [FontFeature.tabularFigures()],
                       ),
                     ),
                   ],
