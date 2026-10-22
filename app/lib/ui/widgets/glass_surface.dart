@@ -5,6 +5,7 @@ import '../../core/preferences/app_preferences.dart';
 import '../../core/theme/app_theme.dart';
 
 /// A bounded Flutter material approximation, not native Apple Liquid Glass.
+/// Strictly restricted to floating capsules (AppleTabBar) and floating action docks.
 class GlassSurface extends StatelessWidget {
   const GlassSurface(
       {super.key,
@@ -23,34 +24,51 @@ class GlassSurface extends StatelessWidget {
             media.highContrast ||
             media.accessibleNavigation;
     final borderRadius = BorderRadius.circular(radius);
-    final surface = DecoratedBox(
-      decoration: BoxDecoration(
-        color: opaque ? Colors.white : const Color(0xDCF9FAFC),
-        borderRadius: borderRadius,
-        border: Border.all(
-            color: opaque ? AppTheme.surfaceBorder : const Color(0xE0FFFFFF),
-            width: 0.5),
-      ),
-      child: Padding(padding: padding, child: child),
-    );
-    return DecoratedBox(
+
+    if (opaque) {
+      return Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: borderRadius,
+          border: Border.all(color: AppTheme.surfaceBorder, width: 0.5),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x0C0C2340),
+              blurRadius: 16,
+              offset: Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Padding(padding: padding, child: child),
+      );
+    }
+
+    return Container(
       decoration: BoxDecoration(
         borderRadius: borderRadius,
         boxShadow: const [
           BoxShadow(
-              color: Color(0x120C2340), blurRadius: 24, offset: Offset(0, 8)),
+              color: Color(0x140C2340), blurRadius: 24, offset: Offset(0, 8)),
           BoxShadow(
               color: Color(0x060C2340), blurRadius: 4, offset: Offset(0, 1)),
         ],
       ),
       child: ClipRRect(
         borderRadius: borderRadius,
-        child: opaque
-            ? surface
-            : BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                child: surface,
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          child: Container(
+            decoration: BoxDecoration(
+              color: const Color(0xDCFFFFFF),
+              borderRadius: borderRadius,
+              border: Border.all(
+                color: const Color(0xE0FFFFFF),
+                width: 0.5,
               ),
+            ),
+            child: Padding(padding: padding, child: child),
+          ),
+        ),
       ),
     );
   }
@@ -67,13 +85,29 @@ class GlassIconButton extends StatelessWidget {
   final VoidCallback? onPressed;
 
   @override
-  Widget build(BuildContext context) => GlassSurface(
-        radius: 24,
-        child: IconButton(
-            tooltip: label,
-            onPressed: onPressed,
-            icon: Icon(icon),
-            constraints: const BoxConstraints(minWidth: 48, minHeight: 48)),
+  Widget build(BuildContext context) => Semantics(
+        button: true,
+        label: label,
+        child: SizedBox(
+          width: 48,
+          height: 48,
+          child: Center(
+            child: Container(
+              width: 36,
+              height: 36,
+              decoration: const BoxDecoration(
+                color: Color(0xFFE5E5EA),
+                shape: BoxShape.circle,
+              ),
+              child: IconButton(
+                padding: EdgeInsets.zero,
+                tooltip: label,
+                onPressed: onPressed,
+                icon: Icon(icon, size: 18, color: AppTheme.textPrimary),
+              ),
+            ),
+          ),
+        ),
       );
 }
 
@@ -123,7 +157,9 @@ class ContentGroup extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         padding: padding,
         decoration: BoxDecoration(
-            color: Colors.white, borderRadius: BorderRadius.circular(24)),
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: const Color(0xFFE5E5EA), width: 0.5)),
         child: child,
       );
 }
@@ -150,7 +186,9 @@ class PrimaryAction extends StatelessWidget {
           onPressed: busy ? null : onPressed,
           style: FilledButton.styleFrom(
             backgroundColor:
-                destructive ? AppTheme.danger : AppTheme.textPrimary,
+                destructive ? AppTheme.danger : AppTheme.appleBlue,
+            foregroundColor: Colors.white,
+            elevation: 0,
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
             shape: RoundedRectangleBorder(
                 borderRadius:
@@ -175,11 +213,9 @@ class PrimaryAction extends StatelessWidget {
 class GlassBackButton extends StatelessWidget {
   const GlassBackButton({super.key});
   @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.all(4),
-        child: GlassIconButton(
-            icon: CupertinoIcons.chevron_left,
-            label: 'Zpět',
-            onPressed: () => Navigator.of(context).maybePop()),
+  Widget build(BuildContext context) => IconButton(
+        tooltip: 'Zpět',
+        icon: const Icon(CupertinoIcons.chevron_left, size: 22),
+        onPressed: () => Navigator.of(context).maybePop(),
       );
 }

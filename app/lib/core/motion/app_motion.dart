@@ -2,9 +2,13 @@ import 'package:flutter/widgets.dart';
 
 /// Short, interruptible motion; accessibility settings always take precedence.
 abstract final class AppMotion {
-  static Duration duration(BuildContext context, [int milliseconds = 260]) {
+  static bool isReducedMotion(BuildContext context) {
     final media = MediaQuery.of(context);
-    return media.disableAnimations || media.accessibleNavigation
+    return media.disableAnimations || media.accessibleNavigation;
+  }
+
+  static Duration duration(BuildContext context, [int milliseconds = 260]) {
+    return isReducedMotion(context)
         ? Duration.zero
         : Duration(milliseconds: milliseconds);
   }

@@ -288,6 +288,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
         },
       );
 
+  Color _leanColor(double? value) {
+    if (value == null || value <= 1.0) return AppTheme.textPrimary;
+    if (value <= 15.0) return const Color(0xFF34C759);
+    if (value <= 30.0) return const Color(0xFFFF9500);
+    return AppTheme.danger;
+  }
+
   Widget _cockpitHeader() {
     final demo = manager.isSimulationMode;
     final connected = manager.bleService.state == BleConnectionState.connected;
@@ -300,15 +307,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
         children: [
           Icon(
             demo
-                ? CupertinoIcons.play_circle
+                ? CupertinoIcons.play_circle_fill
                 : connected
-                    ? CupertinoIcons.link
+                    ? CupertinoIcons.checkmark_circle_fill
                     : CupertinoIcons.antenna_radiowaves_left_right,
             size: 20,
             color: demo
                 ? AppTheme.appleOrange
                 : connected
-                    ? AppTheme.appleBlue
+                    ? const Color(0xFF34C759)
                     : AppTheme.textMuted,
           ),
           const SizedBox(width: 8),
@@ -334,9 +341,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const SizedBox(height: 1),
                 Text(
                   demo
-                      ? 'Simulovaná data · okruh Brno'
+                      ? 'Simulovaná data okruhu Brno'
                       : connected
-                          ? (manager.pairedDeviceName ?? 'MotoLogger')
+                          ? (manager.pairedDeviceName ?? 'MotoLogger ESP32-S3')
                           : error
                               ? 'Bluetooth není dostupné'
                               : 'Jednotka zatím není připojena',
@@ -394,8 +401,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFE5E5EA), width: 1),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFE5E5EA), width: 0.5),
         ),
         child: Row(
           children: [
@@ -497,7 +504,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  /// Speed & Gear section displayed directly on the screen canvas across full width.
+  /// Clean Apple Cockpit Speed Section inside an opaque white content card.
   Widget _speedSection(TelemetryPacket pkt, bool hasData, bool isCompact) {
     final effectiveSpeed = _effectiveSpeedKmh(pkt);
     final speedText = hasData ? '$effectiveSpeed' : '—';
@@ -506,109 +513,110 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final rpmRatio = (hasData ? (rpm / 12000.0) : 0.0).clamp(0.0, 1.0);
     final isRedline = rpm >= 9500;
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        // Status header above speed
-        Text(
-          manager.isRecording
-              ? (manager.isPaused ? 'ZÁZNAM POZASTAVEN' : 'PROBÍHÁ ZÁZNAM')
-              : 'RYCHLOST',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 11,
-            letterSpacing: 1.3,
-            fontWeight: FontWeight.w700,
-            color: manager.isRecording && !manager.isPaused
-                ? AppTheme.appleBlue
-                : AppTheme.textMuted,
+    return ContentGroup(
+      padding: EdgeInsets.symmetric(
+        horizontal: 20,
+        vertical: isCompact ? 14 : 20,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // Status label
+          Text(
+            manager.isRecording
+                ? (manager.isPaused ? 'ZÁZNAM POZASTAVEN' : 'PROBÍHÁ ZÁZNAM')
+                : 'RYCHLOST',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 11,
+              letterSpacing: 1.3,
+              fontWeight: FontWeight.w700,
+              color: manager.isRecording && !manager.isPaused
+                  ? AppTheme.appleBlue
+                  : AppTheme.textMuted,
+            ),
           ),
-        ),
-        SizedBox(height: isCompact ? 1 : 2),
+          SizedBox(height: isCompact ? 2 : 6),
 
-        // Giant Speed + Gear Badge in a balanced row
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Semantics(
-                label: hasData
-                    ? 'Rychlost $effectiveSpeed kilometrů za hodinu'
-                    : 'Rychlost není dostupná',
-                excludeSemantics: true,
-                child: Text(
-                  speedText,
-                  style: TextStyle(
-                    fontSize: isCompact ? 72 : 88,
-                    fontWeight: FontWeight.w600,
-                    height: 1.0,
-                    letterSpacing: -4,
-                    fontFeatures: const [FontFeature.tabularFigures()],
+          // Dominant Speed + Gear Badge in a balanced row
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Semantics(
+                  label: hasData
+                      ? 'Rychlost $effectiveSpeed kilometrů za hodinu'
+                      : 'Rychlost není dostupná',
+                  excludeSemantics: true,
+                  child: Text(
+                    speedText,
+                    style: TextStyle(
+                      fontSize: isCompact ? 76 : 92,
+                      fontWeight: FontWeight.w600,
+                      height: 0.95,
+                      letterSpacing: -4,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 6),
-              const Text(
-                'km/h',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                  color: AppTheme.textMuted,
+                const SizedBox(width: 8),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'km/h',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                        color: AppTheme.textMuted,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    // High-contrast Gear Badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: hasData && gear == 0
+                            ? const Color(0xFF34C759).withValues(alpha: 0.15)
+                            : const Color(0xFFF2F2F7),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        !hasData || gear < 0
+                            ? '—'
+                            : gear == 0
+                                ? 'N'
+                                : '$gear',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                          color: hasData && gear == 0
+                              ? const Color(0xFF34C759)
+                              : AppTheme.textPrimary,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              const SizedBox(width: 14),
-              // Distinct Gear Badge
-              Container(
-                padding: EdgeInsets.symmetric(
-                  horizontal: isCompact ? 10 : 12,
-                  vertical: isCompact ? 4 : 6,
-                ),
-                decoration: BoxDecoration(
-                  color: hasData && gear == 0
-                      ? const Color(0xFF34C759).withValues(alpha: 0.12)
-                      : const Color(0xFFE5E5EA),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: hasData && gear == 0
-                        ? const Color(0xFF34C759)
-                        : const Color(0xFFD1D1D6),
-                    width: 1,
-                  ),
-                ),
-                child: Text(
-                  !hasData || gear < 0
-                      ? '—'
-                      : gear == 0
-                          ? 'N'
-                          : '$gear',
-                  style: TextStyle(
-                    fontSize: isCompact ? 20 : 24,
-                    fontWeight: FontWeight.w700,
-                    color: !hasData || gear < 0
-                        ? AppTheme.textPrimary
-                        : gear == 0
-                            ? const Color(0xFF34C759)
-                            : AppTheme.textPrimary,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  ),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-        SizedBox(height: isCompact ? 6 : 8),
+          SizedBox(height: isCompact ? 10 : 16),
 
-        // Apple-style RPM ribbon
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: ClipRRect(
+          // Smooth RPM ribbon
+          ClipRRect(
             borderRadius: BorderRadius.circular(3),
             child: Container(
-              height: isCompact ? 4 : 5,
+              height: 4,
               color: const Color(0xFFE5E5EA),
               alignment: Alignment.centerLeft,
               child: LayoutBuilder(
@@ -622,58 +630,164 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
           ),
-        ),
-      ],
+          const SizedBox(height: 8),
+
+          // Telemetry footer
+          Text(
+            hasData
+                ? '$rpm ot/min · ${manager.totalDistanceKm.toStringAsFixed(1)} km'
+                : 'Čekám na telemetrii motocyklu',
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppTheme.textMuted,
+              fontFeatures: [FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
-  /// Full-width row combining Left Lean, Central G-G Reticle, and Right Lean.
+  /// Calm, Apple HIG Lean Angle Card with dynamic horizon arc.
   Widget _leanAndGgSection(
       TelemetryPacket pkt, bool hasData, bool isCompact) {
     final leftAngle = hasData ? max(0.0, -pkt.leanAngleDeg) : null;
     final rightAngle = hasData ? max(0.0, pkt.leanAngleDeg) : null;
-    final screenWidth = MediaQuery.sizeOf(context).width;
-    final screenHeight = MediaQuery.sizeOf(context).height;
-    final reticleSize = isCompact
-        ? (screenWidth < 360 ? 115.0 : 135.0)
-        : screenHeight >= 750
-            ? 175.0
-            : 145.0;
+    final currentLean = hasData ? pkt.leanAngleDeg : 0.0;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 6),
+    return ContentGroup(
+      padding: EdgeInsets.symmetric(
+        horizontal: 18,
+        vertical: isCompact ? 12 : 16,
+      ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Left Lean Section
+          // Left Lean Metric
           Expanded(
-            child: _leanSection(
-              label: 'VLEVO',
-              value: leftAngle,
-              peak: manager.maxLeanLeft.abs(),
-              icon: CupertinoIcons.arrow_turn_up_left,
-              isCompact: isCompact,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(CupertinoIcons.arrow_turn_up_left,
+                          size: 12, color: AppTheme.textMuted),
+                      SizedBox(width: 4),
+                      Text(
+                        'VLEVO',
+                        style: TextStyle(
+                          fontSize: 11,
+                          letterSpacing: 1.2,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.textMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 4),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    leftAngle == null ? '—' : '${leftAngle.round()}°',
+                    style: TextStyle(
+                      fontSize: isCompact ? 28 : 34,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -1,
+                      color: _leanColor(leftAngle),
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    'max ${manager.maxLeanLeft.abs().round()}°',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppTheme.textMuted,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-          // Center G-G Friction Reticle
-          Semantics(
-            label: 'G-G diagram zrychlení a přetížení',
-            child: GgFrictionReticle(
-              accelXG: hasData ? pkt.accelYG : 0.0,
-              accelYG: hasData ? pkt.accelXG : 0.0,
-              frictionEnvelope: manager.frictionEnvelopeRadii,
-              size: reticleSize,
+
+          // Center Dynamic Lean Horizon Arc
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: SizedBox(
+              width: isCompact ? 76 : 96,
+              height: isCompact ? 52 : 62,
+              child: CustomPaint(
+                painter: _LeanArcPainter(
+                  leanAngleDeg: currentLean,
+                  hasData: hasData,
+                ),
+              ),
             ),
           ),
-          // Right Lean Section
+
+          // Right Lean Metric
           Expanded(
-            child: _leanSection(
-              label: 'VPRAVO',
-              value: rightAngle,
-              peak: manager.maxLeanRight.abs(),
-              icon: CupertinoIcons.arrow_turn_up_right,
-              isCompact: isCompact,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'VPRAVO',
+                        style: TextStyle(
+                          fontSize: 11,
+                          letterSpacing: 1.2,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.textMuted,
+                        ),
+                      ),
+                      SizedBox(width: 4),
+                      Icon(CupertinoIcons.arrow_turn_up_right,
+                          size: 12, color: AppTheme.textMuted),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 4),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    rightAngle == null ? '—' : '${rightAngle.round()}°',
+                    style: TextStyle(
+                      fontSize: isCompact ? 28 : 34,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -1,
+                      color: _leanColor(rightAngle),
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    'max ${manager.maxLeanRight.abs().round()}°',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppTheme.textMuted,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -1100,5 +1214,99 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ],
     );
   }
+}
+
+/// Calm Apple HIG Lean Horizon Arc.
+class _LeanArcPainter extends CustomPainter {
+  final double leanAngleDeg;
+  final bool hasData;
+
+  const _LeanArcPainter({
+    required this.leanAngleDeg,
+    required this.hasData,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+    final center = Offset(w / 2, h * 0.9);
+    final radius = min(w / 2, h * 0.85) - 4;
+
+    // Background track arc from -55° to +55°
+    final trackPaint = Paint()
+      ..color = const Color(0xFFE5E5EA)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 5
+      ..strokeCap = StrokeCap.round;
+
+    const startAngle = -pi * 0.82;
+    const sweepAngle = pi * 0.64;
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      startAngle,
+      sweepAngle,
+      false,
+      trackPaint,
+    );
+
+    // Center zero reference tick
+    final tickPaint = Paint()
+      ..color = const Color(0xFFAEAEB2)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
+    canvas.drawLine(
+      Offset(center.dx, center.dy - radius - 5),
+      Offset(center.dx, center.dy - radius + 5),
+      tickPaint,
+    );
+
+    if (hasData) {
+      final leanClamped = leanAngleDeg.clamp(-55.0, 55.0);
+      final leanRad = leanClamped * (pi / 180.0);
+      final activeColor = leanClamped.abs() >= 30.0
+          ? AppTheme.danger
+          : (leanClamped.abs() >= 15.0
+              ? AppTheme.appleOrange
+              : AppTheme.appleGreen);
+
+      final activePaint = Paint()
+        ..color = activeColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 6
+        ..strokeCap = StrokeCap.round;
+
+      // Draw arc from top-center (-pi/2) to the current lean angle
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: radius),
+        -pi / 2,
+        leanRad,
+        false,
+        activePaint,
+      );
+
+      // Current lean bubble indicator
+      final angle = -pi / 2 + leanRad;
+      final needleOffset = Offset(
+        center.dx + radius * cos(angle),
+        center.dy + radius * sin(angle),
+      );
+
+      canvas.drawCircle(needleOffset, 5.0, Paint()..color = activeColor);
+      canvas.drawCircle(
+        needleOffset,
+        7.0,
+        Paint()
+          ..color = Colors.white
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.0,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _LeanArcPainter oldDelegate) =>
+      oldDelegate.leanAngleDeg != leanAngleDeg ||
+      oldDelegate.hasData != hasData;
 }
 

@@ -492,40 +492,38 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 onPressed: _exitSelectionMode, child: const Text('Hotovo'))
           else
             Padding(
-                padding: const EdgeInsets.only(right: 20),
-                child: GlassSurface(
-                    radius: 26,
-                    child: Row(children: [
-                      if (_cachedSessions.isNotEmpty)
-                        IconButton(
-                            tooltip: 'Vybrat jízdy',
-                            icon: const Icon(CupertinoIcons.checkmark_circle),
-                            onPressed: _enterSelectionMode),
-                      PopupMenuButton<String>(
-                          tooltip: 'Možnosti historie',
-                          icon: const Icon(CupertinoIcons.ellipsis),
-                          onSelected: (action) {
-                            if (action == 'import') _importFromMicroSd();
-                            if (action == 'export') {
-                              _exportAllSessionsAsZip(cachedFiltered);
-                            }
-                            if (action == 'refresh') _refresh();
-                          },
-                          itemBuilder: (_) => [
-                                PopupMenuItem(
-                                    value: 'import',
-                                    enabled: !_isImporting,
-                                    child: const Text('Importovat z MicroSD')),
-                                if (_cachedSessions.isNotEmpty)
-                                  PopupMenuItem(
-                                      value: 'export',
-                                      enabled: !_isExportingBulk,
-                                      child:
-                                          const Text('Exportovat vše do ZIP')),
-                                const PopupMenuItem(
-                                    value: 'refresh', child: Text('Obnovit')),
-                              ]),
-                    ]))),
+                padding: const EdgeInsets.only(right: 12),
+                child: Row(children: [
+                  if (_cachedSessions.isNotEmpty)
+                    IconButton(
+                        tooltip: 'Vybrat jízdy',
+                        icon: const Icon(CupertinoIcons.checkmark_circle),
+                        onPressed: _enterSelectionMode),
+                  PopupMenuButton<String>(
+                      tooltip: 'Možnosti historie',
+                      icon: const Icon(CupertinoIcons.ellipsis),
+                      onSelected: (action) {
+                        if (action == 'import') _importFromMicroSd();
+                        if (action == 'export') {
+                          _exportAllSessionsAsZip(cachedFiltered);
+                        }
+                        if (action == 'refresh') _refresh();
+                      },
+                      itemBuilder: (_) => [
+                            PopupMenuItem(
+                                value: 'import',
+                                enabled: !_isImporting,
+                                child: const Text('Importovat z MicroSD')),
+                            if (_cachedSessions.isNotEmpty)
+                              PopupMenuItem(
+                                  value: 'export',
+                                  enabled: !_isExportingBulk,
+                                  child:
+                                      const Text('Exportovat vše do ZIP')),
+                            const PopupMenuItem(
+                                value: 'refresh', child: Text('Obnovit')),
+                          ]),
+                ])),
         ],
       ),
       bottomNavigationBar: _isSelectionMode
