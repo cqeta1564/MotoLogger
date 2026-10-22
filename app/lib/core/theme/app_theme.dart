@@ -9,7 +9,7 @@ class AppTheme {
       ? 'CupertinoSystemText'
       : 'Roboto';
   // App Version
-  static const String appVersion = '1.0.2 (Build 3)';
+  static const String appVersion = '1.0.3 (Build 4)';
 
   // Apple System Palette
   static const Color background = Color(0xFFFFFFFF);
@@ -73,7 +73,7 @@ class AppTheme {
       fontFamily: systemFont,
       scaffoldBackgroundColor: surfaceSecondary,
       primaryColor: primary,
-      cardColor: surfaceSecondary,
+      cardColor: surface,
       appBarTheme: AppBarTheme(
         systemOverlayStyle: SystemUiOverlayStyle.dark,
         backgroundColor: Colors.transparent,
@@ -105,12 +105,12 @@ class AppTheme {
         ),
       ),
       cardTheme: CardThemeData(
-        color: surfaceSecondary,
+        color: surface,
         elevation: 0,
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: surfaceBorder, width: 0.8),
+          side: const BorderSide(color: surfaceBorder, width: 0.5),
         ),
       ),
       dialogTheme: DialogThemeData(
@@ -120,8 +120,8 @@ class AppTheme {
       ),
       dividerTheme: const DividerThemeData(
         color: surfaceBorder,
-        thickness: 0.8,
-        space: 1,
+        thickness: 0.5,
+        space: 0.5,
       ),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: const Color(0xFF1C1C1E),

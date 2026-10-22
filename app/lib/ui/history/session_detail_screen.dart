@@ -11,6 +11,7 @@ import '../../services/lap_timer_service.dart';
 import '../widgets/gps_track_map_card.dart';
 import '../widgets/gg_friction_card.dart';
 import '../widgets/glass_surface.dart';
+import '../widgets/apple_modal_sheet.dart';
 
 /// Detailed breakdown and telemetry inspection screen for a ride session.
 /// Formatted according to Apple Fitness & Health aesthetic.
@@ -368,7 +369,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE5E5EA), width: 1),
+        border: Border.all(color: const Color(0xFFE5E5EA), width: 0.5),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.03),
@@ -614,64 +615,32 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
   }
 
   Future<void> _showExportSheet() async {
-    showCupertinoModalPopup<void>(
+    showAppleModalSheet<void>(
       context: context,
-      builder: (ctx) => CupertinoActionSheet(
-        title: const Text('Exportovat telemetrická data'),
-        message: const Text(
-            'Vyberte požadovaný formát pro analýzu nebo zobrazení v mapách'),
-        actions: [
-          CupertinoActionSheetAction(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _exportGpx();
-            },
-            child: const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.map_outlined, color: AppTheme.appleBlue, size: 20),
-                SizedBox(width: 8),
-                Text('Exportovat GPX (Strava, Garmin, Mapy)'),
-              ],
-            ),
-          ),
-          CupertinoActionSheetAction(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _exportCsv();
-            },
-            child: const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.table_chart_outlined,
-                    color: AppTheme.appleGreen, size: 20),
-                SizedBox(width: 8),
-                Text('Exportovat CSV (MoTeC i2, RaceRender)'),
-              ],
-            ),
-          ),
-          CupertinoActionSheetAction(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _exportZipPackage();
-            },
-            child: const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.folder_zip_outlined,
-                    color: AppTheme.applePurple, size: 20),
-                SizedBox(width: 8),
-                Text('Balíček pro MoTeC i2 a RaceRender (.zip)'),
-              ],
-            ),
-          ),
-        ],
-        cancelButton: CupertinoActionSheetAction(
+      title: 'Exportovat telemetrická data',
+      subtitle:
+          'Vyberte požadovaný formát pro analýzu nebo zobrazení v mapách',
+      actions: [
+        AppleSheetAction(
+          icon: Icons.map_outlined,
+          title: 'Exportovat GPX',
+          subtitle: 'Pro Strava, Garmin, Mapy.cz',
           isDefaultAction: true,
-          onPressed: () => Navigator.pop(ctx),
-          child: const Text('Zrušit'),
+          onPressed: _exportGpx,
         ),
-      ),
+        AppleSheetAction(
+          icon: Icons.table_chart_outlined,
+          title: 'Exportovat CSV (MoTeC i2, RaceRender)',
+          subtitle: 'Kompatibilní s telemetrickým softwarem',
+          onPressed: _exportCsv,
+        ),
+        AppleSheetAction(
+          icon: Icons.folder_zip_outlined,
+          title: 'Balíček pro MoTeC i2 a RaceRender (.zip)',
+          subtitle: 'Kompletní telemetrický archiv',
+          onPressed: _exportZipPackage,
+        ),
+      ],
     );
   }
 

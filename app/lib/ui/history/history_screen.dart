@@ -11,6 +11,8 @@ import '../../services/database_service.dart';
 import '../../services/telemetry_manager.dart';
 import '../widgets/season_summary_card.dart';
 import '../widgets/glass_surface.dart';
+import '../widgets/apple_scale_button.dart';
+import '../widgets/apple_modal_sheet.dart';
 import 'session_detail_screen.dart';
 
 enum HistorySortOption {
@@ -310,100 +312,74 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Future<void> _showExportSheet(RideSession s) async {
-    showCupertinoModalPopup<void>(
+    showAppleModalSheet<void>(
       context: context,
-      builder: (ctx) => CupertinoActionSheet(
-        title: Text('Export jízdy: ${s.title}'),
-        message: const Text('Vyberte formát pro uložení nebo sdílení'),
-        actions: [
-          CupertinoActionSheetAction(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              try {
-                final path = await widget.dbService.exportSessionToGpx(s.id!);
-                await Share.shareXFiles([XFile(path)],
-                    text: 'MotoLogger Jízda GPX: ${s.title}');
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                        backgroundColor: AppTheme.appleRed,
-                        content: Text('Chyba při exportu GPX: $e')),
-                  );
-                }
-              }
-            },
-            child: const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.map_outlined, color: AppTheme.appleBlue, size: 20),
-                SizedBox(width: 8),
-                Text('Exportovat GPX (Strava, Garmin, Mapy)'),
-              ],
-            ),
-          ),
-          CupertinoActionSheetAction(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              try {
-                final path = await widget.dbService.exportSessionToCsv(s.id!);
-                await Share.shareXFiles([XFile(path)],
-                    text: 'MotoLogger Jízda CSV: ${s.title}');
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                        backgroundColor: AppTheme.appleRed,
-                        content: Text('Chyba při exportu CSV: $e')),
-                  );
-                }
-              }
-            },
-            child: const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.table_chart_outlined,
-                    color: AppTheme.appleGreen, size: 20),
-                SizedBox(width: 8),
-                Text('Exportovat CSV (MoTeC i2, RaceRender)'),
-              ],
-            ),
-          ),
-          CupertinoActionSheetAction(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              try {
-                final path =
-                    await widget.dbService.exportSessionPackageToZip(s.id!);
-                await Share.shareXFiles([XFile(path)],
-                    text: 'MotoLogger Analytický balíček: ${s.title}');
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                        backgroundColor: AppTheme.appleRed,
-                        content: Text('Chyba při exportu balíčku: $e')),
-                  );
-                }
-              }
-            },
-            child: const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.folder_zip_outlined,
-                    color: AppTheme.applePurple, size: 20),
-                SizedBox(width: 8),
-                Text('Balíček pro MoTeC i2 a RaceRender (.zip)'),
-              ],
-            ),
-          ),
-        ],
-        cancelButton: CupertinoActionSheetAction(
+      title: 'Export jízdy: ${s.title}',
+      subtitle: 'Vyberte formát pro uložení nebo sdílení',
+      actions: [
+        AppleSheetAction(
+          icon: Icons.map_outlined,
+          title: 'Exportovat GPX',
+          subtitle: 'Pro Strava, Garmin, Mapy.cz',
           isDefaultAction: true,
-          onPressed: () => Navigator.pop(ctx),
-          child: const Text('Zrušit'),
+          onPressed: () async {
+            try {
+              final path = await widget.dbService.exportSessionToGpx(s.id!);
+              await Share.shareXFiles([XFile(path)],
+                  text: 'MotoLogger Jízda GPX: ${s.title}');
+            } catch (e) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                      backgroundColor: AppTheme.appleRed,
+                      content: Text('Chyba při exportu GPX: $e')),
+                );
+              }
+            }
+          },
         ),
-      ),
+        AppleSheetAction(
+          icon: Icons.table_chart_outlined,
+          title: 'Exportovat CSV (MoTeC i2, RaceRender)',
+          subtitle: 'Kompatibilní s telemetrickým softwarem',
+          onPressed: () async {
+            try {
+              final path = await widget.dbService.exportSessionToCsv(s.id!);
+              await Share.shareXFiles([XFile(path)],
+                  text: 'MotoLogger Jízda CSV: ${s.title}');
+            } catch (e) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                      backgroundColor: AppTheme.appleRed,
+                      content: Text('Chyba při exportu CSV: $e')),
+                );
+              }
+            }
+          },
+        ),
+        AppleSheetAction(
+          icon: Icons.folder_zip_outlined,
+          title: 'Balíček pro MoTeC i2 a RaceRender (.zip)',
+          subtitle: 'Kompletní telemetrický archiv',
+          onPressed: () async {
+            try {
+              final path =
+                  await widget.dbService.exportSessionPackageToZip(s.id!);
+              await Share.shareXFiles([XFile(path)],
+                  text: 'MotoLogger Analytický balíček: ${s.title}');
+            } catch (e) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                      backgroundColor: AppTheme.appleRed,
+                      content: Text('Chyba při exportu balíčku: $e')),
+                );
+              }
+            }
+          },
+        ),
+      ],
     );
   }
 
@@ -706,105 +682,102 @@ class _HistoryScreenState extends State<HistoryScreen> {
         padding: const EdgeInsets.only(bottom: 12),
         child: Semantics(
           selected: selected,
-          child: ContentGroup(
-              child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(24),
-              onTap: () async {
-                if (_isSelectionMode) {
-                  if (session.id != null) _toggleSessionSelection(session.id!);
-                  return;
-                }
-                await Navigator.push(
-                    context,
-                    CupertinoPageRoute<void>(
-                        builder: (_) => SessionDetailScreen(
-                            session: session, dbService: widget.dbService)));
-                if (mounted) _refresh();
-              },
-              onLongPress: () {
-                _enterSelectionMode();
+          child: AppleScaleButton(
+            onPressed: () async {
+              if (_isSelectionMode) {
                 if (session.id != null) _toggleSessionSelection(session.id!);
-              },
-              child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                return;
+              }
+              await Navigator.push(
+                  context,
+                  CupertinoPageRoute<void>(
+                      builder: (_) => SessionDetailScreen(
+                          session: session, dbService: widget.dbService)));
+              if (mounted) _refresh();
+            },
+            onLongPress: () {
+              _enterSelectionMode();
+              if (session.id != null) _toggleSessionSelection(session.id!);
+            },
+            child: ContentGroup(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(children: [
+                    Expanded(
+                        child: Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Row(children: [
-                          Expanded(
-                              child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Flexible(
-                                child: Text(session.title,
-                                    style: const TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.w600),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis),
+                        Flexible(
+                          child: Text(session.title,
+                              style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w600),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis),
+                        ),
+                        if (session.isDemo) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFE5E5EA),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Text(
+                              'Demo',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.textMuted,
+                                letterSpacing: 0.2,
                               ),
-                              if (session.isDemo) ...[
-                                const SizedBox(width: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 3),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFE5E5EA),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: const Text(
-                                    'Demo',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppTheme.textMuted,
-                                      letterSpacing: 0.2,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ],
-                          )),
-                          const SizedBox(width: 12),
-                          Icon(
-                              _isSelectionMode
-                                  ? (selected
-                                      ? CupertinoIcons.checkmark_circle_fill
-                                      : CupertinoIcons.circle)
-                                  : CupertinoIcons.chevron_right,
-                              color: selected
-                                  ? AppTheme.appleBlue
-                                  : AppTheme.textMuted,
-                              size: 20),
-                        ]),
-                        const SizedBox(height: 6),
-                        Text(
-                            '${_formatDateTime(session.startTime)} · ${_formatDuration(session.duration)}',
-                            style: const TextStyle(
-                                fontSize: 13, color: AppTheme.textMuted)),
-                        const SizedBox(height: 18),
-                        Wrap(spacing: 24, runSpacing: 12, children: [
-                          _metric('Vzdálenost',
-                              '${session.totalDistanceKm.toStringAsFixed(1)} km'),
-                          _metric('Max. rychlost',
-                              '${session.topSpeedKmh.round()} km/h'),
-                          _metric('Náklon L / P',
-                              '${session.maxLeanLeftDeg.abs().round()}° / ${session.maxLeanRightDeg.abs().round()}°'),
-                        ]),
-                        if (!_isSelectionMode)
-                          Align(
-                              alignment: Alignment.centerRight,
-                              child: TextButton.icon(
-                                  onPressed: () => _showExportSheet(session),
-                                  icon: const Icon(CupertinoIcons.share,
-                                      size: 18),
-                                  label: const Text('Exportovat'))),
-                      ])),
-            ),
-          )),
-        ));
+                            ),
+                          ),
+                        ],
+                      ],
+                    )),
+                    const SizedBox(width: 12),
+                    Icon(
+                        _isSelectionMode
+                            ? (selected
+                                ? CupertinoIcons.checkmark_circle_fill
+                                : CupertinoIcons.circle)
+                            : CupertinoIcons.chevron_right,
+                        color: selected
+                            ? AppTheme.appleBlue
+                            : AppTheme.textMuted,
+                        size: 20),
+                  ]),
+                  const SizedBox(height: 6),
+                  Text(
+                      '${_formatDateTime(session.startTime)} · ${_formatDuration(session.duration)}',
+                      style: const TextStyle(
+                          fontSize: 13, color: AppTheme.textMuted)),
+                  const SizedBox(height: 18),
+                  Wrap(spacing: 24, runSpacing: 12, children: [
+                    _metric('Vzdálenost',
+                        '${session.totalDistanceKm.toStringAsFixed(1)} km'),
+                    _metric('Max. rychlost',
+                        '${session.topSpeedKmh.round()} km/h'),
+                    _metric('Náklon L / P',
+                        '${session.maxLeanLeftDeg.abs().round()}° / ${session.maxLeanRightDeg.abs().round()}°'),
+                  ]),
+                  if (!_isSelectionMode)
+                    Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton.icon(
+                            onPressed: () => _showExportSheet(session),
+                            icon: const Icon(CupertinoIcons.share,
+                                size: 18),
+                            label: const Text('Exportovat'))),
+                ]),
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _metric(String label, String value) =>

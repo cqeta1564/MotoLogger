@@ -1,7 +1,7 @@
 name: motologger
 description: "High-performance motorcycle telemetry dashboard for Android Auto and Apple CarPlay"
 publish_to: 'none'
-version: 1.0.2+3
+version: 1.0.3+4
 
 environment:
   sdk: '>=3.2.0 <4.0.0'

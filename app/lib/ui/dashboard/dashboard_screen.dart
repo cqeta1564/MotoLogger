@@ -13,6 +13,7 @@ import '../widgets/glass_surface.dart';
 import '../widgets/slide_to_unlock.dart';
 import '../widgets/corner_gradient_breather.dart';
 import '../widgets/gg_friction_reticle.dart';
+import '../widgets/apple_modal_sheet.dart';
 
 /// Live ride cockpit with simplified, rider-centric instruments and Apple aesthetic.
 class DashboardScreen extends StatefulWidget {
@@ -109,6 +110,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _autoLockTimer?.cancel();
     _autoLockTimer = null;
     _setLocked(false);
+    HapticFeedback.mediumImpact();
     if (_effectiveSpeedKmh(manager.latestPacket) > 5 &&
         !manager.isSimulationMode) {
       _autoLockTimer =
@@ -159,54 +161,59 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _pair() => Navigator.of(context).push(CupertinoPageRoute<void>(
       builder: (_) => EspPairingScreen(telemetryManager: manager)));
 
-  void _showMenu() => showCupertinoModalPopup<void>(
-      context: context,
-      builder: (sheetContext) => CupertinoActionSheet(
-            title: const Text('Ovládání jízdy'),
-            message: const Text('Demo používá simulovaná data okruhu Brno.'),
-            actions: [
-              if (!manager.isRecording &&
-                  (manager.isSimulationMode ||
-                      manager.bleService.state != BleConnectionState.connected))
-                CupertinoActionSheetAction(
-                    onPressed: () {
-                      Navigator.pop(sheetContext);
-                      manager.setSimulationMode(!manager.isSimulationMode);
-                    },
-                    child: Text(manager.isSimulationMode
-                        ? 'Vypnout demo'
-                        : 'Vyzkoušet demo')),
-              CupertinoActionSheetAction(
-                  onPressed: () {
-                    Navigator.pop(sheetContext);
-                    _pair();
-                  },
-                  child: const Text('Připojit jednotku')),
-              CupertinoActionSheetAction(
-                  onPressed: () {
-                    Navigator.pop(sheetContext);
-                    manager.resetPeaks();
-                  },
-                  child: const Text('Vynulovat maxima')),
-              if (manager.isRecording)
-                CupertinoActionSheetAction(
-                  onPressed: () {
-                    Navigator.pop(sheetContext);
-                    manager.markCustomFinishLineHere();
-                    HapticFeedback.mediumImpact();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Cílová čára byla označena na aktuální pozici.'),
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
-                  },
-                  child: const Text('Označit cíl (Lap)')),
-            ],
-            cancelButton: CupertinoActionSheetAction(
-                onPressed: () => Navigator.pop(sheetContext),
-                child: const Text('Zrušit')),
-          ));
+  void _showMenu() => showAppleModalSheet<void>(
+        context: context,
+        title: 'Ovládání jízdy',
+        subtitle: manager.isSimulationMode
+            ? 'Aktivní simulace okruhu Brno'
+            : 'Jednotka a telemetrie motocyklu',
+        actions: [
+          if (!manager.isRecording &&
+              (manager.isSimulationMode ||
+                  manager.bleService.state != BleConnectionState.connected))
+            AppleSheetAction(
+              icon: manager.isSimulationMode
+                  ? CupertinoIcons.stop_circle
+                  : CupertinoIcons.play_circle,
+              title: manager.isSimulationMode
+                  ? 'Vypnout demo'
+                  : 'Vyzkoušet demo',
+              subtitle: 'Simulovaná data okruhu Brno',
+              onPressed: () =>
+                  manager.setSimulationMode(!manager.isSimulationMode),
+            ),
+          AppleSheetAction(
+            icon: CupertinoIcons.antenna_radiowaves_left_right,
+            title: 'Připojit jednotku',
+            subtitle: 'Spárování a správa Bluetooth',
+            onPressed: _pair,
+          ),
+          AppleSheetAction(
+            icon: CupertinoIcons.arrow_counterclockwise,
+            title: 'Vynulovat maxima',
+            subtitle: 'Resetovat špičky náklonu a rychlosti',
+            onPressed: manager.resetPeaks,
+          ),
+          if (manager.isRecording)
+            AppleSheetAction(
+              icon: CupertinoIcons.flag,
+              title: 'Označit cíl (Lap)',
+              subtitle: 'Nastavit cíl pro měření kol na aktuální pozici',
+              isDefaultAction: true,
+              onPressed: () {
+                manager.markCustomFinishLineHere();
+                HapticFeedback.mediumImpact();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content:
+                        Text('Cílová čára byla označena na aktuální pozici.'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              },
+            ),
+        ],
+      );
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
@@ -1179,10 +1186,65 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 : () => manager.setSimulationMode(true),
           )
         else if (!manager.isPaused)
-          PrimaryAction(
-            label: 'Pozastavit jízdu',
-            icon: CupertinoIcons.pause_fill,
-            onPressed: _busy ? null : manager.pauseRecording,
+          LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth < 380) {
+                return PrimaryAction(
+                  label: 'Pozastavit jízdu',
+                  icon: CupertinoIcons.pause_fill,
+                  onPressed: _busy ? null : manager.pauseRecording,
+                );
+              }
+              return GlassSurface(
+                radius: 20,
+                padding: const EdgeInsets.fromLTRB(16, 6, 8, 6),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(
+                        color: AppTheme.appleRed,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text(
+                            'PROBÍHÁ ZÁZNAM',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.8,
+                              color: AppTheme.appleRed,
+                            ),
+                          ),
+                          Text(
+                            '${manager.currentRideDuration.inMinutes.toString().padLeft(2, '0')}:${(manager.currentRideDuration.inSeconds % 60).toString().padLeft(2, '0')} · ${manager.totalDistanceKm.toStringAsFixed(1)} km',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.textPrimary,
+                              fontFeatures: [FontFeature.tabularFigures()],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    PrimaryAction(
+                      label: 'Pozastavit jízdu',
+                      icon: CupertinoIcons.pause_fill,
+                      onPressed: _busy ? null : manager.pauseRecording,
+                    ),
+                  ],
+                ),
+              );
+            },
           )
         else
           GlassSurface(

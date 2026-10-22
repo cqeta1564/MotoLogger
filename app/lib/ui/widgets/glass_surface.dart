@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import '../../core/preferences/app_preferences.dart';
 import '../../core/theme/app_theme.dart';
+import 'apple_scale_button.dart';
 
 /// A bounded Flutter material approximation, not native Apple Liquid Glass.
 /// Strictly restricted to floating capsules (AppleTabBar) and floating action docks.
@@ -149,18 +150,38 @@ class AppPageTitle extends StatelessWidget {
 
 class ContentGroup extends StatelessWidget {
   const ContentGroup(
-      {super.key, required this.child, this.padding = EdgeInsets.zero});
+      {super.key,
+      required this.child,
+      this.padding = EdgeInsets.zero,
+      this.radius = 16});
   final Widget child;
   final EdgeInsetsGeometry padding;
+  final double radius;
 
   @override
   Widget build(BuildContext context) => Container(
         padding: padding,
         decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(24),
+            borderRadius: BorderRadius.circular(radius),
             border: Border.all(color: const Color(0xFFE5E5EA), width: 0.5)),
         child: child,
+      );
+}
+
+/// A hairline divider (0.5 pt) indented to align with text in Inset Grouped lists.
+class AppleGroupDivider extends StatelessWidget {
+  const AppleGroupDivider({super.key, this.indent = 56, this.endIndent = 0});
+  final double indent;
+  final double endIndent;
+
+  @override
+  Widget build(BuildContext context) => Divider(
+        height: 0.5,
+        thickness: 0.5,
+        indent: indent,
+        endIndent: endIndent,
+        color: const Color(0xFFE5E5EA),
       );
 }
 
@@ -179,33 +200,39 @@ class PrimaryAction extends StatelessWidget {
   final bool destructive;
 
   @override
-  Widget build(BuildContext context) => ConstrainedBox(
-        constraints:
-            const BoxConstraints(minHeight: AppTheme.primaryButtonHeight),
-        child: FilledButton(
-          onPressed: busy ? null : onPressed,
-          style: FilledButton.styleFrom(
-            backgroundColor:
-                destructive ? AppTheme.danger : AppTheme.appleBlue,
-            foregroundColor: Colors.white,
-            elevation: 0,
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-            shape: RoundedRectangleBorder(
-                borderRadius:
-                    BorderRadius.circular(AppTheme.primaryButtonRadius)),
+  Widget build(BuildContext context) => AppleScaleButton(
+        onPressed: busy ? null : onPressed,
+        child: Semantics(
+          button: true,
+          enabled: onPressed != null && !busy,
+          label: label,
+          child: Container(
+            height: AppTheme.primaryButtonHeight,
+            decoration: BoxDecoration(
+              color: destructive
+                  ? AppTheme.danger
+                  : (onPressed == null && !busy
+                      ? const Color(0xFFAEAEB2)
+                      : AppTheme.appleBlue),
+              borderRadius:
+                  BorderRadius.circular(AppTheme.primaryButtonRadius),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              if (busy)
+                const CupertinoActivityIndicator(color: Colors.white)
+              else if (icon != null)
+                Icon(icon, size: 20, color: Colors.white),
+              if (busy || icon != null) const SizedBox(width: 10),
+              Flexible(
+                  child: Text(label,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white))),
+            ]),
           ),
-          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            if (busy)
-              const CupertinoActivityIndicator(color: Colors.white)
-            else if (icon != null)
-              Icon(icon, size: 20),
-            if (busy || icon != null) const SizedBox(width: 10),
-            Flexible(
-                child: Text(label,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                        fontSize: 17, fontWeight: FontWeight.w600))),
-          ]),
         ),
       );
 }

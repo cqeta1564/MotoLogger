@@ -5,6 +5,7 @@ import '../../core/preferences/app_preferences.dart';
 import '../../services/telemetry_manager.dart';
 import '../../services/ble_service.dart';
 import '../widgets/glass_surface.dart';
+import '../widgets/apple_scale_button.dart';
 import 'tank_calibration_screen.dart';
 import 'bike_learning_screen.dart';
 import 'bike_profiles_screen.dart';
@@ -357,15 +358,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _section(String title) => Padding(
-      padding: const EdgeInsets.fromLTRB(4, 28, 4, 10),
+      padding: const EdgeInsets.fromLTRB(16, 28, 16, 8),
       child: Semantics(
           header: true,
           child: Text(title,
               style: const TextStyle(
-                  fontSize: 15,
+                  fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: AppTheme.textMuted))));
-  Widget _divider() => const Divider(indent: 60, endIndent: 16);
+                  letterSpacing: -0.08,
+                  color: Color(0xFF6E6E73)))));
+  Widget _divider() => const AppleGroupDivider(indent: 56, endIndent: 0);
 }
 
 class SettingsRow extends StatelessWidget {
@@ -387,48 +389,45 @@ class SettingsRow extends StatelessWidget {
   final bool destructive;
 
   @override
-  Widget build(BuildContext context) => Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(20),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 17),
-            child: Row(children: [
-              Icon(icon,
-                  size: 23,
-                  color: destructive ? AppTheme.danger : AppTheme.textMuted),
-              const SizedBox(width: 16),
-              Expanded(
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                    Text(title,
-                        style: TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w500,
-                            color: destructive
-                                ? AppTheme.danger
-                                : AppTheme.textPrimary)),
-                    if (subtitle != null) ...[
-                      const SizedBox(height: 4),
-                      Text(subtitle!,
-                          style: const TextStyle(
-                              fontSize: 13,
-                              height: 1.35,
-                              color: AppTheme.textMuted))
-                    ],
-                  ])),
-              if (trailing != null) ...[
-                const SizedBox(width: 8),
-                trailing!
-              ] else if (onTap != null && navigates) ...[
-                const SizedBox(width: 8),
-                const Icon(CupertinoIcons.chevron_right,
-                    size: 15, color: AppTheme.textMuted)
-              ],
-            ]),
-          ),
+  Widget build(BuildContext context) => AppleScaleButton(
+        onPressed: onTap,
+        pressedScale: 0.985,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+          child: Row(children: [
+            Icon(icon,
+                size: 23,
+                color: destructive ? AppTheme.danger : AppTheme.textMuted),
+            const SizedBox(width: 16),
+            Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                  Text(title,
+                      style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w500,
+                          color: destructive
+                              ? AppTheme.danger
+                              : AppTheme.textPrimary)),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 3),
+                    Text(subtitle!,
+                        style: const TextStyle(
+                            fontSize: 13,
+                            height: 1.35,
+                            color: AppTheme.textMuted))
+                  ],
+                ])),
+            if (trailing != null) ...[
+              const SizedBox(width: 8),
+              trailing!
+            ] else if (onTap != null && navigates) ...[
+              const SizedBox(width: 8),
+              const Icon(CupertinoIcons.chevron_right,
+                  size: 15, color: Color(0xFFC7C7CC))
+            ],
+          ]),
         ),
       );
 }
