@@ -306,7 +306,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       const SettingsRow(
                           icon: CupertinoIcons.info,
                           title: 'MotoLogger',
-                          subtitle: 'Verze 1.0.0'),
+                          subtitle: 'Verze ${AppTheme.appVersion} · Apple HIG'),
                     ])),
                     if (manager.isPaired ||
                         manager.mountingRollOffsetDeg != 0) ...[

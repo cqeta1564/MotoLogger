@@ -8,6 +8,9 @@ class AppTheme {
           defaultTargetPlatform == TargetPlatform.macOS
       ? 'CupertinoSystemText'
       : 'Roboto';
+  // App Version
+  static const String appVersion = '1.0.2 (Build 3)';
+
   // Apple System Palette
   static const Color background = Color(0xFFFFFFFF);
   static const Color surface = Color(0xFFFFFFFF);
