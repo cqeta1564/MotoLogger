@@ -81,13 +81,17 @@ class MotoLoggerDashboardScreen(carContext: androidx.car.app.CarContext) : Scree
                 .build()
         )
 
-        // 2. Powertrain & Gear row
+        // 2. Powertrain & Gear row (pro t.gear < 0 zobraz em-dash '—', pro 0 zobraz 'N', jinak cislo)
         val gearStr = if (t.isConnected && t.gear != null) {
-            if (t.gear == 0) "N" else t.gear.toString()
+            when {
+                t.gear < 0 -> "—"
+                t.gear == 0 -> "N"
+                else -> t.gear.toString()
+            }
         } else {
             "—"
         }
-        val speedStr = if (t.speedKmh != null && (t.isConnected || t.speedKmh > 0)) {
+        val speedStr = if (t.speedKmh != null && (t.isConnected || t.speedKmh > 0) && t.speedKmh >= 0) {
             "${t.speedKmh} km/h"
         } else {
             "—"

@@ -7,7 +7,7 @@ class BleConstants {
   static const String commandCharUuid = '19b10002-e8f2-537e-4f6c-d104768a1214';
 
   // Packet format constants
-  static const int expectedPacketLength = 28;
+  static const int expectedPacketLength = 29;
 
   // Mobile -> ESP32 Commands
   static const int cmdTareZero = 0x01; // Zero-tare IMU lean and pitch calibration

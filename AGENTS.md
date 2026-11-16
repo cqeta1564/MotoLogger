@@ -121,7 +121,7 @@ Always verify pin assignments against this table before modifying firmware:
    - Telemetry Stream: Packed binary struct `BleTelemetryPacket` (29 bytes little-endian: 28 bytes telemetry + 1 byte `status_flags`, zero serialization overhead).
    - Control Commands:
      - `0x01`: Instant Zero-Tare (lean & pitch).
-     - `0x02`: Tare Mounting Roll Offset (payload: `int16_t offset_x10`, stored permanently in ESP32 NVS `Preferences`).
+     - `0x02`: Tare Mounting Roll Offset (payload: `int16_t offset_x10`, stored permanently in ESP32 NVS `Preferences` under key `roll_offset`).
 4. **Automotive Safety:**
    - Zero-quiescent-drain auto-shutdown: Drop `FORCE_ON` (`GPIO17`) 15 seconds after engine stops to prevent motorcycle battery discharge.
    - Non-blocking CAN queues to avoid dropping frames during high bus load.
@@ -136,7 +136,7 @@ Always verify pin assignments against this table before modifying firmware:
      - `theme/app_theme.dart` (Apple light palette, typography, button geometries).
      - `motion/app_motion.dart` (Reduced-motion policy and transition timing constants).
      - `preferences/app_preferences.dart` (SQLite-persisted settings like `reduce_transparency`).
-   - `lib/models/`: `telemetry_sample.dart`, `session.dart`, `bike_profile.dart`, `can_definition.dart`, `gps_record.dart`.
+   - `lib/models/`: `can_profile.dart` (`BikeProfile`, `CanSignalMapping`), `captured_can_frame.dart` (`CapturedCanFrame`), `dtc_code.dart` (`DiagnosticTroubleCode`), `fused_sample.dart` (`FusedSample`), `lap_split.dart` (`LapSplit`), `session.dart` (`RideSession`, `SeasonStats`), `telemetry_packet.dart` (`TelemetryPacket`).
    - `lib/services/`: `ble_service.dart`, `telemetry_manager.dart`, `database_service.dart`, `gps_service.dart`, `can_profile_service.dart`.
    - `lib/ui/dashboard/`: `dashboard_screen.dart` (Ride HUD, lean gauges, tachometer, lock overlay, action controls).
    - `lib/ui/history/`: `history_screen.dart`, `session_detail_screen.dart` (Season summary, session search/sort/selection, GPS track map, G-G diagram, MoTeC i2 / GPX export).
@@ -157,7 +157,11 @@ Always verify pin assignments against this table before modifying firmware:
 3. **Calibration Subsystem:**
    - `calibrateFromTank({required double phoneRollDeg})`: Computes mounting offset \(\theta_{\text{offset}} = \theta_{\text{esp}} - \theta_{\text{phone}}\), sends command `0x02` via BLE, saves locally.
    - `calibrateUpright()`: Computes offset relative to 0.0°, sends command `0x02`, saves locally.
-4. **Testing & Static Analysis:**
+4. **Native Head Unit Projection (Android Auto & Apple CarPlay):**
+   - **Android Auto:** `MotoLoggerCarAppService` extending `CarAppService`, `automotive_app_desc.xml` template descriptor, `PaneTemplate` glanceable dashboard, and `CarTelemetryRepository`.
+   - **Apple CarPlay:** `CarPlaySceneDelegate` implementing `CPTemplateApplicationSceneDelegate`, `CarPlayManager` rendering `CPInformationTemplate` with lean angle, powertrain, lap status, and Tare zero action.
+   - **Strict Truthful Telemetry:** Unknown, disconnected, or invalid gear numbers (`< 0` or `null`) display an em-dash (`—`), neutral displays `N`, and disconnected sensors never display fabricated values.
+5. **Testing & Static Analysis:**
    - Always verify changes with:
      ```bash
      flutter analyze

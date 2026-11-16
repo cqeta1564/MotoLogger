@@ -744,6 +744,10 @@ class TelemetryManager extends ChangeNotifier {
     final active = await bleService.setDiagnosticMode(enable);
     _isDiagnosticModeActive = active;
     if (!enable) {
+      // Clear status bit 4 on the cached packet so the getter reports false immediately.
+      _latestPacket = _latestPacket.copyWith(
+        statusFlags: _latestPacket.statusFlags & ~(1 << 4),
+      );
       _diagnosticStatusMessage = null;
     } else if (active) {
       _diagnosticStatusMessage =

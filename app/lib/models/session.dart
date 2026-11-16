@@ -74,6 +74,7 @@ class RideSession {
       'max_g_force': maxGForce,
       'total_distance_km': totalDistanceKm,
       'sample_count': sampleCount,
+      'is_demo': isDemo ? 1 : 0,
     };
   }
 
@@ -129,7 +130,8 @@ class SeasonStats {
     for (final s in sessions) {
       totalDist += s.totalDistanceKm;
       totalTime += s.duration;
-      if (s.maxLeanLeftDeg > maxLeft) maxLeft = s.maxLeanLeftDeg;
+      // Left lean is stored as a negative value, so compare magnitudes.
+      if (s.maxLeanLeftDeg.abs() > maxLeft) maxLeft = s.maxLeanLeftDeg.abs();
       if (s.maxLeanRightDeg > maxRight) maxRight = s.maxLeanRightDeg;
       if (s.topSpeedKmh > topSpeed) topSpeed = s.topSpeedKmh;
     }

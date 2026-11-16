@@ -148,7 +148,7 @@ Motorcycles generate violent high-frequency vibrations from 1-cylinder to 4-cyli
 ### 4.4 Roll Offset Calibration & NVS Storage
 The hardware board may be installed inside the bike at a slight roll offset relative to the motorcycle's frame:
 $$\theta_{\text{corrected}} = \theta_{\text{raw}} - \theta_{\text{offset}}$$
-- In firmware (`imu_manager.cpp`), the roll and pitch offsets are stored permanently in the ESP32 non-volatile storage (NVS) using the `Preferences` library (namespace: `motologger`, keys: `roll_off`, `pitch_off`).
+- In firmware (`imu_manager.cpp`), the roll and pitch offsets are stored permanently in the ESP32 non-volatile storage (NVS) using the `Preferences` library (namespace: `motologger`, keys: `roll_offset`, `pitch_offset`).
 - On boot, `ImuManager::begin()` loads the stored offsets.
 - When the smartphone sends a calibration command, `setRollOffset(deg)` or `zeroTare()` immediately updates the live offset and writes it to NVS.
 
@@ -198,7 +198,7 @@ struct __attribute__((packed)) BleTelemetryPacket {
   - `share_plus`: Native share sheet for exported CSV, GPX, and ZIP bundles.
 - Directory Structure:
   - `lib/core/`: Apple Design System theme (`AppTheme`), motion timing & reduced-motion policy (`AppMotion`), persistent SQLite preferences (`AppPreferences`).
-  - `lib/models/`: `TelemetrySample`, `Session`, `BikeProfile`, `CanDefinition`, `GpsRecord`.
+  - `lib/models/`: `can_profile.dart` (`BikeProfile`, `CanSignalMapping`), `captured_can_frame.dart` (`CapturedCanFrame`), `dtc_code.dart` (`DiagnosticTroubleCode`), `fused_sample.dart` (`FusedSample`), `lap_split.dart` (`LapSplit`), `session.dart` (`RideSession`, `SeasonStats`), `telemetry_packet.dart` (`TelemetryPacket`).
   - `lib/services/`: `BleService`, `TelemetryManager`, `DatabaseService`, `GpsService`, `CanProfileService`.
   - `lib/ui/dashboard/`: Ride HUD (`DashboardScreen`), lean angle arc, digital readouts, friction circle, tachometer, auto-lock overlay.
   - `lib/ui/history/`: Season summary (`SeasonSummaryCard`), ride history list (`HistoryScreen`), detailed analytics (`SessionDetailScreen`), track maps (`GpsTrackMapCard`), G-G diagrams (`GgFrictionCard`), MoTeC i2 CSV / GPX export.
@@ -251,8 +251,20 @@ Motorcyclists rarely carry bubble levels or paddock stands with them. MotoLogger
 - **Truthful Telemetry:** Em-dash (`—`) displayed for missing/disconnected telemetry (no fabricated 0.0°). Buffered samples retained on SQLite save errors with retry capability.
 
 ### 5.4 Android Auto & CarPlay Head Unit Projection
-- Android Auto integration via Android `CarAppService` (`android/` configuration).
-- Allows projecting high-contrast, glanceable telemetry (current lean angle, maximum left/right lean, gear indicator, shift light) directly onto motorcycle TFT displays supporting Android Auto / CarPlay (e.g. Chigee AIO-5, Carpuride W502/W702, Ottocast).
+- **Overview:** Projects high-contrast, glanceable telemetry (current lean angle, peak left/right lean, vehicle speed, gear position, engine RPM, live lap timing) directly onto motorcycle TFT displays supporting Android Auto or Apple CarPlay (e.g., Chigee AIO-5, Carpuride W502/W702, Ottocast).
+- **Android Auto Architecture (`android/`):**
+  - Managed via `MotoLoggerCarAppService` extending Android for Cars `CarAppService`.
+  - Registered with `<uses name="template" />` in `res/xml/automotive_app_desc.xml` and manifest metadata `com.google.android.gms.car.application`.
+  - `MotoLoggerDashboardScreen` renders an automotive `PaneTemplate` with high-contrast lean and powertrain status rows, plus an explicit zero-tare action (`CarTelemetryRepository.requestTareZero()`).
+- **Apple CarPlay Architecture (`ios/`):**
+  - Integrated via `CPTemplateApplicationSceneDelegate` in `CarPlaySceneDelegate` and managed through `CarPlayManager`.
+  - Registered under `CPTemplateApplicationSceneSessionRoleApplication` in `Info.plist` scene configurations with multi-scene support enabled.
+  - Renders a native `CPInformationTemplate` featuring glanceable telemetry items and a "Vynulovat náklon (Tare)" action button.
+- **Bi-directional Method Channels:**
+  - `com.motologger.app/car_projection` throttles updates at 5 Hz from `TelemetryManager` into native memory.
+  - Native tare actions invoke the `tareZero` method call back into Flutter to execute zero-tare calibration in real time.
+- **Strict Truthful Telemetry:**
+  - Unknown, disconnected, or invalid gear numbers (`< 0` or `null`) display an em-dash (`—`), neutral displays `N`, and disconnected sensors never display fabricated values.
 
 ---
 
