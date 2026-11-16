@@ -29,12 +29,29 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
       onCreate: _onCreate,
+      onUpgrade: _onUpgrade,
     );
+  }
+
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      final columns = await db.rawQuery('PRAGMA table_info(sessions)');
+      final hasIsDemo = columns.any((c) => c['name'] == 'is_demo');
+      if (!hasIsDemo) {
+        await db.execute(
+          'ALTER TABLE sessions ADD COLUMN is_demo INTEGER NOT NULL DEFAULT 0',
+        );
+        // Backfill legacy rows using the previous title-based demo heuristic.
+        await db.execute(
+          "UPDATE sessions SET is_demo = 1 WHERE LOWER(TRIM(title)) LIKE 'demo%'",
+        );
+      }
+    }
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -50,7 +67,8 @@ class DatabaseService {
         top_speed_kmh REAL DEFAULT 0.0,
         max_g_force REAL DEFAULT 0.0,
         total_distance_km REAL DEFAULT 0.0,
-        sample_count INTEGER DEFAULT 0
+        sample_count INTEGER DEFAULT 0,
+        is_demo INTEGER NOT NULL DEFAULT 0
       )
     ''');
 
@@ -161,9 +179,10 @@ class DatabaseService {
     if (session == null) throw Exception('Session not found');
 
     final dir = await getApplicationDocumentsDirectory();
-    final file = File(join(dir.path, 'Ride_Session_${session.id}_${session.startTime.millisecondsSinceEpoch}.csv'));
+    final file = File(join(dir.path, 'Ride_Session_${session.id}_${session.startTime.millisecondsSinceEpoch}_motec.csv'));
 
-    final content = generateCsvString(samples: samples);
+    // MoTeC i2 / RaceRender compatible CSV; the raw generateCsvString stays untouched for round-trip import.
+    final content = generateMotecCsvString(session: session, samples: samples);
     await file.writeAsString(content);
     return file.path;
   }

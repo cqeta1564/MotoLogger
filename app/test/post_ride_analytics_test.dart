@@ -36,8 +36,8 @@ void main() {
       gpsAccuracyMeters: 3.5,
       leanAngleDeg: -35.5, // Left lean
       pitchDeg: -4.0,
-      accelXG: -0.65, // Left lateral G
-      accelYG: -0.85, // Heavy braking G
+      accelXG: -0.85, // Heavy braking G
+      accelYG: -0.65, // Left lateral G
       accelZG: 0.98,
       gyroXDps: 0.0,
       gyroYDps: 0.0,
@@ -62,8 +62,8 @@ void main() {
       gpsAccuracyMeters: 2.8,
       leanAngleDeg: 46.0, // Right lean (Apex)
       pitchDeg: 6.5,
-      accelXG: 0.88, // Right lateral G
-      accelYG: 0.72, // Acceleration G
+      accelXG: 0.72, // Acceleration G
+      accelYG: 0.88, // Right lateral G
       accelZG: 1.05,
       gyroXDps: 0.0,
       gyroYDps: 0.0,
@@ -133,8 +133,8 @@ void main() {
       expect(gpx.contains('<motologger:lean_angle_deg>46.00</motologger:lean_angle_deg>'), isTrue);
       expect(gpx.contains('<motologger:engine_rpm>6500</motologger:engine_rpm>'), isTrue);
       expect(gpx.contains('<motologger:throttle_pos_pct>90</motologger:throttle_pos_pct>'), isTrue);
-      expect(gpx.contains('<motologger:accel_x_g>-0.650</motologger:accel_x_g>'), isTrue);
-      expect(gpx.contains('<motologger:accel_y_g>-0.850</motologger:accel_y_g>'), isTrue);
+      expect(gpx.contains('<motologger:accel_x_g>-0.850</motologger:accel_x_g>'), isTrue);
+      expect(gpx.contains('<motologger:accel_y_g>-0.650</motologger:accel_y_g>'), isTrue);
     });
 
     test('generateCsvString produces well-formatted CSV with headers and data rows', () {
@@ -246,10 +246,10 @@ void main() {
       expect(find.text('Pravý náklon G'), findsOneWidget);
 
       // Peak values:
-      // Max braking: sample 1 had accelYG = -0.85 -> 0.85 G
-      // Max accel: sample 2 had accelYG = 0.72 -> +0.72 G
-      // Max left: sample 1 had accelXG = -0.65 -> 0.65 G
-      // Max right: sample 2 had accelXG = 0.88 -> 0.88 G
+      // Max braking: sample 1 had accelXG = -0.85 -> 0.85 G
+      // Max accel: sample 2 had accelXG = 0.72 -> +0.72 G
+      // Max left: sample 1 had accelYG = -0.65 -> 0.65 G
+      // Max right: sample 2 had accelYG = 0.88 -> 0.88 G
       expect(find.text('0.85 G'), findsOneWidget);
       expect(find.text('+0.72 G'), findsOneWidget);
       expect(find.text('0.65 G'), findsOneWidget);

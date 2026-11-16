@@ -24,16 +24,16 @@ class GgFrictionCard extends StatelessWidget {
     double maxTotalG = 0.0;
 
     for (final s in samples) {
-      if (s.accelYG < maxBrakeG) maxBrakeG = s.accelYG;
-      if (s.accelYG > maxAccelG) maxAccelG = s.accelYG;
-      if (s.accelXG < maxLeftG) maxLeftG = s.accelXG;
-      if (s.accelXG > maxRightG) maxRightG = s.accelXG;
+      if (s.accelXG < maxBrakeG) maxBrakeG = s.accelXG;
+      if (s.accelXG > maxAccelG) maxAccelG = s.accelXG;
+      if (s.accelYG < maxLeftG) maxLeftG = s.accelYG;
+      if (s.accelYG > maxRightG) maxRightG = s.accelYG;
 
       final currentG = sqrt(s.accelXG * s.accelXG + s.accelYG * s.accelYG);
       if (currentG > maxTotalG) maxTotalG = currentG;
 
       if (currentG > 0.05) {
-        double angle = atan2(s.accelYG, s.accelXG);
+        double angle = atan2(s.accelXG, s.accelYG);
         if (angle < 0) angle += 2 * pi;
         final sector = ((angle / (2 * pi)) * 36).floor() % 36;
         if (currentG > envelope[sector]) {
@@ -48,7 +48,7 @@ class GgFrictionCard extends StatelessWidget {
     for (int i = 0; i < samples.length; i += step) {
       final s = samples[i];
       if (s.accelXG.abs() > 0.02 || s.accelYG.abs() > 0.02) {
-        scatterPoints.add(Offset(s.accelXG, s.accelYG));
+        scatterPoints.add(Offset(s.accelYG, s.accelXG));
       }
     }
 

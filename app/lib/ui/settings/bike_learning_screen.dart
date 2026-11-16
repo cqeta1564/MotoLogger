@@ -447,6 +447,7 @@ class _BikeLearningScreenState extends State<BikeLearningScreen> {
               const SizedBox(height: 14),
               SizedBox(
                 width: double.infinity,
+                height: AppTheme.primaryButtonHeight,
                 child: OutlinedButton.icon(
                   onPressed: _isImportingSd ? null : _importFromMicroSd,
                   icon: _isImportingSd
@@ -463,9 +464,9 @@ class _BikeLearningScreenState extends State<BikeLearningScreen> {
                     foregroundColor: AppTheme.appleBlue,
                     side: const BorderSide(color: Color(0xFFE5E5EA)),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius:
+                          BorderRadius.circular(AppTheme.primaryButtonRadius),
                     ),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
                 ),
               ),
@@ -815,13 +816,14 @@ class _BikeLearningScreenState extends State<BikeLearningScreen> {
               ),
               const SizedBox(height: 14),
               SizedBox(
-                height: 48,
+                height: AppTheme.primaryButtonHeight,
                 child: CupertinoButton(
                   padding: EdgeInsets.zero,
                   color: _promptCopied
                       ? AppTheme.appleGreen
                       : const Color(0xFF1C1C1E),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius:
+                      BorderRadius.circular(AppTheme.primaryButtonRadius),
                   onPressed: _copyPrompt,
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -905,11 +907,12 @@ class _BikeLearningScreenState extends State<BikeLearningScreen> {
               ),
               const SizedBox(height: 14),
               SizedBox(
-                height: 48,
+                height: AppTheme.primaryButtonHeight,
                 child: CupertinoButton(
                   padding: EdgeInsets.zero,
                   color: const Color(0xFFF2F2F7),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius:
+                      BorderRadius.circular(AppTheme.primaryButtonRadius),
                   onPressed: _shareDatasetFile,
                   child: const Row(
                     mainAxisAlignment: MainAxisAlignment.center,

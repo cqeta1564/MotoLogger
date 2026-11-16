@@ -797,7 +797,8 @@ class BleService {
             coolantTempC: 88,
             gear: 0,
             batteryVoltage: 14.1,
-            statusFlags: 0x1F, // SD OK, Engine Run, IMU OK
+            // SD OK, Engine Run, IMU OK (+ bit 4 only while diagnostic mode is on)
+            statusFlags: _mockDiagModeActive ? 0x1F : 0x0F,
           );
           _telemetryController.add(stationaryPacket);
           return;
